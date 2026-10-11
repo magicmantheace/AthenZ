@@ -31,12 +31,21 @@ def parser() -> argparse.ArgumentParser:
     x.add_argument('key')
     x.add_argument('--confirm', action='store_true', required=True,
                    help='Explicit permission to modify disposable checkout')
+    x = sub.add_parser('retry', help='Explicitly undo or dismiss proposal within 3-retry limit')
+    x.add_argument('key')
+    x.add_argument('--confirm', action='store_true', required=True)
     x = sub.add_parser('syntax', help='AST parse only; no untrusted Python execution')
     x.add_argument('key')
     x = sub.add_parser('test', help='Run unit tests only within digest-pinned container')
     x.add_argument('key')
     x.add_argument('--image', required=True, help='e.g. python@sha256:<64 lowercase hex>')
     x.add_argument('--confirm', action='store_true', required=True)
+    x = sub.add_parser('export-review', help='Write an immutable patch into private AthenZ storage')
+    x.add_argument('key')
+    x.add_argument('--confirm', action='store_true', required=True)
+    x = sub.add_parser('cancel', help='Explicitly cancel a session and clean up worktree')
+    x.add_argument('key')
+    x.add_argument('--discard-changes', action='store_true')
     x = sub.add_parser('cleanup', help='Explicitly discard or remove worktree')
     x.add_argument('key')
     x.add_argument('--discard-changes', action='store_true')
@@ -69,12 +78,23 @@ def main(argv: list[str] | None = None) -> None:
             if not args.confirm:
                 raise ValueError('Explicit --confirm is required to apply edits')
             print(f"Files changed: {worker.apply(args.key)}")
+        elif args.command == 'retry':
+            if not args.confirm:
+                raise ValueError('Explicit --confirm required to reset proposed changes')
+            print(f'Retry #{worker.retry(args.key)} ready for a revised proposal')
         elif args.command == 'syntax':
             print(json.dumps(worker.syntax_check(args.key), indent=2))
         elif args.command == 'test':
             if not args.confirm:
                 raise ValueError('Explicit --confirm required for container execution')
             print(json.dumps(worker.container_tests(args.key, image=args.image), indent=2))
+        elif args.command == 'export-review':
+            if not args.confirm:
+                raise ValueError('Explicit --confirm required to export a private review bundle')
+            print(json.dumps(worker.export_review(args.key), indent=2))
+        elif args.command == 'cancel':
+            worker.cleanup(args.key, discard_changes=args.discard_changes, disposition='cancelled')
+            print('Cancelled; private metadata retained, edits removed if explicitly discarded')
         elif args.command == 'cleanup':
             worker.cleanup(args.key, discard_changes=args.discard_changes)
             print('Worktree removed; private task record retained')

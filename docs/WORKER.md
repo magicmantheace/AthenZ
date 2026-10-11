@@ -47,3 +47,42 @@ This first stage does not meet all of issue #9's autonomy and trust-boundary
 requirements. Next: an explicit multi-step controller, retry budgeting,
 trusted test attestation, safe immutable snapshotting, cancellation, and
 Windows/WSL2 integration validation.
+
+## Manual bounded retries and cancellation
+
+`athenz-worker retry fix1 --confirm` reverts a previously applied patch (or
+removes an unapplied proposal), verifies that the disposable tree is clean,
+and permits another proposal. The default budget is **three retries** per
+task. If undo is interrupted before the checkpoint update, retry can recover
+from the already-undone proposal state. It does not itself ask the model to
+retry or run any code. `athenz-worker cancel fix1 --discard-changes` ends a
+task and explicitly discards the isolated worktree; `show` will no longer
+resume it. A completed checkpoint retains only private task metadata.
+
+## Private review handoff (new)
+
+Once an explicitly reviewed proposal has been applied, use:
+
+```sh
+athenz-worker syntax fix1
+athenz-worker export-review fix1 --confirm
+```
+
+`export-review` verifies that **only the approved tracked files** differ from
+HEAD and that every changed file still matches its approved SHA-256. It writes
+an immutable `*.patch` under the private `ATHENZ_HOME/reviews` directory,
+never under the repository. A SHA-256 digest, selected paths, base commit and
+latest matching verification level are saved in the private task checkpoint.
+Untracked files, staged changes and surprise modifications block export.
+
+Verification levels are *not-verified*, *syntax-only*, or
+*container-tests-observed*. The latter records the exit code observed from the
+configured Docker runner; it is not a cryptographically independent attestation
+of arbitrary code safety or functional correctness. Recheck patches and rerun
+trusted tests before merging them into a project. No Git commit, push, merge or
+remote action is performed.
+
+The exported patch survives worktree cleanup and can be applied manually with
+`git apply --check /path/to/patch` followed by `git apply /path/to/patch` after
+review. Do not export a patch to an untrusted destination or Git repository;
+private source fragments may be present in it.

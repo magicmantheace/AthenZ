@@ -8,10 +8,12 @@ only run via an opt-in, locked-down container runner.
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import uuid
 from pathlib import Path
@@ -35,7 +37,7 @@ def _git(repo: Path, *args: str) -> str:
                              timeout=45, env={**os.environ, 'GIT_TERMINAL_PROMPT': '0'})
     if process.returncode:
         raise WorktreeError((process.stderr or process.stdout).strip()[-600:])
-    return process.stdout.strip()
+    return process.stdout.rstrip('\n')
 
 
 class Worker:
@@ -106,6 +108,8 @@ class Worker:
         item = self.resume(key)
         if item['status'] not in {'paused', 'running'} or item['state']['proposal_id'] is not None:
             raise WorktreeError('Task has an outstanding proposal or is finished')
+        if _git(Path(item['state']['workspace']), 'status', '--porcelain=v1'):
+            raise WorktreeError('Worktree has unexpected changes; review or discard before new proposal')
         pid = propose(self.store, model, item['state']['workspace'], item['task'], selected_files)
         state = dict(item['state'])
         state['proposal_id'] = pid
@@ -119,6 +123,43 @@ class Worker:
         if pid is None:
             raise WorktreeError('No reviewed proposal to apply')
         return change_status(self.store, pid)
+
+    def retry(self, key: str, *, max_retries: int = 3) -> int:
+        """Manually restart proposal selection, with a bounded retry budget.
+
+        Applied proposals are first reverted using fingerprint-checked undo.
+        Unapplied proposals are deleted, preventing later stale application.
+        """
+        item = self.resume(key)
+        state = dict(item['state'])
+        if item['status'] not in {'paused', 'running'} or state['proposal_id'] is None:
+            raise WorktreeError('A proposal is required before retrying')
+        if not 1 <= max_retries <= 3 or state['attempts'] >= max_retries:
+            raise WorktreeError('Retry budget exhausted')
+        pid = state['proposal_id']
+        try:
+            proposal = self.store.get_proposal(pid)
+        except ValueError:
+            proposal = None  # Unapplied proposal may have been purged before a crash.
+        if proposal is not None and proposal['status'] == 'applied':
+            change_status(self.store, pid, undo=True)
+        elif proposal is not None and proposal['status'] == 'proposed':
+            self.store.forget_runtime('proposals', pid)
+        elif proposal is not None and proposal['status'] != 'undone':
+            raise WorktreeError('Unexpected proposal status')
+        # Allow crash recovery when the previous undo succeeded but the
+        # checkpoint write was interrupted.
+        # Avoid generating a new proposal on top of edits not owned by AthenZ.
+        if _git(Path(state['workspace']), 'status', '--porcelain=v1'):
+            raise WorktreeError('Unexpected changes remain after undo; review workspace manually')
+        state['proposal_id'] = None
+        # Prior review artifacts remain on disk for audit, but cannot be
+        # represented as the active proposal after a retry.
+        state.pop('review_bundle', None)
+        state['attempts'] += 1
+        self.store.checkpoint(key, item['task'], state, status='paused',
+                              expected_revision=item['revision'])
+        return state['attempts']
 
     def syntax_check(self, key: str) -> dict:
         """Parse patched Python files without importing or executing their code."""
@@ -193,9 +234,12 @@ class Worker:
                                          'Container unit tests completed; inspect evidence')
         return {'returncode': returncode, 'test_run_id': test_id, 'output': output}
 
-    def cleanup(self, key: str, *, discard_changes: bool = False) -> None:
+    def cleanup(self, key: str, *, discard_changes: bool = False,
+                disposition: str = 'released') -> None:
+        if disposition not in {'released', 'cancelled'}:
+            raise ValueError('Invalid cleanup disposition')
         item = self.resume(key)
-        state = item['state']
+        state = dict(item['state'])
         workspace = Path(state['workspace'])
         # No default data-loss path: dirty trees require an explicit discard flag.
         if _git(workspace, 'status', '--porcelain=v1') and not discard_changes:
@@ -204,8 +248,95 @@ class Worker:
              *(['--force'] if discard_changes else []), str(workspace))
         # Discarding an isolated patch must revoke its procedural lessons.
         pid = state['proposal_id']
-        if pid is not None and self.store.get_proposal(pid)['status'] == 'applied':
-            self.store.update_proposal(pid, 'applied', 'undone')
+        if pid is not None:
+            proposal = self.store.get_proposal(pid)
+            if proposal['status'] == 'applied':
+                self.store.update_proposal(pid, 'applied', 'undone')
+            elif proposal['status'] == 'proposed':
+                self.store.forget_runtime('proposals', pid)
         # Checkpoint retained for audit, but no longer resumable.
+        state['disposition'] = disposition
         self.store.checkpoint(key, item['task'], state, status='complete',
                               expected_revision=item['revision'])
+
+    def export_review(self, key: str) -> dict:
+        """Create an immutable, PRIVATE handoff patch for an applied, reviewed change.
+
+        This writes only to ATHENZ_HOME/reviews. It does not commit, push,
+        or imply that static parsing is sufficient behavioral verification.
+        Reject unrelated or untracked edits rather than accidentally exporting
+        arbitrary workspace content.
+        """
+        item = self.resume(key)
+        pid = item['state']['proposal_id']
+        if item['status'] != 'paused' or pid is None:
+            raise WorktreeError('Task has no reviewable proposed patch')
+        proposal = self.store.get_proposal(pid)
+        workspace = Path(item['state']['workspace'])
+        if proposal['status'] != 'applied' or Path(proposal['repo']) != workspace:
+            raise WorktreeError('Proposal must be applied in its assigned worktree')
+        changes = json.loads(proposal['changes_json'])
+        expected = {c['path'] for c in changes}
+        if not expected or len(expected) != len(changes):
+            raise WorktreeError('Invalid reviewed change set')
+        for c in changes:
+            if digest(allowed_file(workspace, c['path']).read_text(encoding='utf-8')) != c['after_sha256']:
+                raise WorktreeError('Source no longer matches reviewed changes')
+        # NUL-delimited Git porcelain avoids assuming filename quoting rules.
+        status = _git(workspace, 'status', '--porcelain=v1', '-z', '--untracked-files=all')
+        entries = [part for part in status.split('\0') if part]
+        if len(entries) != len(expected) or any(
+                len(e) < 4 or e[:3] != ' M ' or e[3:] not in expected
+                for e in entries) or {e[3:] for e in entries} != expected:
+            raise WorktreeError('Unexpected files or stages in workspace; review manually')
+        # Only the reviewed paths can enter the patch. No external diff driver.
+        patch = _git(workspace, 'diff', '--no-ext-diff', '--no-textconv',
+                     '--binary', '--', *sorted(expected)) + '\n'
+        if not patch.strip() or len(patch.encode('utf-8')) > 512_000:
+            raise WorktreeError('Patch is empty or too large for a review bundle')
+        patch_sha = hashlib.sha256(patch.encode('utf-8')).hexdigest()
+        files_sha = digest(''.join(c['path'] + c['after_sha256'] for c in changes))
+        latest = self.store.db.execute("""SELECT id,command,returncode,files_sha256
+            FROM test_runs WHERE proposal_id=? ORDER BY id DESC LIMIT 1""", (pid,)).fetchone()
+        verification = 'not-verified'
+        test_id = None
+        if latest and latest['files_sha256'] == files_sha and latest['returncode'] == 0:
+            test_id = int(latest['id'])
+            if latest['command'] == 'athenz:ast.parse (no execution)':
+                verification = 'syntax-only'
+            elif latest['command'] == 'docker:isolated unittest':
+                verification = 'container-tests-observed'
+        reviews = self.store.home.resolve() / 'reviews'
+        if reviews.is_symlink():
+            raise WorktreeError('Private review folder cannot be a symlink')
+        reviews.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if reviews.is_symlink() or reviews.resolve() != reviews:
+            raise WorktreeError('Unsafe private review folder')
+        name = f'{key}-{pid}-{patch_sha[:16]}.patch'
+        dest = reviews / name
+        # O_EXCL prevents overwriting earlier evidence; O_NOFOLLOW adds
+        # filesystem protection where it is available.
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_NOFOLLOW', 0)
+        try:
+            fd = os.open(dest, flags, 0o600)
+        except FileExistsError as exc:
+            raise WorktreeError('Review bundle already exists; no overwrite allowed') from exc
+        try:
+            with os.fdopen(fd, 'wb') as handle:
+                handle.write(patch.encode('utf-8'))
+                handle.flush()
+                os.fsync(handle.fileno())
+            if stat.S_ISLNK(dest.lstat().st_mode):
+                raise WorktreeError('Unexpected review bundle symlink')
+            review = {'path': str(dest), 'sha256': patch_sha,
+                      'files': sorted(expected), 'base_sha': item['state']['base_sha'],
+                      'verification': verification, 'test_run_id': test_id,
+                      'proposal_id': pid}
+            state = dict(item['state'])
+            state['review_bundle'] = review
+            self.store.checkpoint(key, item['task'], state, status='paused',
+                                  expected_revision=item['revision'])
+        except BaseException:
+            dest.unlink(missing_ok=True)
+            raise
+        return review
