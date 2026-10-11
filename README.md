@@ -109,3 +109,7 @@ Additional v0.3 controls: `athenz dispute`, `athenz resolve-dispute`,
 `athenz artifact-hash`, and `athenz artifact-verify`. Disputed approved
 memories are withheld from prompts until resolution. Artifact fingerprints
 are locally observed metadata, **not** independent proof of code correctness.
+
+## v0.4 supervised worktrees (initial slice)
+
+`athenz-worker` creates disposable detached worktrees, reviews local model proposals before applying them, saves resumable private checkpoints and runs Python syntax parsing without executing project code. Optional digest-pinned Docker testing fails closed without a container runtime. See [docs/WORKER.md](docs/WORKER.md). No unattended loop, commit/push or full v0.4 acceptance is claimed.
