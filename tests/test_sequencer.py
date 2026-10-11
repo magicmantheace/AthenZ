@@ -131,6 +131,20 @@ class SequenceTests(unittest.TestCase):
         self.assertEqual(self.controller.status('task')['phase'], 'awaiting_review')
         self.controller.cancel('task', discard_changes=True)
 
+    def test_refused_cancellation_preserves_reviewed_evidence(self):
+        self._reviewed()
+        self.controller.syntax('task')
+        self.controller.advance('task')
+        first_id = self.controller.worker.resume('task')['state']['sequence']['approved'][0]['proposal_id']
+        self.store.record_test(first_id, 'docker:isolated unittest', 0, 'passed', 'hash', 'lesson')
+        eid = self.store.list_items('experiences')[0]['id']
+        self.store.set_review('experiences', eid, 'approved')
+        with self.assertRaisesRegex(SequenceError, '--discard-changes'):
+            self.controller.cancel('task')
+        self.assertEqual(len(self.store.list_items('experiences', 'approved')), 1)
+        self.controller.cancel('task', discard_changes=True)
+        self.assertEqual(self.store.list_items('experiences', 'approved'), [])
+
     def test_crash_during_rollback_recovers_and_preserves_prior_step(self):
         self._reviewed()
         self.controller.syntax('task')

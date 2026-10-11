@@ -298,6 +298,11 @@ class SequenceController:
             item, seq = self._load(key)
         # Worktree cleanup itself cannot distinguish earlier applied proposals.
         # All approved lessons from this discarded sequence must be revoked.
+        # A refused non-destructive cancellation must not revoke lessons.
+        # Check the dirty worktree before changing any evidence status.
+        if not discard_changes and _git(Path(item['state']['workspace']),
+                                        'status', '--porcelain=v1', '--untracked-files=all'):
+            raise SequenceError('Workspace contains edits; --discard-changes required')
         # Revoke evidence *before* filesystem removal. A crash during removal
         # must not leave trusted lessons pointing to a discarded workspace.
         ids = [stage['proposal_id'] for stage in seq['approved']]
