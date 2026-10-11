@@ -8,7 +8,7 @@ without a separate future training and evaluation pipeline.
 **Status: experimental v0.4 pre-release.** Human review is required for identity
 claims and file changes. Task checkpoints, scoped patch proposals, reviewed
 feedback, episodic memory and the review-gated foreground controller are
-implemented. There is no unsupervised daemon, remote Git push/merge automation, automatic model
+implemented. There is no unsupervised daemon, Git publishing, automatic model
 fine-tuning, or verified Windows/WSL2 Docker integration.
 
 ## Setup
@@ -46,7 +46,7 @@ A syntax failure can be retried automatically **only by undoing the isolated
 changes and preparing a new proposal**. Each attempt requires fresh approval.
 Passing syntax checks do **not** prove behavior. Actual project tests require
 the `athenz-worker test` opt-in Docker runner with a trusted, digest-pinned image.
-There is no host-side project test command or remote Git push action. Local branch handoff requires separate explicit approval.
+There is no host-side project test command or Git commit/push action.
 
 Your reviewed feedback and independently checked results may inform future
 prompt context. Model-weight updates are a separate future milestone.
@@ -76,23 +76,29 @@ whether container tests were observed passing or failing and pins their
 snapshot fingerprint. If Docker is unavailable, the operation fails closed.
 This is not independent attestation and is still unverified on Windows/WSL2.
 
-### Reviewed local Git branch handoff (no remote push)
+### Real Docker verifier hardening (v0.4)
 
-With the sequence fully approved, Docker tests observed passing, and an
-immutable review patch exported, use:
+Full-sequence test snapshots are fingerprinted before **and after** the
+container run; unexpected changes cannot be reported as passing tests. Bind
+source paths with Docker mount option separators are rejected. An opt-in
+actual-Docker integration workflow tests real passing/failing fixtures on
+GitHub-hosted Ubuntu; it does not establish Windows/WSL2 compatibility or
+remote execution attestation. See [docs/SEQUENCE.md](docs/SEQUENCE.md).
 
-```sh
-athenz-sequence publish-local <key> --sha256 <exact-exported-patch-sha256> --confirm
-```
 
-This generates a commit on a new `athenz/<key>-<digest>` **local-only branch**
-without moving the original checkout's HEAD or changing its files. It never
-pushes, opens a PR, merges or publishes to a remote service; those remain owner
-actions. A model cannot approve the patch, the container test, or publication.
+## v0.5 offline QLoRA training (experimental)
 
-The branch and commit belong to the same local Git object database as the
-trusted source repository; do not run it on untrusted Git configurations.
+`athenz-training prepare-qlora DATASET_SHA --base-model /local/qwen2.5-safetensors
+--confirm` prepares a local, hash-bound run. `athenz-training run-qlora RUN_ID
+--confirm` performs **opt-in** CUDA 4-bit LoRA training with separately
+installed PyTorch/Transformers/PEFT/bitsandbytes. `--resume` is explicit.
+An Ollama GGUF-only model is not a valid training base. No automatic model
+selection or deployment is provided. The training runtime has **not** been
+executed on the owner's RTX 3060. See [docs/TRAINING.md](docs/TRAINING.md).
 
-### Full-sequence Docker verification hardening
 
-The optional GitHub-hosted Linux Docker CI workflow exercises real pass/fail fixtures. The verifier now detects file drift in the copied snapshot before and after container tests and rejects unsafe Docker bind-mount source paths. This is still local observation, not independent attestation or Windows/WSL2 hardware validation. See [docs/SEQUENCE.md](docs/SEQUENCE.md).
+Private adapter registry: `athenz-training register-adapter RUN_ID --candidate
+LOCAL-TAG --confirm` verifies completed adapter bytes. `selection`,
+`select-adapter` (requires a fresh SHA-256 evaluation report, revision, and
+owner acknowledgment), and `rollback-adapter` maintain a reversible **private
+review pointer only**; they do not load or deploy a model. See training docs.

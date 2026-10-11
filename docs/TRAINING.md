@@ -67,3 +67,82 @@ for iterative development and preserve test data for a final, independently
 reviewed evaluation. No automatic promotion, model-weight change, or remote
 training occurs. Inference may require a working local Ollama installation,
 but that is not a prerequisite for independent code development.
+
+
+## Experimental offline QLoRA backend (v0.5)
+
+AthenZ can now prepare an **immutable local QLoRA recipe**, fingerprint every
+base-model safetensors shard, and run an *explicit, opt-in* training process.
+The training backend is experimental and has **not yet been run on the target
+RTX 3060**; no successful adapter training is claimed.
+
+Prerequisites: a **separately downloaded, trusted Hugging Face Qwen2/Qwen2.5
+safetensors directory** containing `config.json` (model_type `qwen2`), a
+fast `tokenizer.json`, and weights. An Ollama-only GGUF model directory is
+**not** interchangeable with HF safetensors. Use a 1.5B instruct model as a
+conservative first GPU test on 12 GiB VRAM; available memory depends on the
+OS, model variant and other running programs. On Windows, use a local WSL2
+Linux CUDA installation for PyTorch and bitsandbytes.
+
+Install locally compatible CUDA PyTorch, `transformers`, `peft`, `accelerate`,
+and `bitsandbytes` from trusted packages **before** invoking training; they
+are deliberately optional, not imported by other AthenZ commands. Offline
+training requires all model dependencies already installed, and the loader
+uses `local_files_only=True` and `trust_remote_code=False`.
+
+```sh
+athenz-training inspect
+athenz-training build --confirm
+athenz-training prepare-qlora DATASET_SHA256 \
+  --base-model /path/to/local/qwen2.5-1.5b-instruct --max-steps 80 --seq-length 512 --confirm
+athenz-training verify-qlora RUN_ID
+# Only on your own trusted CUDA/WSL2 machine, after inspecting the recipe:
+athenz-training run-qlora RUN_ID --confirm
+# An interrupted or failed run must be explicitly resumed:
+athenz-training run-qlora RUN_ID --resume --confirm
+```
+
+The run remains under private `ATHENZ_HOME/runs/qlora-<id>/`, with its recipe,
+checkpoints, and adapter. QLoRA uses 4-bit NF4 plus LoRA rank 8,
+microbatch 1, gradient accumulation 8, up to 500 steps, and saves step
+checkpoints with bounded retention. Supervised targets mask the user/prompt
+tokens; excessively long examples are skipped instead of silently truncated.
+There is **no CPU fallback**, cloud API, auto-resume daemon, model activation,
+Git commit of training data or automatic promotion. Training and resumed
+training revalidate explicit source approval and weights before loading, and
+again before a run can be marked complete. A successful local training run
+**does not establish candidate quality or automatically load into Ollama**.
+
+The backend has been unit-tested with synthetic tiny fake weights, mocked
+trainer calls and no CUDA. Dependency compatibility and VRAM behavior must
+be verified on the target machine; for untrusted model files, use a VM.
+
+
+## Adapter registry and reversible review pointer (no deployment)
+
+Completed, still-valid private training outputs can be registered only after
+verifying the adapter safetensors digest, its LoRA config, and the original
+base-model fingerprint. Registration records metadata privately in the AthenZ
+SQLite checkpoint store. **The candidate label is an owner assertion**, not
+proof that an Ollama tag is actually backed by the registered adapter.
+
+```sh
+athenz-training register-adapter RUN_ID --candidate locally-evaluated-candidate --confirm
+athenz-training selection
+# AFTER creating and reviewing a private comparison report for that candidate:
+athenz-training select-adapter RUN_ID --report-sha256 EVAL_SHA \
+  --revision 0 --ack-lineage --confirm
+athenz-training selection
+# To roll back, copy the currently displayed revision:
+athenz-training rollback-adapter --revision CURRENT_REVISION --confirm
+```
+
+`select-adapter` requires an unaltered, current held-out evaluation report,
+a matching approved dataset, a strictly improving candidate score, and a
+manual acknowledgment of the unproven adapter→candidate mapping. Both the
+adapter and report are revalidated before updating the checkpoint, and a
+compare-and-swap revision prevents stale concurrent selection. Rollback also
+revalidates its target. **Selection and rollback only change a private review
+pointer:** they deliberately do not alter Ollama, load adapters, change Twin
+responses, move model files, or make network calls. Actual promotion requires
+separate installer integration, model conversion/testing, and user approval.

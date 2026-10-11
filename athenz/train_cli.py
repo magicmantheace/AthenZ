@@ -9,6 +9,8 @@ from .experience import ExperienceStore
 from .training import build_dataset, delete_dataset, inspect_dataset, verify_dataset
 from .model_gate import compare_models, save_report
 from .chat import OllamaClient
+from .finetune import create_run, describe_run, execute_run
+from .adapters import register_adapter, selection, select_for_review, rollback_selection
 
 
 def parser() -> argparse.ArgumentParser:
@@ -32,6 +34,33 @@ def parser() -> argparse.ArgumentParser:
     x.add_argument('--min-cases', type=int, default=10)
     x.add_argument('--seed', type=int, default=42)
     x.add_argument('--confirm', action='store_true', help='Explicit permission for local Ollama inference and report')
+    x = sub.add_parser('prepare-qlora', help='Create private, immutable QLoRA recipe; NO training')
+    x.add_argument('sha256', help='Approved training dataset SHA-256')
+    x.add_argument('--base-model', type=Path, required=True, help='Existing offline Qwen2.5 HF safetensors directory')
+    x.add_argument('--max-steps', type=int, default=80)
+    x.add_argument('--seq-length', type=int, default=512)
+    x.add_argument('--seed', type=int, default=42)
+    x.add_argument('--confirm', action='store_true')
+    x = sub.add_parser('verify-qlora', help='Verify private recipe, source consent and local base weights')
+    x.add_argument('run_id')
+    x = sub.add_parser('run-qlora', help='Opt-in experimental CUDA QLoRA trainer; never deploys')
+    x.add_argument('run_id')
+    x.add_argument('--resume', action='store_true', help='Explicitly resume an interrupted/failed run')
+    x.add_argument('--confirm', action='store_true')
+    x = sub.add_parser('register-adapter', help='Register completed private adapter (no Ollama load)')
+    x.add_argument('run_id')
+    x.add_argument('--candidate', required=True, help='Explicit LOCAL candidate label; lineage unverified')
+    x.add_argument('--confirm', action='store_true')
+    sub.add_parser('selection', help='Show private adapter-review pointer; NOT deployed')
+    x = sub.add_parser('select-adapter', help='Save owner-approved review pointer; no inference change')
+    x.add_argument('run_id')
+    x.add_argument('--report-sha256', required=True)
+    x.add_argument('--revision', type=int, required=True)
+    x.add_argument('--ack-lineage', action='store_true', help='I manually verified candidate uses this adapter')
+    x.add_argument('--confirm', action='store_true')
+    x = sub.add_parser('rollback-adapter', help='Revert private review pointer, not Ollama')
+    x.add_argument('--revision', type=int, required=True)
+    x.add_argument('--confirm', action='store_true')
     return p
 
 
@@ -45,6 +74,26 @@ def main(argv: list[str] | None = None) -> None:
             result = build_dataset(store, confirmed=args.confirm)
         elif args.command == 'verify':
             result = verify_dataset(store, args.sha256)
+        elif args.command == 'prepare-qlora':
+            result = create_run(store, args.sha256, args.base_model,
+                                max_steps=args.max_steps, seq_length=args.seq_length,
+                                seed=args.seed, confirmed=args.confirm)
+        elif args.command == 'verify-qlora':
+            result = describe_run(store, args.run_id)
+        elif args.command == 'run-qlora':
+            result = execute_run(store, args.run_id, confirmed=args.confirm, resume=args.resume)
+        elif args.command == 'register-adapter':
+            result = register_adapter(store, args.run_id, args.candidate, confirmed=args.confirm)
+        elif args.command == 'selection':
+            result = selection(store)
+        elif args.command == 'select-adapter':
+            result = select_for_review(store, args.run_id, args.report_sha256,
+                                       expected_revision=args.revision,
+                                       confirmed=args.confirm,
+                                       lineage_acknowledged=args.ack_lineage)
+        elif args.command == 'rollback-adapter':
+            result = rollback_selection(store, expected_revision=args.revision,
+                                        confirmed=args.confirm)
         elif args.command == 'compare':
             if not args.confirm:
                 raise ValueError('--confirm required before running local model benchmarks')
