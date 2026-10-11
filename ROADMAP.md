@@ -78,4 +78,5 @@ An adapter registry entry or review selection does NOT affect AthenZ inference, 
 ## v0.5 merged-GGUF Ollama handoff (experimental)
 - [x] Owner-reviewed private Modelfile for an externally merged full GGUF with source/adapter hashes, consent checks and an opt-in local Ollama `create` command.
 - [x] Dedicated candidate tag, existing-tag preflight, private import-intent checkpoint and observed installed-model digest without automatic model selection or remote publishing.
-- [ ] The actual Qwen LoRA merge/GGUF conversion, independently verified adapter lineage, target-PC import and inference tests remain outstanding. A model fingerprint proves bytes, not their training ancestry.
+- [x] Experimental owner-triggered CPU PEFT merge and SHA-pinned trusted local llama.cpp FP16 GGUF conversion, with consent revalidation, private recovery checkpoints, and an exact-output importer evidence link (PR #26).
+- [ ] Actual Qwen LoRA merge/GGUF conversion must still be tested with full model weights, adequate host RAM/disk, WSL2, and the target PC. Independent adapter lineage attestation and actual Ollama inference are outstanding; fingerprints prove bytes, not training ancestry.

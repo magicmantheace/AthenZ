@@ -63,6 +63,26 @@ def _modelfile_path(path: Path) -> str:
     return json.dumps(raw, ensure_ascii=True)
 
 
+def _conversion_lineage(store: ExperienceStore, run_id: str, gguf_sha: str) -> str:
+    """Prefer observed local conversion when available; never infer successful lineage.
+
+    An interrupted/failed conversion must not be silently bypassed by a new
+    manual import, and recorded output must be the exact reviewed GGUF bytes.
+    """
+    cp = store.get_checkpoint('convert_' + run_id)
+    if cp is None:
+        return 'owner-attested-merge-not-independently-proven'
+    from .conversion import conversion_status
+    try:
+        observed = conversion_status(store, run_id)
+    except (ValueError, OSError) as exc:
+        raise ImportErrorLocal('Local conversion evidence is not verifiable') from exc
+    if (observed['status'] != 'complete' or not observed['artifact']
+            or observed['artifact']['sha256'] != gguf_sha):
+        raise ImportErrorLocal('GGUF does not match a completed local conversion')
+    return 'owner-attested-and-local-conversion-observed-not-independently-proven'
+
+
 def _verified_source(store: ExperienceStore, run_id: str, state: dict) -> dict:
     entry = verified_registry_entry(store, run_id)
     if (entry['artifact_sha256'] != state['adapter_artifact_sha256']
@@ -73,6 +93,8 @@ def _verified_source(store: ExperienceStore, run_id: str, state: dict) -> dict:
     _, sha, size = _source_gguf(Path(state['gguf_path']))
     if sha != state['gguf_sha256'] or size != state['gguf_bytes']:
         raise ImportErrorLocal('Converted GGUF changed since owner review')
+    if state.get('lineage') != _conversion_lineage(store, run_id, sha):
+        raise ImportErrorLocal('GGUF provenance changed since preparation')
     recipe = (f"FROM {_modelfile_path(Path(state['gguf_path']))}\n").encode('utf-8')
     file = Path(state['modelfile'])
     if file.is_symlink() or not file.is_file() or file.read_bytes() != recipe:
@@ -109,7 +131,7 @@ def prepare_import(store: ExperienceStore, run_id: str, gguf_path: Path,
              'dataset_sha256': entry['dataset_sha256'], 'base_fingerprint': entry['base_fingerprint'],
              'registry_candidate': entry['candidate_model'], 'candidate_tag': candidate_tag,
              'modelfile': str(modelfile), 'modelfile_sha256': hashlib.sha256(recipe).hexdigest(),
-             'lineage': 'owner-attested-merge-not-independently-proven',
+             'lineage': _conversion_lineage(store, run_id, digest),
              'format': 'complete-merged-gguf-model', 'deployment': 'not-imported'}
     key = 'ollama_import_' + run_id
     old = store.get_checkpoint(key)
