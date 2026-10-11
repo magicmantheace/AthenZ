@@ -116,3 +116,33 @@ again before a run can be marked complete. A successful local training run
 The backend has been unit-tested with synthetic tiny fake weights, mocked
 trainer calls and no CUDA. Dependency compatibility and VRAM behavior must
 be verified on the target machine; for untrusted model files, use a VM.
+
+
+## Adapter registry and reversible review pointer (no deployment)
+
+Completed, still-valid private training outputs can be registered only after
+verifying the adapter safetensors digest, its LoRA config, and the original
+base-model fingerprint. Registration records metadata privately in the AthenZ
+SQLite checkpoint store. **The candidate label is an owner assertion**, not
+proof that an Ollama tag is actually backed by the registered adapter.
+
+```sh
+athenz-training register-adapter RUN_ID --candidate locally-evaluated-candidate --confirm
+athenz-training selection
+# AFTER creating and reviewing a private comparison report for that candidate:
+athenz-training select-adapter RUN_ID --report-sha256 EVAL_SHA \
+  --revision 0 --ack-lineage --confirm
+athenz-training selection
+# To roll back, copy the currently displayed revision:
+athenz-training rollback-adapter --revision CURRENT_REVISION --confirm
+```
+
+`select-adapter` requires an unaltered, current held-out evaluation report,
+a matching approved dataset, a strictly improving candidate score, and a
+manual acknowledgment of the unproven adapter→candidate mapping. Both the
+adapter and report are revalidated before updating the checkpoint, and a
+compare-and-swap revision prevents stale concurrent selection. Rollback also
+revalidates its target. **Selection and rollback only change a private review
+pointer:** they deliberately do not alter Ollama, load adapters, change Twin
+responses, move model files, or make network calls. Actual promotion requires
+separate installer integration, model conversion/testing, and user approval.

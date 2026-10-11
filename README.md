@@ -95,3 +95,10 @@ installed PyTorch/Transformers/PEFT/bitsandbytes. `--resume` is explicit.
 An Ollama GGUF-only model is not a valid training base. No automatic model
 selection or deployment is provided. The training runtime has **not** been
 executed on the owner's RTX 3060. See [docs/TRAINING.md](docs/TRAINING.md).
+
+
+Private adapter registry: `athenz-training register-adapter RUN_ID --candidate
+LOCAL-TAG --confirm` verifies completed adapter bytes. `selection`,
+`select-adapter` (requires a fresh SHA-256 evaluation report, revision, and
+owner acknowledgment), and `rollback-adapter` maintain a reversible **private
+review pointer only**; they do not load or deploy a model. See training docs.
