@@ -39,7 +39,7 @@ class TrainingDatasetTests(unittest.TestCase):
         result = build_dataset(self.store, confirmed=True)
         data = Path(result['path'])
         self.assertEqual(result['count'], 1)
-        self.assertTrue(data.is_relative_to(self.store.home))
+        self.assertTrue(data.resolve().is_relative_to(self.store.home.resolve()))
         self.assertNotIn('Never exported', data.read_text())
         parsed = json.loads(data.read_text().splitlines()[0])
         self.assertEqual(parsed['messages'][1]['content'], 'Reviewed synthetic response.')

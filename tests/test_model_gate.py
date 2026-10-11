@@ -57,7 +57,7 @@ class EvaluationGateTests(unittest.TestCase):
         with self.assertRaisesRegex(BenchmarkError, 'confirm'):
             save_report(self.store, report)
         saved = save_report(self.store, report, confirmed=True)
-        self.assertTrue(Path(saved['path']).is_relative_to(self.store.home))
+        self.assertTrue(Path(saved['path']).resolve().is_relative_to(self.store.home.resolve()))
         self.assertEqual(hashlib.sha256(Path(saved['path']).read_bytes()).hexdigest(), saved['sha256'])
         self.assertEqual(save_report(self.store, report, confirmed=True), saved)
 
