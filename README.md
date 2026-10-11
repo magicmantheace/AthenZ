@@ -5,11 +5,11 @@ style and choices based on approved examples; **Agent Mode** provides independen
 assistance without claiming to be the owner. Neither mode modifies model weights
 without a separate future training and evaluation pipeline.
 
-**Status: experimental v0.4 pre-release.** Human review is required for identity
+**Status: experimental v0.5 pre-release.** Human review is required for identity
 claims and file changes. Task checkpoints, scoped patch proposals, reviewed
 feedback, episodic memory and the review-gated foreground controller are
-implemented. There is no unsupervised daemon, Git publishing, automatic model
-fine-tuning, or verified Windows/WSL2 Docker integration.
+implemented. There is no unattended daemon, automatic cloud publishing, automatic
+model promotion, or verified GPU fine-tuning on the target Windows/WSL2 system.
 
 ## Setup
 
@@ -23,7 +23,8 @@ python -m athenz.chat --mode agent
 python -m unittest discover -s tests -v
 ```
 
-The `athenz`, `athenz-worker`, and `athenz-controller` command-line entries are
+The `athenz`, `athenz-worker`, `athenz-controller`, `athenz-sequence`, and
+`athenz-training` command-line entries are
 installed from `pyproject.toml`. Each mode uses locally stored, approval-gated
 private identity and memory in `~/.athenz` or `ATHENZ_HOME`, never the Git repo.
 The Ollama client accepts **only** explicit HTTP loopback endpoints.
@@ -96,9 +97,33 @@ An Ollama GGUF-only model is not a valid training base. No automatic model
 selection or deployment is provided. The training runtime has **not** been
 executed on the owner's RTX 3060. See [docs/TRAINING.md](docs/TRAINING.md).
 
+## Reviewed local Ollama routing (v0.5)
 
-Private adapter registry: `athenz-training register-adapter RUN_ID --candidate
-LOCAL-TAG --confirm` verifies completed adapter bytes. `selection`,
-`select-adapter` (requires a fresh SHA-256 evaluation report, revision, and
-owner acknowledgment), and `rollback-adapter` maintain a reversible **private
-review pointer only**; they do not load or deploy a model. See training docs.
+After creating an Ollama candidate **outside AthenZ** and verifying its
+training lineage yourself, register and evaluate it, select its adapter for
+review, then explicitly activate the already-installed tag:
+
+```sh
+athenz-training selection
+athenz-training runtime-status
+athenz-training runtime-activate --baseline EXISTING_EVALUATED_BASELINE \
+  --revision 0 --confirm
+# AthenZ chat now uses the pinned installed tag, unless --model overrides it.
+python -m athenz.chat --mode agent
+athenz-training runtime-status
+athenz-training runtime-rollback --revision CURRENT_RUNTIME_REVISION --confirm
+```
+
+The activation command performs a small local inference smoke check, requires
+matching approved dataset/evaluation evidence, and pins both candidate and
+baseline Ollama `/api/tags` digests. AthenZ chat rechecks the digest and
+reviewed private evidence before sending each prompt. If consent is revoked or
+a tag is replaced, chat fails closed until manual rollback/review. Explicit
+`--model` always means a deliberate owner override of the configured route.
+
+**This does not create, convert, import, train, deploy, or replace Ollama model
+weights.** The registered adapter-to-candidate association is *owner-attested*,
+not independently proven. `runtime-rollback` switches only AthenZ's private
+tag preference back to the exact pinned baseline (if it is still installed),
+not the Ollama daemon's installed files. No outbound model requests or remote
+network calls are authorized. See [docs/TRAINING.md](docs/TRAINING.md).

@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import Request, ProxyHandler, HTTPRedirectHandler, build_opener
 from .prompting import build_messages
 from .experience import ExperienceStore
 from .store import IdentityStore
@@ -15,6 +15,17 @@ from .store import IdentityStore
 
 class LocalModelError(RuntimeError):
     pass
+
+
+class _NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise LocalModelError('Local Ollama endpoint redirected; refusing external request')
+
+
+def safe_local_open(req, timeout: int):
+    # urllib otherwise inherits HTTP(S)_PROXY and follows redirects. Never send
+    # private prompts through a proxy or to an endpoint other than loopback.
+    return build_opener(ProxyHandler({}), _NoRedirect()).open(req, timeout=timeout)
 
 
 class OllamaClient:
@@ -40,7 +51,7 @@ class OllamaClient:
         req = Request(self.endpoint + "/api/chat", data=json.dumps(payload).encode("utf-8"),
                       headers={"Content-Type": "application/json"}, method="POST")
         try:
-            with urlopen(req, timeout=timeout) as response:
+            with safe_local_open(req, timeout=timeout) as response:
                 data = json.load(response)
             content = data["message"]["content"]
             if not isinstance(content, str):
@@ -71,7 +82,9 @@ def main(argv: list[str] | None = None) -> None:
     args = p.parse_args(argv)
     store = ExperienceStore(args.home)
     try:
-        model = OllamaClient(model=args.model)
+        from .runtime import checked_active_tag, RoutingError
+        selected = checked_active_tag(store) if args.model is None else None
+        model = OllamaClient(model=args.model or selected)
         print(f"AthenZ local {args.mode} chat (model: {model.model}). /exit to quit")
         history = store.conversation(args.session, args.mode, limit=10)
         while True:
@@ -85,8 +98,12 @@ def main(argv: list[str] | None = None) -> None:
             if not q:
                 continue
             try:
+                if args.model is None and selected is not None:
+                    checked = checked_active_tag(store)
+                    if checked != selected:
+                        raise RoutingError('Active model routing changed; restart the session')
                 reply = answer(store, model, q, args.mode, history)
-            except LocalModelError as error:
+            except (LocalModelError, RoutingError) as error:
                 print(f"Error: {error}")
                 continue
             print(f"\nAthenZ> {reply}\n")
