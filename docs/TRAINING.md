@@ -146,3 +146,58 @@ revalidates its target. **Selection and rollback only change a private review
 pointer:** they deliberately do not alter Ollama, load adapters, change Twin
 responses, move model files, or make network calls. Actual promotion requires
 separate installer integration, model conversion/testing, and user approval.
+
+
+## Local Ollama candidate selection and rollback (experimental)
+
+AthenZ can safely change **its own chat routing** to an already-installed local
+Ollama candidate; it cannot install or import the LoRA weights. The candidate
+must be registered with the adapter label, evaluated against an existing
+baseline, and chosen via `select-adapter --ack-lineage` first. **The lineage
+acknowledgment is a manual assertion, not cryptographic proof that Ollama's
+weights contain that adapter.** Independently verifying that mapping and a
+supported Ollama import route is future work.
+
+```sh
+athenz-training selection
+athenz-training runtime-status
+athenz-training runtime-activate --baseline base-evaluated-tag \
+  --revision 0 --confirm
+python -m athenz.chat --mode agent
+# Use the displayed runtime revision after any activation or prior rollback:
+athenz-training runtime-rollback --revision CURRENT_RUNTIME_REVISION --confirm
+```
+
+`runtime-activate` checks that the registered adapter, approved dataset and
+held-out evaluation report still agree, ensures that both Ollama tags exist on
+an **explicit loopback** endpoint, reads their SHA-256 digests from `/api/tags`,
+requires that both hashes match the digests recorded during the *held-out model comparison*,
+and runs a small synthetic smoke prompt against the candidate. It never sends
+owner private text for that smoke test. The installed tag is not modified. Older evaluation reports created
+before model digest pinning cannot authorize runtime activation; rerun the
+comparison with the candidate actually installed.
+Activation uses a compare-and-swap checkpoint revision to avoid stale writes.
+
+Without `--model`, AthenZ chat consults the private selected route before
+startup and rechecks the selected Ollama tag and current review/consent before
+each new message. It will *refuse* to route to a replaced tag, revoked dataset,
+changed adapter, or altered held-out report. It does not silently downgrade to
+a different tag. Explicit `--model` remains an intentional manual override.
+`runtime-rollback` restores the already-recorded baseline tag and manifest
+digest, even if the candidate has vanished or the adapter consent was revoked.
+If the baseline itself has changed, rollback refuses rather than routing to
+unknown weights. This is a runtime routing preference, **not Ollama server
+model deployment, download, deletion, or weight rollback**.
+
+Local HTTP requests disable proxy inheritance and reject HTTP redirects; this
+is essential because Ollama prompts contain sensitive user context. The tag
+lookup returns metadata only. Revalidating a large offline base-model
+fingerprint on every prompt prioritizes consent/integrity over response speed;
+performance optimization without weakening this guarantee is pending.
+
+The current official Ollama Modelfile documentation lists `FROM` for compatible
+Safetensors model imports, but does not currently describe `ADAPTER` as a
+supported directive. AthenZ therefore does not automate LoRA import or assume
+that a separately named candidate includes a given adapter. Actual Ollama
+adapter interoperability must be validated on a supported release and target
+hardware before an installation pipeline is enabled.

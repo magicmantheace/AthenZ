@@ -39,10 +39,20 @@ def compare_models(store: ExperienceStore, baseline_model, candidate_model,
     if (not isinstance(baseline, str) or not isinstance(candidate, str)
             or not baseline.strip() or not candidate.strip() or baseline == candidate):
         raise BenchmarkError('Select two distinct, explicitly named local models')
+    from .runtime import model_digest
+    initial_baseline_digest = model_digest(baseline)
+    initial_candidate_digest = model_digest(candidate)
+    if initial_baseline_digest == initial_candidate_digest:
+        raise BenchmarkError('Baseline and candidate have identical installed model digests')
     verify_dataset(store, dataset_sha256)
     initial_cases_sha = _heldout_fingerprint(store, split, limit)
     first = evaluate_decisions(store, baseline_model, split=split, limit=limit, seed=seed)
+    if model_digest(baseline) != initial_baseline_digest:
+        raise BenchmarkError('Baseline model digest changed during evaluation')
     second = evaluate_decisions(store, candidate_model, split=split, limit=limit, seed=seed)
+    if (model_digest(baseline) != initial_baseline_digest or
+            model_digest(candidate) != initial_candidate_digest):
+        raise BenchmarkError('Installed model digest changed during evaluation')
     ids_a = [c['id'] for c in first['cases']]
     ids_b = [c['id'] for c in second['cases']]
     if (ids_a != ids_b or len(ids_a) < min_cases or len(set(ids_a)) != len(ids_a)
@@ -61,6 +71,8 @@ def compare_models(store: ExperienceStore, baseline_model, candidate_model,
               'case_ids_sha256': hashlib.sha256(json.dumps(ids_a).encode()).hexdigest(),
               'heldout_fingerprint': initial_cases_sha,
               'baseline': baseline, 'candidate': candidate,
+              'baseline_digest': initial_baseline_digest,
+              'candidate_digest': initial_candidate_digest,
               'baseline_correct': first['correct'], 'candidate_correct': second['correct'],
               'baseline_accuracy': first['accuracy'], 'candidate_accuracy': second['accuracy'],
               'accuracy_gain': round(second['accuracy'] - first['accuracy'], 8),

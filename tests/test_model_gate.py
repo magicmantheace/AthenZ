@@ -20,6 +20,9 @@ class EvaluationGateTests(unittest.TestCase):
     def setUp(self):
         t = tempfile.TemporaryDirectory()
         self.addCleanup(t.cleanup)
+        digest_patch = mock.patch('athenz.runtime.model_digest', side_effect=lambda tag: 'a'*64 if tag in {'base', 'base-local'} else 'b'*64)
+        digest_patch.start()
+        self.addCleanup(digest_patch.stop)
         self.store = ExperienceStore(Path(t.name) / 'private')
         self.addCleanup(self.store.close)
         self.store.add_message('s', 'agent', 'user', 'synthetic training question')
@@ -53,6 +56,8 @@ class EvaluationGateTests(unittest.TestCase):
         self.assertTrue(report['eligible_for_review'])
         self.assertEqual(report['promotion'], 'not-authorized')
         self.assertEqual(report['cases'], 12)
+        self.assertEqual(report['baseline_digest'], 'a'*64)
+        self.assertEqual(report['candidate_digest'], 'b'*64)
         self.assertNotIn('synthetic held-out scenario', str(report))
         with self.assertRaisesRegex(BenchmarkError, 'confirm'):
             save_report(self.store, report)
@@ -89,6 +94,18 @@ class EvaluationGateTests(unittest.TestCase):
             return response
         with mock.patch('athenz.model_gate.evaluate_decisions', side_effect=fake):
             with self.assertRaisesRegex(BenchmarkError, 'changed'):
+                compare_models(self.store, Model('base'), Model('candidate'), self.sha)
+
+    def test_model_digest_drift_during_evaluation_is_rejected(self):
+        count = {'candidate': 0}
+        def digests(tag):
+            if tag == 'candidate':
+                count['candidate'] += 1
+                return 'b'*64 if count['candidate'] == 1 else 'c'*64
+            return 'a'*64
+        with mock.patch('athenz.runtime.model_digest', side_effect=digests), \
+             mock.patch('athenz.model_gate.evaluate_decisions', side_effect=self.observations()):
+            with self.assertRaisesRegex(BenchmarkError, 'digest changed'):
                 compare_models(self.store, Model('base'), Model('candidate'), self.sha)
 
     def test_revocation_between_two_inferences_blocks_benchmark(self):
