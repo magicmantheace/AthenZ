@@ -101,3 +101,13 @@ and **cleanup UNCONFIRMED**; inspect your Docker daemon manually. Killing a
 Docker CLI process alone is not proof its container stopped. This timeout path
 is unit-tested with a simulated Docker client, but has not yet been validated
 on the owner's Windows/WSL2 machine.
+
+## Legacy proposal API: no host-side Python execution
+
+The older `athenz code-test --kind compile` command now parses the edited
+Python files with `ast.parse` instead of launching `python -m py_compile` in
+an untrusted repository directory. Its result is **syntax-only evidence** and
+cannot become a verified procedural lesson. The old `--kind unittest` path
+has been removed from the legacy command: use `athenz-worker test` with the
+explicit digest-pinned Docker image and review confirmation instead. Existing
+stored `python -m py_compile` evidence is excluded from procedural retrieval.

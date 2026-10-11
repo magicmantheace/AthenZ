@@ -105,7 +105,7 @@ def build_parser() -> argparse.ArgumentParser:
         x.add_argument('id', type=int)
     x = sub.add_parser('code-test')
     x.add_argument('id', type=int)
-    x.add_argument('--kind', choices=['compile', 'unittest'], default='compile')
+    x.add_argument('--kind', choices=['compile'], default='compile')
     # v0.3 episodic memory and durable task checkpoints. No command execution.
     x = sub.add_parser('observe')
     x.add_argument('topic')
