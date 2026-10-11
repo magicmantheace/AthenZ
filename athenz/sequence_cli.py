@@ -37,6 +37,10 @@ def parser() -> argparse.ArgumentParser:
     x = sub.add_parser('export')
     x.add_argument('key')
     x.add_argument('--confirm', required=True, action='store_true')
+    x = sub.add_parser('publish-local', help='Create local branch after passing container tests; never push')
+    x.add_argument('key')
+    x.add_argument('--sha256', required=True, help='Exact exported patch SHA-256')
+    x.add_argument('--confirm', required=True, action='store_true')
     x = sub.add_parser('cancel')
     x.add_argument('key')
     x.add_argument('--discard-changes', action='store_true')
@@ -65,6 +69,11 @@ def main(argv: list[str] | None = None) -> None:
             if not args.confirm:
                 raise ValueError('Explicit --confirm required')
             result = ctl.export(args.key)
+        elif args.command == 'publish-local':
+            if not args.confirm:
+                raise ValueError('Explicit --confirm required for local Git ref creation')
+            from .publishing import publish_local_branch
+            result = publish_local_branch(ctl, args.key, args.sha256)
         elif args.command == 'cancel':
             ctl.cancel(args.key, discard_changes=args.discard_changes)
             result = {'status': 'cancelled'}

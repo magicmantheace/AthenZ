@@ -8,7 +8,7 @@ without a separate future training and evaluation pipeline.
 **Status: experimental v0.4 pre-release.** Human review is required for identity
 claims and file changes. Task checkpoints, scoped patch proposals, reviewed
 feedback, episodic memory and the review-gated foreground controller are
-implemented. There is no unsupervised daemon, Git publishing, automatic model
+implemented. There is no unsupervised daemon, remote Git push/merge automation, automatic model
 fine-tuning, or verified Windows/WSL2 Docker integration.
 
 ## Setup
@@ -46,7 +46,7 @@ A syntax failure can be retried automatically **only by undoing the isolated
 changes and preparing a new proposal**. Each attempt requires fresh approval.
 Passing syntax checks do **not** prove behavior. Actual project tests require
 the `athenz-worker test` opt-in Docker runner with a trusted, digest-pinned image.
-There is no host-side project test command or Git commit/push action.
+There is no host-side project test command or remote Git push action. Local branch handoff requires separate explicit approval.
 
 Your reviewed feedback and independently checked results may inform future
 prompt context. Model-weight updates are a separate future milestone.
@@ -75,3 +75,20 @@ throwaway snapshot of the **combined final result**. The review export records
 whether container tests were observed passing or failing and pins their
 snapshot fingerprint. If Docker is unavailable, the operation fails closed.
 This is not independent attestation and is still unverified on Windows/WSL2.
+
+### Reviewed local Git branch handoff (no remote push)
+
+With the sequence fully approved, Docker tests observed passing, and an
+immutable review patch exported, use:
+
+```sh
+athenz-sequence publish-local <key> --sha256 <exact-exported-patch-sha256> --confirm
+```
+
+This generates a commit on a new `athenz/<key>-<digest>` **local-only branch**
+without moving the original checkout's HEAD or changing its files. It never
+pushes, opens a PR, merges or publishes to a remote service; those remain owner
+actions. A model cannot approve the patch, the container test, or publication.
+
+The branch and commit belong to the same local Git object database as the
+trusted source repository; do not run it on untrusted Git configurations.
