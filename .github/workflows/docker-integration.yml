@@ -1,0 +1,44 @@
+name: Docker behavioral sandbox integration
+
+on:
+  pull_request:
+    paths:
+      - 'athenz/verification.py'
+      - 'tests/test_docker_integration.py'
+      - 'tests/test_sandbox_threats.py'
+      - '.github/workflows/docker-integration.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'athenz/verification.py'
+      - 'tests/test_docker_integration.py'
+      - 'tests/test_sandbox_threats.py'
+      - '.github/workflows/docker-integration.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  actual-docker-sandbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install AthenZ
+        run: python -m pip install -e .
+      - name: Resolve a local Docker image by registry digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull python:3.11-slim
+          IMAGE="$(docker image inspect python:3.11-slim --format '{{index .RepoDigests 0}}')"
+          [[ "$IMAGE" =~ ^[a-z0-9][a-z0-9._/-]*@sha256:[a-f0-9]{64}$ ]]
+          echo "ATHENZ_TEST_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+      - name: Test actual isolated container (pass and fail cases)
+        env:
+          ATHENZ_INTEGRATION_DOCKER: '1'
+        run: python -m unittest tests.test_docker_integration -v
