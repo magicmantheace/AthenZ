@@ -40,3 +40,30 @@ external backups separately. SQLite WAL / file backups may retain copies.
 Dataset hashes are integrity checks, not signed or independently attested
 provenance. Training, model selection, baseline benchmark, LoRA creation,
 deployment and rollback remain unimplemented.
+
+## Compare a candidate model (evaluation only)
+
+Once you have a separately created candidate model available in local Ollama,
+use the **same** eligible, owner-approved dataset snapshot and a held-out
+calibration set to assess whether it performs better than the baseline:
+
+```sh
+athenz-training compare <dataset-sha256> --baseline local-base-tag \
+  --candidate local-candidate-tag --split calibration --min-cases 10 --confirm
+```
+
+This makes local Ollama requests and records **aggregate** accuracy, gain,
+model names, decision-set fingerprint and dataset SHA-256 under the private
+`ATHENZ_HOME/evaluations` folder. Case scenarios, user answers and predictions
+are omitted from the report. Both models are evaluated on the *same*
+deterministically ordered/shuffled cases, and the report is discarded if the
+private source approvals or evaluation decisions change while running.
+
+The comparison can label a model `eligible_for_review` if its observed
+accuracy exceeds the baseline on at least 10 held-out cases. **This is not
+statistically robust proof of improvement**, is not independent attestation,
+and does not grant permission to install or deploy any adapter. Use calibration
+for iterative development and preserve test data for a final, independently
+reviewed evaluation. No automatic promotion, model-weight change, or remote
+training occurs. Inference may require a working local Ollama installation,
+but that is not a prerequisite for independent code development.

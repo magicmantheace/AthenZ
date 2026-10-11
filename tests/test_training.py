@@ -128,7 +128,7 @@ class TrainingDatasetTests(unittest.TestCase):
 
     def test_cli_has_no_train_or_deploy_command(self):
         commands = parser()._subparsers._group_actions[0].choices
-        self.assertEqual(set(commands), {'inspect', 'build', 'verify', 'delete'})
+        self.assertEqual(set(commands), {'inspect', 'build', 'verify', 'delete', 'compare'})
 
 
 if __name__ == '__main__':
