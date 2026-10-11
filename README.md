@@ -1,115 +1,57 @@
 # AthenZ
 
-**AthenZ** is a local-first digital twin, an approval-gated personal memory
-system and a bounded coding assistant. Twin mode estimates the owner's style
-and preferences without pretending to literally be the owner; Agent mode
-works for the owner and learns from reviewed, test-backed work evidence.
+Private, local-first digital twin and coding assistant. **Twin Mode** simulates
+style and choices based on approved examples; **Agent Mode** provides independent
+assistance without claiming to be the owner. Neither mode modifies model weights
+without a separate future training and evaluation pipeline.
 
-**Status: v0.2 pre-release integration.** Identity, private conversation
-persistence, feedback and training candidates, opt-in writing imports, and
-scoped code proposals are implemented. No autonomous daemon, isolated coding
-sandbox, self-directed training, LoRA model deployment or desktop app exists
-yet. The target PC's Ollama inference remains unverified.
+**Status: experimental v0.4 pre-release.** Human review is required for identity
+claims and file changes. Task checkpoints, scoped patch proposals, reviewed
+feedback, episodic memory and the review-gated foreground controller are
+implemented. There is no unsupervised daemon, Git publishing, automatic model
+fine-tuning, or verified Windows/WSL2 Docker integration.
 
-## Installation (Python 3.11+, local Ollama optional)
+## Setup
 
 ```sh
 python -m pip install -e .
 athenz init
-athenz propose preference "Prefer tests before deployment"
-athenz list identity --status pending
-athenz status 1 approved
-athenz context
-python -m unittest discover -s tests -v
-
-# For local conversations, install Ollama and fetch a model first:
+# Optional: install Ollama separately and pull a local model
 ollama pull qwen3.5:2b
-python -m athenz.chat --mode agent --session work
-python -m athenz.chat --mode twin --session personal
+python -m athenz.chat --mode twin
+python -m athenz.chat --mode agent
+python -m unittest discover -s tests -v
 ```
 
-Ollama only connects to explicit HTTP loopback (`127.0.0.1`, `::1`,
-`localhost`). By default it uses `http://127.0.0.1:11434`.
-Use `ATHENZ_OLLAMA_URL` and `ATHENZ_MODEL` to customize local inference.
+The `athenz`, `athenz-worker`, and `athenz-controller` command-line entries are
+installed from `pyproject.toml`. Each mode uses locally stored, approval-gated
+private identity and memory in `~/.athenz` or `ATHENZ_HOME`, never the Git repo.
+The Ollama client accepts **only** explicit HTTP loopback endpoints.
 
-## Learning and reviewed coding
+## Supervised coding and learning
 
 ```sh
-# Messages are shown with reply IDs; give feedback on an assistant reply:
-athenz feedback 2 down --correction "The answer I would actually give"
-athenz list train_pairs --status pending
-athenz review train_pairs 1 approved
-athenz export-training ~/reviewed-training.json
-
-# Preview personal writing samples, then explicitly import them as pending:
-athenz import-chatgpt ~/Downloads/conversations.json --source-ref oct-2026
-athenz import-chatgpt ~/Downloads/conversations.json --source-ref oct-2026 --confirm
-athenz list writing_samples --status pending
-
-# Review a model-proposed code patch before changing source files:
-athenz code-propose /path/to/repo "Fix arithmetic" calc.py tests/test_calc.py
-athenz code-diff 1
-athenz code-apply 1
-athenz code-test 1 --kind compile
-athenz code-test 1 --kind unittest
-athenz list experiences --status pending
-athenz review experiences 1 approved
-athenz code-undo 1
+athenz-controller start mathfix /path/to/clean/trusted/repo 'Repair arithmetic'
+athenz-controller plan mathfix calc.py util.py
+athenz-controller prepare mathfix
+athenz-controller review mathfix
+athenz-controller apply mathfix --sha256 <displayed-sha256> --confirm
+athenz-controller syntax mathfix
+athenz-controller export mathfix --confirm
+athenz-controller cancel mathfix --discard-changes
 ```
 
-Only explicitly selected existing text files can be proposed. A human runs
-`code-apply` and chooses when to test; the model cannot execute shell commands,
-commit, push or deploy. `unittest` executes code from the specified repository
-on the host — it is **not sandboxed**. Do not run it on untrusted repositories.
-Test-backed experiences remain pending unless approved. A reverted proposal
-revokes any approved lesson attached to it. Tests passing are observations,
-not proof of code correctness.
+The planner cannot choose extra files, execute arbitrary code or bypass review.
+A syntax failure can be retried automatically **only by undoing the isolated
+changes and preparing a new proposal**. Each attempt requires fresh approval.
+Passing syntax checks do **not** prove behavior. Actual project tests require
+the `athenz-worker test` opt-in Docker runner with a trusted, digest-pinned image.
+There is no host-side project test command or Git commit/push action.
 
-## Privacy and limitations
+Your reviewed feedback and independently checked results may inform future
+prompt context. Model-weight updates are a separate future milestone.
 
-Local data is held in `~/.athenz/identity.sqlite3` or `ATHENZ_HOME`. Do not
-put this directory inside the Git repository. No personally identifiable
-owner data, raw chat exports, conversation contents or training samples are
-committed here. `athenz export ...` and `athenz export-training ...` refuse
-paths inside detected Git working trees.
-
-Use `athenz forget identity <id>`, `athenz forget-runtime messages <id>`,
-`athenz delete-session <session>`, or `athenz purge-source <source> --source-ref
-<ref>` for targeted deletion. SQLite/WAL and external backups can retain
-remnants: encryption-at-rest and backup lifecycle controls are **not** done.
-Never assume automatic learning has modified model weights.
-
-## Project references
-
-- [ROADMAP.md](ROADMAP.md) — v0.1–v1.0 acceptance criteria.
-- [AGENTS.md](AGENTS.md) — development, privacy and safety constraints.
-- [docs/LEARNING.md](docs/LEARNING.md) — detailed memory and coding controls.
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — runtime component boundaries.
-
-## v0.3 experience-learning foundation (experimental)
-
-Reviewable episodic memory and non-executing task checkpoints are available:
-
-```bash
-athenz observe "Python testing" "Use mocks for network calls" --tag python --tag tests
-athenz list episodes --status pending
-athenz review-episode 1 approved
-athenz recall "python tests"
-athenz checkpoint-save parser-fix "Improve parser" --state-json '{"step":1}'
-athenz checkpoint-show parser-fix
-```
-
-Approved episodes are retrieved only for matching topics, and recorded coding
-lessons require current passing test evidence. See
-[docs/LEARNING.md](docs/LEARNING.md) for conflict review, source purge, revision
-checks, and limitations. This does **not** yet make AthenZ a self-training or
-unattended autonomous agent. Checkpoints store data but cannot execute tasks.
-
-Additional v0.3 controls: `athenz dispute`, `athenz resolve-dispute`,
-`athenz artifact-hash`, and `athenz artifact-verify`. Disputed approved
-memories are withheld from prompts until resolution. Artifact fingerprints
-are locally observed metadata, **not** independent proof of code correctness.
-
-## v0.4 supervised worktrees (initial slice)
-
-`athenz-worker` creates disposable detached worktrees, reviews local model proposals before applying them, saves resumable private checkpoints and runs Python syntax parsing without executing project code. Optional digest-pinned Docker testing fails closed without a container runtime. See [docs/WORKER.md](docs/WORKER.md). No unattended loop, commit/push or full v0.4 acceptance is claimed.
+See [ROADMAP.md](ROADMAP.md), [AGENTS.md](AGENTS.md),
+[docs/LEARNING.md](docs/LEARNING.md), [docs/WORKER.md](docs/WORKER.md), and
+[docs/CONTROLLER.md](docs/CONTROLLER.md). Encryption at rest, robust local
+backup erasure, attested testing, and target-PC validation remain unfinished.

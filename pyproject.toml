@@ -1,2 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
 
-# Worker is intentionally separate from personal Twin chat / main CLI.
+[project]
+name = "athenz-local"
+version = "0.4.0a1"
+description = "Local-first digital twin with approval-gated memory and supervised coding"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+athenz = "athenz.cli:main"
+athenz-worker = "athenz.work_cli:main"
+athenz-controller = "athenz.controller_cli:main"
+
+[tool.setuptools.packages.find]
+include = ["athenz*"]
