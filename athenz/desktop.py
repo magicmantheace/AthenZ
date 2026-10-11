@@ -1,0 +1,424 @@
+"""Local-only AthenZ desktop shell with explicit human approval controls.
+
+Tkinter is imported only when launching the graphical application. A pure
+service layer lets CI test privacy boundaries without a display server.
+No daemon, scheduler, model training, Docker execution or Git publishing.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+import queue
+import re
+import threading
+
+from .chat import OllamaClient, answer
+from .experience import ExperienceStore
+from .runtime import checked_active_tag
+
+SESSION = re.compile(r'[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}\Z')
+PENDING_TABLES = ('identity', 'episodes', 'decisions', 'train_pairs', 'writing_samples', 'experiences')
+
+
+class DesktopError(ValueError):
+    """A desktop workflow tried to exceed owner-controlled permissions."""
+
+
+def _validate_session(session: str, mode: str) -> None:
+    if not isinstance(session, str) or not SESSION.fullmatch(session):
+        raise DesktopError('Session key must have 1–64 letters, numbers, dots, dashes or underscores')
+    if mode not in ('agent', 'twin'):
+        raise DesktopError('Mode must be Agent or Twin')
+
+
+class DesktopService:
+    """Small UI-independent facade; every operation has its own SQLite handle.
+
+    Creating/closing DB handles inside each method prevents sharing SQLite
+    connections between Tk's main thread and Ollama inference workers.
+    """
+    def __init__(self, home: Path | None = None):
+        self.home = Path(home) if home is not None else None
+
+    def history(self, session: str, mode: str, *, limit: int = 40) -> list[dict]:
+        _validate_session(session, mode)
+        if not 1 <= limit <= 100:
+            raise DesktopError('History limit must be 1..100')
+        store = ExperienceStore(self.home)
+        try:
+            return store.conversation(session, mode, limit=limit)
+        finally:
+            store.close()
+
+    def send(self, session: str, mode: str, prompt: str, *, model: str | None = None) -> dict:
+        """Synchronous worker-thread operation; only successful replies persist.
+
+        This method never calls GUI functions. The routed tag is revalidated
+        after inference to reject stale model selections during a slow reply.
+        """
+        _validate_session(session, mode)
+        if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 4000:
+            raise DesktopError('Enter a prompt of 1–4000 characters')
+        store = ExperienceStore(self.home)
+        try:
+            chosen = checked_active_tag(store) if model is None else None
+            local = OllamaClient(model=model or chosen)
+            recent = store.conversation(session, mode, limit=10)
+            reply = answer(store, local, prompt.strip(), mode, recent)
+            if model is None and checked_active_tag(store) != chosen:
+                raise DesktopError('Selected model changed during inference; reply discarded')
+            if not isinstance(reply, str) or not reply.strip():
+                raise DesktopError('Local model returned no usable reply')
+            # Commit both messages together; a failed response never writes a
+            # partial conversation. All parameters are bound SQL values.
+            from .store import utc_now
+            with store.db:
+                store.db.execute('''INSERT INTO messages(session,mode,role,content,created_at)
+                                    VALUES (?,?,?,?,?)''',
+                                 (session, mode, 'user', prompt.strip(), utc_now()))
+                saved = store.db.execute('''INSERT INTO messages(session,mode,role,content,created_at)
+                                            VALUES (?,?,?,?,?)''',
+                                         (session, mode, 'assistant', reply, utc_now()))
+            return {'reply': reply, 'reply_id': int(saved.lastrowid), 'model': local.model,
+                    'session': session, 'mode': mode}
+        finally:
+            store.close()
+
+    def pending(self, *, limit: int = 200) -> list[dict]:
+        if not 1 <= limit <= 300:
+            raise DesktopError('Pending limit must be 1..300')
+        store = ExperienceStore(self.home)
+        try:
+            result = []
+            for table in PENDING_TABLES:
+                rows = store.list_items(table, 'pending', limit)
+                for item in rows:
+                    preview = (item.get('text') or item.get('topic') or
+                               item.get('scenario') or item.get('instruction') or
+                               item.get('lesson') or '')
+                    result.append({'table': table, 'id': int(item['id']),
+                                   'preview': str(preview)[:180]})
+                    if len(result) >= limit:
+                        return result
+            return result
+        finally:
+            store.close()
+
+    def review_detail(self, table: str, item_id: int) -> dict:
+        # Present the ENTIRE reviewed item, rather than approving a truncated preview.
+        if table not in PENDING_TABLES or not isinstance(item_id, int) or item_id <= 0:
+            raise DesktopError('Invalid pending review selection')
+        store = ExperienceStore(self.home)
+        try:
+            row = store.db.execute('SELECT * FROM '+table+' WHERE id=?', (item_id,)).fetchone()
+            if row is None or row['status'] != 'pending':
+                raise DesktopError('Review record is no longer pending')
+            return dict(row)
+        finally:
+            store.close()
+
+    def feedback(self, session: str, mode: str, message_id: int, rating: str,
+                 correction: str = '') -> dict:
+        # Only a reply from this same local session/mode can be rated.
+        _validate_session(session, mode)
+        if rating not in ('up', 'down') or not isinstance(message_id, int) or message_id <= 0:
+            raise DesktopError('Select a stored assistant reply and rating')
+        if len(correction) > 4000:
+            raise DesktopError('Correction must contain no more than 4000 characters')
+        store = ExperienceStore(self.home)
+        try:
+            row = store.db.execute("SELECT id FROM messages WHERE id=? AND session=? AND mode=? AND role='assistant'",
+                                   (message_id, session, mode)).fetchone()
+            if row is None:
+                raise DesktopError('Reply does not exist in this session and mode')
+            feedback_id = store.add_feedback(message_id, rating, correction)
+            return {'feedback_id': feedback_id, 'training': 'pending-owner-review'}
+        finally:
+            store.close()
+
+    def review(self, table: str, item_id: int, state: str) -> bool:
+        """Explicit UI approval/rejection only, never automatic promotion."""
+        if table not in PENDING_TABLES or not isinstance(item_id, int) or item_id <= 0:
+            raise DesktopError('Choose a pending reviewed item')
+        if state not in ('approved', 'rejected'):
+            raise DesktopError('Choose an explicit approval or rejection')
+        store = ExperienceStore(self.home)
+        try:
+            if table == 'identity':
+                row = store.db.execute('SELECT status FROM identity WHERE id=?', (item_id,)).fetchone()
+                if row is None or row['status'] != 'pending':
+                    raise DesktopError('Item changed since review list loaded')
+                return store.status(item_id, state)
+            if table == 'episodes':
+                row = store.db.execute('SELECT status FROM episodes WHERE id=?', (item_id,)).fetchone()
+                if row is None or row['status'] != 'pending':
+                    raise DesktopError('Item changed since review list loaded')
+                return store.review_episode(item_id, state)
+            if table == 'decisions':
+                row = store.db.execute('SELECT status FROM decisions WHERE id=?', (item_id,)).fetchone()
+                if row is None or row['status'] != 'pending':
+                    raise DesktopError('Item changed since review list loaded')
+                return store.decision_status(item_id, state)
+            row = store.db.execute('SELECT status FROM '+table+' WHERE id=?', (item_id,)).fetchone()
+            if row is None or row['status'] != 'pending':
+                raise DesktopError('Item changed since review list loaded')
+            return store.set_review(table, item_id, state)
+        finally:
+            store.close()
+
+    def tasks(self, *, limit: int = 100) -> list[dict]:
+        if not 1 <= limit <= 300:
+            raise DesktopError('Task limit must be 1..300')
+        store = ExperienceStore(self.home)
+        try:
+            return [{'task_key': r['task_key'], 'task': r['task'],
+                     'status': r['status'], 'revision': int(r['revision'])}
+                    for r in store.db.execute(
+                        'SELECT task_key,task,status,revision FROM checkpoints '
+                        'ORDER BY updated_at DESC,id DESC LIMIT ?', (limit,))]
+        finally:
+            store.close()
+
+
+def launch(home: Path | None = None) -> None:
+    """Start a foreground Tk interface; it makes no operations on its own."""
+    try:
+        import tkinter as tk
+        from tkinter import ttk, messagebox, simpledialog
+    except ImportError as exc:
+        raise DesktopError('Tkinter is unavailable; install Tk support for Python') from exc
+
+    service = DesktopService(home)
+    try:
+        window = tk.Tk()
+    except tk.TclError as exc:
+        raise DesktopError('No graphical display is available') from exc
+    window.title('AthenZ — Local AI')
+    window.minsize(820, 540)
+    window.geometry('1040x690')
+    style = ttk.Style(window)
+    if 'clam' in style.theme_names():
+        style.theme_use('clam')
+    status = tk.StringVar(value='Local only · No background actions')
+    book = ttk.Notebook(window)
+    book.pack(fill='both', expand=True, padx=12, pady=(12, 4))
+    chat_tab, review_tab, tasks_tab = (ttk.Frame(book, padding=12) for _ in range(3))
+    book.add(chat_tab, text='Chat')
+    book.add(review_tab, text='Review memory')
+    book.add(tasks_tab, text='Tasks (read-only)')
+
+    chat_controls = ttk.Frame(chat_tab)
+    chat_controls.pack(fill='x')
+    ttk.Label(chat_controls, text='Mode').pack(side='left', padx=(0, 6))
+    mode = tk.StringVar(value='agent')
+    modes = ttk.Combobox(chat_controls, values=('agent', 'twin'), width=9,
+                         state='readonly', textvariable=mode)
+    modes.pack(side='left', padx=(0, 12))
+    ttk.Label(chat_controls, text='Session').pack(side='left', padx=(0, 6))
+    session = tk.StringVar(value='desktop')
+    session_box = ttk.Entry(chat_controls, textvariable=session, width=24)
+    session_box.pack(side='left', padx=(0, 8))
+    transcript = tk.Text(chat_tab, wrap='word', state='disabled', padx=10, pady=10)
+    transcript.pack(fill='both', expand=True, pady=8)
+    send_row = ttk.Frame(chat_tab)
+    send_row.pack(fill='x')
+    prompt = ttk.Entry(send_row)
+    prompt.pack(side='left', fill='x', expand=True, padx=(0, 8))
+    send_button = ttk.Button(send_row, text='Send')
+    send_button.pack(side='left')
+    response_queue: queue.Queue = queue.Queue()
+    active = {'pending': False}
+
+    def set_status(message: str) -> None:
+        status.set(message)
+
+    def set_transcript(rows: list[dict]) -> None:
+        transcript.config(state='normal')
+        transcript.delete('1.0', 'end')
+        for row in rows:
+            title = 'You' if row['role'] == 'user' else 'AthenZ'
+            transcript.insert('end', f"{title}: {row['content']}\n\n")
+        transcript.see('end')
+        transcript.config(state='disabled')
+
+    def refresh_history(*_) -> None:
+        if active['pending']:
+            return
+        try:
+            set_transcript(service.history(session.get(), mode.get()))
+            set_status('Chat ready · Ollama uses local loopback only')
+        except Exception as exc:
+            set_status(str(exc))
+
+    def send(*_) -> None:
+        if active['pending']:
+            return
+        user_text = prompt.get()
+        chosen_session, chosen_mode = session.get(), mode.get()
+        try:
+            _validate_session(chosen_session, chosen_mode)
+            if not user_text.strip() or len(user_text) > 4000:
+                raise DesktopError('Enter a message of 1–4000 characters')
+        except DesktopError as exc:
+            messagebox.showerror('Cannot send', str(exc))
+            return
+        active['pending'] = True
+        send_button.config(state='disabled')
+        set_status('Generating locally…')
+        def do_inference() -> None:
+            try:
+                outcome = service.send(chosen_session, chosen_mode, user_text)
+                response_queue.put(('ok', outcome))
+            except Exception as exc:
+                response_queue.put(('error', str(exc)))
+        threading.Thread(target=do_inference, name='athenz-local-inference', daemon=True).start()
+
+    def drain() -> None:
+        try:
+            while True:
+                state, value = response_queue.get_nowait()
+                active['pending'] = False
+                send_button.config(state='normal')
+                if state == 'error':
+                    set_status('Local inference failed')
+                    messagebox.showerror('AthenZ', value)
+                else:
+                    prompt.delete(0, 'end')
+                    if (value['session'], value['mode']) == (session.get(), mode.get()):
+                        refresh_history()
+                    set_status(f"Reply #{value['reply_id']} from {value['model']}; feedback requires review")
+        except queue.Empty:
+            pass
+        window.after(100, drain)
+
+    def rate_reply(rating: str) -> None:
+        try:
+            rows = service.history(session.get(), mode.get(), limit=10)
+            last = next((r for r in reversed(rows) if r['role'] == 'assistant'), None)
+            if last is None:
+                raise DesktopError('This session has no assistant reply to rate')
+            correction = ''
+            if rating == 'down':
+                entered = simpledialog.askstring('Correct AthenZ',
+                    'What should the answer have been? Leave blank for negative feedback only.',
+                    parent=window)
+                if entered is None:
+                    return
+                correction = entered
+            if not messagebox.askyesno('Confirm feedback',
+                    f"Record {rating} feedback for reply #{last['id']}? Any training pair will remain pending review."):
+                return
+            result = service.feedback(session.get(), mode.get(), int(last['id']), rating, correction)
+            set_status(f"Feedback #{result['feedback_id']} saved; training requires separate review")
+            reload_reviews()
+        except Exception as exc:
+            messagebox.showerror('Feedback failed', str(exc))
+
+    ttk.Button(send_row, text='Good reply', command=lambda: rate_reply('up')).pack(side='left', padx=(8, 0))
+    ttk.Button(send_row, text='Correct reply', command=lambda: rate_reply('down')).pack(side='left', padx=(8, 0))
+
+    send_button.config(command=send)
+    prompt.bind('<Return>', send)
+    modes.bind('<<ComboboxSelected>>', refresh_history)
+    session_box.bind('<Return>', refresh_history)
+    ttk.Button(chat_controls, text='Load history', command=refresh_history).pack(side='left')
+
+    review_toolbar = ttk.Frame(review_tab)
+    review_toolbar.pack(fill='x', pady=(0, 8))
+    ttk.Label(review_toolbar, text='Pending items stay private and require approval.').pack(side='left')
+    review_tree = ttk.Treeview(review_tab, columns=('kind', 'id', 'preview'),
+                               show='headings', selectmode='browse')
+    for col, width in [('kind', 125), ('id', 65), ('preview', 620)]:
+        review_tree.heading(col, text=col.title())
+        review_tree.column(col, width=width, stretch=col=='preview')
+    review_tree.pack(fill='both', expand=True)
+
+    def reload_reviews() -> None:
+        try:
+            review_tree.delete(*review_tree.get_children())
+            for item in service.pending():
+                review_tree.insert('', 'end', values=(item['table'], item['id'], item['preview']))
+            set_status('Pending items loaded from private storage')
+        except Exception as exc:
+            messagebox.showerror('Review error', str(exc))
+
+    def review_selected(state: str) -> None:
+        selected = review_tree.selection()
+        if not selected:
+            messagebox.showinfo('Select an item', 'Select a pending item for full review first.')
+            return
+        table, number, _ = review_tree.item(selected[0], 'values')
+        try:
+            record = service.review_detail(str(table), int(number))
+        except Exception as exc:
+            messagebox.showerror('Review unavailable', str(exc))
+            reload_reviews()
+            return
+        dialog = tk.Toplevel(window)
+        dialog.title(f'Inspect {table} #{number}')
+        dialog.geometry('700x480')
+        dialog.transient(window)
+        details = tk.Text(dialog, wrap='word', padx=12, pady=12)
+        details.pack(fill='both', expand=True, padx=12, pady=8)
+        details.insert('1.0', json.dumps(record, indent=2, ensure_ascii=False))
+        details.config(state='disabled')
+        controls = ttk.Frame(dialog, padding=12)
+        controls.pack(fill='x')
+
+        def decide() -> None:
+            action = 'approve' if state == 'approved' else 'reject'
+            if not messagebox.askyesno(f'Confirm {action}',
+                    f'{action.title()} the FULL reviewed record {table} #{number}?', parent=dialog):
+                return
+            try:
+                service.review(str(table), int(number), state)
+                dialog.destroy()
+                reload_reviews()
+            except Exception as exc:
+                messagebox.showerror('Review refused', str(exc), parent=dialog)
+
+        ttk.Button(controls, text='Cancel', command=dialog.destroy).pack(side='right', padx=4)
+        ttk.Button(controls, text='Confirm '+state, command=decide).pack(side='right', padx=4)
+
+    ttk.Button(review_toolbar, text='Refresh', command=reload_reviews).pack(side='right', padx=4)
+    ttk.Button(review_toolbar, text='Reject selected', command=lambda: review_selected('rejected')).pack(side='right', padx=4)
+    ttk.Button(review_toolbar, text='Approve selected', command=lambda: review_selected('approved')).pack(side='right', padx=4)
+
+    tasks_row = ttk.Frame(tasks_tab)
+    tasks_row.pack(fill='x', pady=(0, 8))
+    ttk.Label(tasks_row, text='Stored checkpoints · this screen cannot start or run tasks').pack(side='left')
+    task_tree = ttk.Treeview(tasks_tab, columns=('key','state','revision','task'), show='headings')
+    for col, width in [('key',160),('state',90),('revision',85),('task',620)]:
+        task_tree.heading(col, text=col.title())
+        task_tree.column(col, width=width, stretch=col=='task')
+    task_tree.pack(fill='both', expand=True)
+
+    def reload_tasks() -> None:
+        try:
+            task_tree.delete(*task_tree.get_children())
+            for item in service.tasks():
+                task_tree.insert('', 'end', values=(item['task_key'], item['status'],
+                                                    item['revision'], item['task'][:200]))
+        except Exception as exc:
+            messagebox.showerror('Task list unavailable', str(exc))
+    ttk.Button(tasks_row, text='Refresh', command=reload_tasks).pack(side='right')
+
+    ttk.Label(window, textvariable=status, anchor='w').pack(fill='x', padx=16, pady=(0, 10))
+    refresh_history()
+    reload_reviews()
+    reload_tasks()
+    window.after(100, drain)
+    window.mainloop()
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description='Local AthenZ desktop shell (no daemon)')
+    parser.add_argument('--home', type=Path, default=None,
+                        help='Private local AthenZ directory, outside Git')
+    args = parser.parse_args(argv)
+    launch(args.home)
+
+
+if __name__ == '__main__':
+    main()

@@ -80,3 +80,10 @@ An adapter registry entry or review selection does NOT affect AthenZ inference, 
 - [x] Dedicated candidate tag, existing-tag preflight, private import-intent checkpoint and observed installed-model digest without automatic model selection or remote publishing.
 - [x] Experimental owner-triggered CPU PEFT merge and SHA-pinned trusted local llama.cpp FP16 GGUF conversion, with consent revalidation, private recovery checkpoints, and an exact-output importer evidence link (PR #26).
 - [ ] Actual Qwen LoRA merge/GGUF conversion must still be tested with full model weights, adequate host RAM/disk, WSL2, and the target PC. Independent adapter lineage attestation and actual Ollama inference are outstanding; fingerprints prove bytes, not training ancestry.
+
+## v0.6 experimental desktop foundation (PR #27)
+- [x] Native Tkinter foreground interface with Agent/Twin local chat, separate persisted sessions, explicit reply ratings/corrections and owner-confirmed full-record review of pending memory/training candidates.
+- [x] Read-only checkpoint dashboard; nonblocking local inference, no cross-thread SQLite handles, revalidation of routed model and private consent, no implicit background training or Git writes.
+- [x] Ten headless synthetic desktop tests; package wheel built and CLI entrypoint checked on Linux.
+- [ ] Native Windows DPI/UI test, real local Ollama GPU inference, polished error recovery, task-control/approval flows and safe installer.
+- [ ] Supervised background scheduler and app lifecycle controls. Hardware-specific validation remains unverified.

@@ -15,6 +15,7 @@ athenz-worker = "athenz.work_cli:main"
 athenz-controller = "athenz.controller_cli:main"
 athenz-sequence = "athenz.sequence_cli:main"
 athenz-training = "athenz.train_cli:main"
+athenz-desktop = "athenz.desktop:main"
 
 [tool.setuptools.packages.find]
 include = ["athenz*"]

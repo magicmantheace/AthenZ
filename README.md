@@ -164,3 +164,14 @@ uploaded, and failed conversion attempts are preserved for explicit recovery.
 See [docs/CONVERSION.md](docs/CONVERSION.md) for prerequisites, resource
 warnings, and the commands. **Real CPU/RAM/GGUF compatibility has not yet
 been validated on the target PC.**
+
+## Basic native desktop shell (experimental v0.6)
+
+The first desktop interface is available as `athenz-desktop` (or
+`python -m athenz.desktop`). It provides **local chat** in Agent/Twin modes,
+private conversation histories, manual reply feedback, full-record review of
+pending memories/training candidates and **read-only** coding-task status.
+It does not auto-run coding tasks, install models or train weights. Tkinter is
+loaded only when starting the GUI, so headless CLI and CI remain supported.
+The graphical UI and Ollama inference are **not yet tested on the user's PC**;
+see [docs/DESKTOP.md](docs/DESKTOP.md) for prerequisites and limitations.
