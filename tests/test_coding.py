@@ -38,8 +38,9 @@ class CodingTests(unittest.TestCase):
         self.assertEqual(code, 0, out)
         lesson = self.store.list_items('experiences')[0]
         self.assertEqual(lesson['status'], 'pending')
-        self.store.set_review('experiences', lesson['id'], 'approved')
-        self.assertEqual(len(self.store.approved_experiences()), 1)
+        with self.assertRaisesRegex(ValueError, 'Syntax parsing'):
+            self.store.set_review('experiences', lesson['id'], 'approved')
+        self.assertEqual(self.store.approved_experiences(), [])
         self.assertEqual(change_status(self.store, pid, undo=True), 1)
         self.assertIn('return x-y', (self.repo / 'calc.py').read_text())
         self.assertEqual(self.store.approved_experiences(), [])
@@ -81,6 +82,9 @@ class CodingTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             run_tests(self.store, pid, 'rm -rf /')
         self.assertEqual(self.store.list_items('test_runs'), [])
+        (self.repo / 'tests').mkdir()
+        with self.assertRaisesRegex(ValueError, 'Host tests disabled'):
+            run_tests(self.store, pid, 'unittest')
 
 
 if __name__ == '__main__':

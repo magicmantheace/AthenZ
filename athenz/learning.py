@@ -61,7 +61,8 @@ class LearningStore(IdentityStore):
                 raise ValueError('Cannot approve a failed test as a successful lesson')
             test_row = self.db.execute('SELECT command FROM test_runs WHERE id=?',
                                        (row['test_run_id'],)).fetchone()
-            if test_row is None or test_row['command'] == 'athenz:ast.parse (no execution)':
+            if test_row is None or (test_row['command'] == 'athenz:ast.parse (no execution)'
+                                    or ' -m py_compile ' in test_row['command']):
                 raise ValueError('Syntax parsing alone cannot prove procedural success')
             if self.get_proposal(row['proposal_id'])['status'] != 'applied':
                 raise ValueError('Cannot approve a lesson for an unapplied or undone patch')
@@ -89,6 +90,7 @@ class LearningStore(IdentityStore):
               AND t.id=(SELECT MAX(t2.id) FROM test_runs t2 WHERE t2.proposal_id=e.proposal_id)
               AND e.evidence_sha256=t.output_sha256
               AND t.command <> 'athenz:ast.parse (no execution)'
+              AND instr(t.command,' -m py_compile ') = 0
             ORDER BY e.id DESC""")
         ranked = [(relevance(query, r['task'] + ' ' + r['lesson']) if query is not None else 1,
                    i, dict(r)) for i, r in enumerate(rows)]

@@ -5,13 +5,12 @@ or destructive shell command is available to the model.
 """
 from __future__ import annotations
 
+import ast
 import difflib
 import hashlib
 import json
 import os
 from pathlib import Path
-import subprocess
-import sys
 import tempfile
 from .learning import LearningStore
 
@@ -137,36 +136,37 @@ def change_status(store: LearningStore, proposal_id: int, *, undo: bool = False)
 
 
 def run_tests(store: LearningStore, proposal_id: int, kind: str = 'compile', timeout: int = 60) -> tuple[int, str]:
+    """Validate changed Python syntax; NEVER execute repository code on the host.
+
+    Retain the legacy ``compile`` command name for caller compatibility, but
+    use in-process ast.parse instead of ``python -m py_compile``: Python module
+    search paths and third-party import hooks can execute repository code.
+    Behavioral tests must go through the supervised Docker worker.
+    """
+    if kind != 'compile':
+        raise ValueError('Host tests disabled; use a supervised container runner')
     row = store.get_proposal(proposal_id)
     if row['status'] != 'applied':
         raise ValueError('Apply a reviewed proposal first')
     repo = Path(row['repo']).resolve(strict=True)
     changed = json.loads(row['changes_json'])
-    # Prevent verifying a stale or independently modified proposal.
+    if not changed or not all(item['path'].endswith('.py') for item in changed):
+        raise ValueError('Static syntax verification requires Python source files')
+    lines = []
+    code = 0
     for item in changed:
-        if digest(allowed_file(repo, item['path']).read_text(encoding='utf-8')) != item['after_sha256']:
-            raise ValueError(f'Stale file before tests: {item["path"]}')
+        path = allowed_file(repo, item['path'])
+        content = path.read_text(encoding='utf-8')
+        if digest(content) != item['after_sha256']:
+            raise ValueError(f'Stale file before syntax check: {item["path"]}')
+        try:
+            ast.parse(content, filename=item['path'])
+            lines.append(f'{item["path"]}: parsed')
+        except SyntaxError as exc:
+            lines.append(f'{item["path"]}: line {exc.lineno}: invalid syntax')
+            code = 1
+    output = '\n'.join(lines)
     files_hash = digest(''.join(item['path'] + item['after_sha256'] for item in changed))
-    if kind == 'compile':
-        if not all(item['path'].endswith('.py') for item in changed):
-            raise ValueError('Compile check requires Python source files')
-        argv = [sys.executable, '-m', 'py_compile', *[item['path'] for item in changed]]
-    elif kind == 'unittest':
-        tests_dir = repo / 'tests'
-        if not tests_dir.is_dir() or tests_dir.is_symlink():
-            raise ValueError('Repository must have a non-symlink tests directory')
-        argv = [sys.executable, '-m', 'unittest', 'discover', '-s', 'tests', '-v']
-    else:
-        raise ValueError('Allowed test kinds: compile, unittest')
-    # The repo's Python code may execute: v0.4 must add OS/container sandboxing.
-    try:
-        p = subprocess.run(argv, cwd=repo, capture_output=True, text=True,
-                           timeout=max(1, min(timeout, 180)), shell=False, errors='replace', check=False)
-        code, output = p.returncode, p.stdout + '\n' + p.stderr
-    except subprocess.TimeoutExpired:
-        code, output = 124, f'Check exceeded {timeout}s timeout'
-    label = 'passed' if code == 0 else 'failed'
-    lesson = (f"The {kind} check {label} for the proposed changes to "
-              f"{', '.join(item['path'] for item in changed)}. This is not a proof of correctness.")
-    store.record_test(proposal_id, ' '.join(argv), code, output, files_hash, lesson)
-    return code, output[-8000:]
+    store.record_test(proposal_id, 'athenz:ast.parse (no execution)', code, output,
+                      files_hash, 'Static Python syntax verification only; no behavior tested')
+    return code, output
