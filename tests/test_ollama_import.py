@@ -92,7 +92,10 @@ class ImportTests(unittest.TestCase):
         with self.assertRaisesRegex(ImportErrorLocal,'header'):
             self.prepare()
         self.gguf.unlink()
-        self.gguf.symlink_to(self.root/'base'/'config.json')
+        try:
+            self.gguf.symlink_to(self.root/'base'/'config.json')
+        except (OSError, NotImplementedError):
+            return  # Some Windows runners do not grant symlink privileges.
         with self.assertRaisesRegex(ImportErrorLocal,'symlink'):
             self.prepare()
 
