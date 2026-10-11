@@ -43,7 +43,7 @@ class IdentityStore:
     def _migrate(self) -> None:
         # Never blindly ALTER a live database or silently rewrite private records.
         version = self.db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 4:
+        if version > 5:
             raise RuntimeError(f"Database schema v{version} is newer than this application")
         if version == 0:
             with self.db:
@@ -81,10 +81,11 @@ class IdentityStore:
                 PRAGMA user_version = 1;
                 """)
 
-        from .migrations import migrate_v2, migrate_v3, migrate_v4
+        from .migrations import migrate_v2, migrate_v3, migrate_v4, migrate_v5
         migrate_v2(self.db)
         migrate_v3(self.db)
         migrate_v4(self.db)
+        migrate_v5(self.db)
 
     def _event(self, operation: str, subject_type: str, subject_id: int | None) -> None:
         # Deliberately exclude content from event logs so deleting content truly removes it.
@@ -205,7 +206,7 @@ class IdentityStore:
         return counts
 
     def list_items(self, table: str, status: str | None = None, limit: int = 200) -> list[dict]:
-        if table not in {"identity", "decisions", "writing_samples", "events", "identity_revisions", "messages", "feedback", "train_pairs", "proposals", "test_runs", "experiences", "episodes", "checkpoints"}:
+        if table not in {"identity", "decisions", "writing_samples", "events", "identity_revisions", "messages", "feedback", "train_pairs", "proposals", "test_runs", "experiences", "episodes", "checkpoints", "episode_disputes", "evidence_artifacts"}:
             raise ValueError("Unsupported table")
         if status is not None and table not in {"identity", "decisions", "writing_samples", "train_pairs", "experiences", "episodes"}:
             raise ValueError("This table does not contain status")
@@ -240,7 +241,9 @@ class IdentityStore:
                 "test_runs": self.list_items("test_runs", limit=100000),
                 "experiences": self.list_items("experiences", limit=100000),
                 "episodes": self.list_items("episodes", limit=100000),
-                "checkpoints": self.list_items("checkpoints", limit=100000)}
+                "checkpoints": self.list_items("checkpoints", limit=100000),
+                "episode_disputes": self.list_items("episode_disputes", limit=100000),
+                "evidence_artifacts": self.list_items("evidence_artifacts", limit=100000)}
 
     def close(self) -> None:
         self.db.close()

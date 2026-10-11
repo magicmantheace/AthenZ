@@ -144,7 +144,7 @@ class LearningTests(unittest.TestCase):
         db.close()
         upgraded = LearningStore(original.parent)
         self.addCleanup(upgraded.close)
-        self.assertEqual(upgraded.db.execute('PRAGMA user_version').fetchone()[0], 4)
+        self.assertEqual(upgraded.db.execute('PRAGMA user_version').fetchone()[0], 5)
         self.assertEqual(upgraded.context()['identity'][0]['text'], 'retain me')
         self.assertEqual(upgraded.conversation('session', 'agent'), [])
 

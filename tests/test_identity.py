@@ -59,7 +59,7 @@ class IdentityStoreTests(unittest.TestCase):
         reopened = IdentityStore(self.home)
         self.addCleanup(reopened.close)
         self.assertEqual(reopened.context()["decisions"][0]["choice"], "Choice")
-        self.assertEqual(reopened.db.execute("PRAGMA user_version").fetchone()[0], 4)
+        self.assertEqual(reopened.db.execute("PRAGMA user_version").fetchone()[0], 5)
 
     def test_cli_smoke(self):
         main(["--home", str(self.home), "init"])

@@ -104,3 +104,8 @@ lessons require current passing test evidence. See
 [docs/LEARNING.md](docs/LEARNING.md) for conflict review, source purge, revision
 checks, and limitations. This does **not** yet make AthenZ a self-training or
 unattended autonomous agent. Checkpoints store data but cannot execute tasks.
+
+Additional v0.3 controls: `athenz dispute`, `athenz resolve-dispute`,
+`athenz artifact-hash`, and `athenz artifact-verify`. Disputed approved
+memories are withheld from prompts until resolution. Artifact fingerprints
+are locally observed metadata, **not** independent proof of code correctness.
