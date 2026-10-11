@@ -30,7 +30,8 @@ periodic model updates. It is not a literal copy of a human consciousness.
 | v1.0 | Stable personalized local agent with controlled learning | Identity, coding, privacy, recoverability benchmarks met |
 
 ## Next critical path
-1. Record and evaluate user decisions with reproducible train/test splits (#3).
+1. Populate a real owner-authored held-out decision corpus, measure a baseline,
+   and review errors (#3). Deterministic split/option scoring is implemented.
 2. Complete v0.3 event ledger with replay-safe checkpoints, indexed evidence,
    contradiction review and relevant retrieval (#4). A preliminary test-backed
    proposal/experience ledger already exists, but it is not yet a complete v0.3.

@@ -7,7 +7,7 @@ works for the owner and learns from reviewed, test-backed work evidence.
 
 **Status: v0.2 pre-release integration.** Identity, private conversation
 persistence, feedback and training candidates, opt-in writing imports, and
-scoped code proposals are implemented. No autonomous daemon, isolated coding
+scoped code proposals and an experimental held-out decision evaluator are implemented. No autonomous daemon, isolated coding
 sandbox, self-directed training, LoRA model deployment or desktop app exists
 yet. The target PC's Ollama inference remains unverified.
 
@@ -64,6 +64,21 @@ on the host — it is **not sandboxed**. Do not run it on untrusted repositories
 Test-backed experiences remain pending unless approved. A reverted proposal
 revokes any approved lesson attached to it. Tests passing are observations,
 not proof of code correctness.
+
+## Held-out Twin evaluation
+
+```sh
+athenz decision "Ship with failing tests?" "Fix first" "Avoid regressions" \
+  --option "Ship" --option "Fix first" --split test
+athenz decision-status 1 approved
+athenz evaluate-decisions --split test --seed 42
+```
+
+`calibration` and `test` decisions never enter the normal prompt context.
+Scoring uses shuffled multiple-choice options, a repeatable seed, and a
+model response captured at temperature zero. An actual owner-authored test
+corpus and hardware inference are needed before reporting personal accuracy.
+See [docs/LEARNING.md](docs/LEARNING.md) for the review/evaluation process.
 
 ## Privacy and limitations
 

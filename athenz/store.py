@@ -43,7 +43,7 @@ class IdentityStore:
     def _migrate(self) -> None:
         # Never blindly ALTER a live database or silently rewrite private records.
         version = self.db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 2:
+        if version > 3:
             raise RuntimeError(f"Database schema v{version} is newer than this application")
         if version == 0:
             with self.db:
@@ -81,8 +81,9 @@ class IdentityStore:
                 PRAGMA user_version = 1;
                 """)
 
-        from .migrations import migrate_v2
+        from .migrations import migrate_v2, migrate_v3
         migrate_v2(self.db)
+        migrate_v3(self.db)
 
     def _event(self, operation: str, subject_type: str, subject_id: int | None) -> None:
         # Deliberately exclude content from event logs so deleting content truly removes it.
@@ -143,14 +144,27 @@ class IdentityStore:
         return bool(cur.rowcount)
 
     def add_decision(self, scenario: str, choice: str, rationale: str, *, source: str,
-                     exception: str = "", source_ref: str = "", approved: bool = False) -> int:
+                     exception: str = "", source_ref: str = "", approved: bool = False,
+                     options: list[str] | None = None, split: str = 'train') -> int:
         if not all(s.strip() for s in (scenario, choice, rationale, source)):
             raise ValueError("Scenario, choice, rationale and source are required")
+        if split not in {'train', 'calibration', 'test'}:
+            raise ValueError('Invalid decision split')
+        if options is not None:
+            if not (2 <= len(options) <= 6 and all(isinstance(o, str) and o.strip() for o in options)
+                    and len({o.casefold().strip() for o in options}) == len(options)
+                    and choice in options):
+                raise ValueError('Provide 2-6 unique options and select one exact option')
+        elif split != 'train':
+            raise ValueError('Held-out decisions need explicit multiple-choice options')
+        if self.db.execute('SELECT 1 FROM decisions WHERE lower(scenario)=lower(?)',
+                           (scenario.strip(),)).fetchone():
+            raise ValueError('Duplicate decision scenario may contaminate evaluation')
         with self.db:
             cur = self.db.execute("""INSERT INTO decisions
-              (scenario,choice,rationale,exception,source,source_ref,status,created_at)
-              VALUES (?,?,?,?,?,?,?,?)""", (scenario, choice, rationale, exception, source,
-                                             source_ref, "approved" if approved else "pending", utc_now()))
+              (scenario,choice,rationale,exception,source,source_ref,status,created_at,options_json,split)
+              VALUES (?,?,?,?,?,?,?,?,?,?)""", (scenario.strip(), choice, rationale, exception, source,
+                  source_ref, "approved" if approved else "pending", utc_now(), json.dumps(options or []), split))
             self._event("created", "decisions", cur.lastrowid)
         return int(cur.lastrowid)
 
@@ -208,7 +222,8 @@ class IdentityStore:
         """Never surface unapproved personal claims as facts."""
         return {
             "identity": self.list_items("identity", "approved"),
-            "decisions": self.list_items("decisions", "approved"),
+            "decisions": [dict(row) for row in self.db.execute("""SELECT * FROM decisions
+                WHERE status='approved' AND split='train' ORDER BY id DESC LIMIT 200""")],
         }
 
     def export(self) -> dict:

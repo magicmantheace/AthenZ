@@ -63,6 +63,8 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument('--exception', default='')
     x.add_argument('--source', default='owner:cli')
     x.add_argument('--source-ref', default='')
+    x.add_argument('--option', dest='options', action='append', help='Repeat for each explicit choice')
+    x.add_argument('--split', choices=['train', 'calibration', 'test'], default='train')
     x = sub.add_parser('decision-status')
     x.add_argument('id', type=int)
     x.add_argument('state', choices=['approved', 'pending', 'rejected'])
@@ -86,6 +88,11 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument('path', type=Path)
     x = sub.add_parser('export-training')
     x.add_argument('path', type=Path)
+    x = sub.add_parser('evaluate-decisions')
+    x.add_argument('--split', choices=['calibration', 'test'], default='test')
+    x.add_argument('--limit', type=int, default=100)
+    x.add_argument('--seed', type=int, default=42)
+    x.add_argument('--report', type=Path, help='Optional private report, stored outside Git')
     sub.add_parser('context')
     x = sub.add_parser('code-propose')
     x.add_argument('repo', type=Path)
@@ -125,7 +132,11 @@ def main(argv: list[str] | None = None) -> None:
         elif args.cmd == 'list':
             print(json.dumps(store.list_items(args.table, args.status), indent=2))
         elif args.cmd == 'decision':
-            print(f'Pending decision #{store.add_decision(args.scenario, args.choice, args.rationale, source=args.source, source_ref=args.source_ref, exception=args.exception)}')
+            decision_id = store.add_decision(
+                args.scenario, args.choice, args.rationale, source=args.source,
+                source_ref=args.source_ref, exception=args.exception,
+                options=args.options, split=args.split)
+            print(f'Pending decision #{decision_id}')
         elif args.cmd == 'decision-status':
             print('Updated' if store.decision_status(args.id, args.state) else 'Unknown ID')
         elif args.cmd == 'sample':
@@ -148,6 +159,13 @@ def main(argv: list[str] | None = None) -> None:
             pairs = store.approved_training_pairs()
             private_export(args.path, pairs)
             print(f'Exported {len(pairs)} approved training pairs to {args.path}')
+        elif args.cmd == 'evaluate-decisions':
+            from .evaluation import evaluate_decisions
+            from .chat import OllamaClient
+            result = evaluate_decisions(store, OllamaClient(), split=args.split, limit=args.limit, seed=args.seed)
+            if args.report:
+                private_export(args.report, result)
+            print(json.dumps({k: v for k, v in result.items() if k != 'cases'}, indent=2))
         elif args.cmd == 'context':
             print(json.dumps(store.context(), indent=2))
         elif args.cmd == 'code-propose':

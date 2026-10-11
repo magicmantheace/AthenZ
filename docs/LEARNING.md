@@ -57,3 +57,27 @@ personal lived experience.
   high-sensitivity imports until storage/backup protections have been reviewed.
 - Training-candidate export is deliberate; no background model adaptation,
   dataset mixing, external messaging, Git commit/push or model promotion happens.
+
+## Held-out decision evaluation (v0.2 experimental baseline)
+
+AthenZ can collect owner-selected decisions as `train`, `calibration` or `test`
+records. Only approved **train** decisions enter routine Twin/Agent context;
+calibration/test choices and rationales are excluded, even if approved.
+
+```sh
+athenz decision "Should I ship after a failed test?" "Fix it first" \
+  "I prioritize verified changes" --option "Ship anyway" --option "Fix it first" \
+  --split test --source owner:interview
+athenz list decisions --status pending
+athenz decision-status 1 approved
+athenz evaluate-decisions --split test --seed 42
+athenz evaluate-decisions --split test --seed 42 --report ~/private-eval.json
+```
+
+The local model is asked to select one option under a seeded, repeatable order.
+Only scenario and shuffled options enter its input; the owner-selected correct
+answer and rationale are scored afterward. A trivial chance baseline is shown
+alongside exact-match accuracy. Training and held-out duplicate scenario titles
+are rejected. Evaluation does not modify model weights or save training data.
+A real owner-written held-out corpus and target-PC inference are still needed
+before any identity-performance claim can be made.

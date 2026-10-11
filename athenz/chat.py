@@ -29,9 +29,12 @@ class OllamaClient:
         if not self.model.strip():
             raise LocalModelError("Model name is required")
 
-    def generate(self, messages: list[dict], timeout: int = 180, json_mode: bool = False) -> str:
+    def generate(self, messages: list[dict], timeout: int = 180, json_mode: bool = False,
+                 temperature: float = 0.35, seed: int | None = None) -> str:
         payload = {"model": self.model, "messages": messages, "stream": False,
-                   "options": {"num_ctx": 8192, "temperature": 0.35}}
+                   "options": {"num_ctx": 8192, "temperature": temperature}}
+        if seed is not None:
+            payload["options"]["seed"] = int(seed)
         if json_mode:
             payload["format"] = "json"
         req = Request(self.endpoint + "/api/chat", data=json.dumps(payload).encode("utf-8"),
