@@ -1,55 +1,87 @@
 # AthenZ
 
-**AthenZ** is a private, local-first project to build a personal digital twin, an autonomous-but-bounded coding assistant, and an evidence-driven learning system.
+**AthenZ** is a local-first digital twin, an approval-gated personal memory
+system and a bounded coding assistant. Twin mode estimates the owner's style
+and preferences without pretending to literally be the owner; Agent mode
+works for the owner and learns from reviewed, test-backed work evidence.
 
-**Current status:** v0.2 identity foundation (pre-release), plus a local-only Ollama chat entry point. The earlier Adam Twin v0.1 coding/feedback prototype is not yet migrated into this repository. Ollama inference on the target PC has not been tested; self-directed coding and LoRA fine-tuning are **not** implemented.
+**Status: v0.2 pre-release integration.** Identity, private conversation
+persistence, feedback and training candidates, opt-in writing imports, and
+scoped code proposals are implemented. No autonomous daemon, isolated coding
+sandbox, self-directed training, LoRA model deployment or desktop app exists
+yet. The target PC's Ollama inference remains unverified.
 
-## Operating modes
+## Installation (Python 3.11+, local Ollama optional)
 
-- **Twin:** estimates how the owner might write or decide, based on approved examples. It must not claim to literally be that person.
-- **Agent:** works as a capable assistant, respecting the owner's preferences while using independent reasoning and verification.
-
-## What's implemented in this branch
-
-- Private SQLite identity store, no cloud dependency.
-- Proposed vs approved vs rejected profile information and decision examples.
-- Explicit source/provenance fields, confidence labels, and reviewable text revisions.
-- Granular deletion of records and exact-source purge (including revision history).
-- Importable approved-only context builder, separate Twin/Agent prompt policies.
-- CLI controls and a synthetic unit test suite.
-- Optional interactive local Ollama chat, with Twin/Agent modes and approved profile context. Session history is currently in-memory, not persisted.
-
-## Quick start (Python 3.11+)
-
-```bash
+```sh
 python -m pip install -e .
 athenz init
-athenz propose preference "Prefer evidence over speculation"
+athenz propose preference "Prefer tests before deployment"
 athenz list identity --status pending
 athenz status 1 approved
-athenz decision "Ship now or verify first?" "Verify first" "Avoid regressions"
-athenz decision-status 1 approved
 athenz context
 python -m unittest discover -s tests -v
-# After Ollama is installed and the model has been pulled:
+
+# For local conversations, install Ollama and fetch a model first:
 ollama pull qwen3.5:2b
-python -m athenz.chat --mode twin
-# or python -m athenz.chat --mode agent
+python -m athenz.chat --mode agent --session work
+python -m athenz.chat --mode twin --session personal
 ```
 
-Run from Windows PowerShell with `py -3.11 -m pip install -e .` if `python` is not the desired interpreter.
+Ollama only connects to explicit HTTP loopback (`127.0.0.1`, `::1`,
+`localhost`). By default it uses `http://127.0.0.1:11434`.
+Use `ATHENZ_OLLAMA_URL` and `ATHENZ_MODEL` to customize local inference.
 
-Private data is kept at `~/.athenz/identity.sqlite3` (or `ATHENZ_HOME`). The above commands write locally; do not commit that directory or user-specific exports to Git. Export with `athenz export private-profile.json` **outside** the repository. Use `athenz --help` for the full command list.
+## Learning and reviewed coding
 
-## Important controls
+```sh
+# Messages are shown with reply IDs; give feedback on an assistant reply:
+athenz feedback 2 down --correction "The answer I would actually give"
+athenz list train_pairs --status pending
+athenz review train_pairs 1 approved
+athenz export-training ~/reviewed-training.json
 
-- `athenz revise <id> "replacement" --reason "correction"` resets approval to pending.
-- `athenz forget identity <id>` removes a specific memory and its stored revisions.
-- `athenz purge-source <source> --source-ref <ref>` deletes all data imported under that precise source pair.
-- Stored activity events contain operation names and record IDs, not raw personal text.
+# Preview personal writing samples, then explicitly import them as pending:
+athenz import-chatgpt ~/Downloads/conversations.json --source-ref oct-2026
+athenz import-chatgpt ~/Downloads/conversations.json --source-ref oct-2026 --confirm
+athenz list writing_samples --status pending
 
-This is **not yet encrypted at rest**. Keep your user account and backup destination secured. SQLite WAL sidecar files may retain older content until checkpointing; private-data erasure and backup retention require further hardening before v1.0.
+# Review a model-proposed code patch before changing source files:
+athenz code-propose /path/to/repo "Fix arithmetic" calc.py tests/test_calc.py
+athenz code-diff 1
+athenz code-apply 1
+athenz code-test 1 --kind compile
+athenz code-test 1 --kind unittest
+athenz list experiences --status pending
+athenz review experiences 1 approved
+athenz code-undo 1
+```
 
-## Roadmap
+Only explicitly selected existing text files can be proposed. A human runs
+`code-apply` and chooses when to test; the model cannot execute shell commands,
+commit, push or deploy. `unittest` executes code from the specified repository
+on the host — it is **not sandboxed**. Do not run it on untrusted repositories.
+Test-backed experiences remain pending unless approved. A reverted proposal
+revokes any approved lesson attached to it. Tests passing are observations,
+not proof of code correctness.
 
-See [ROADMAP.md](ROADMAP.md) for the v0.1–v1.0 acceptance gates, [AGENTS.md](AGENTS.md) for contribution/privacy rules, and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for system boundaries.
+## Privacy and limitations
+
+Local data is held in `~/.athenz/identity.sqlite3` or `ATHENZ_HOME`. Do not
+put this directory inside the Git repository. No personally identifiable
+owner data, raw chat exports, conversation contents or training samples are
+committed here. `athenz export ...` and `athenz export-training ...` refuse
+paths inside detected Git working trees.
+
+Use `athenz forget identity <id>`, `athenz forget-runtime messages <id>`,
+`athenz delete-session <session>`, or `athenz purge-source <source> --source-ref
+<ref>` for targeted deletion. SQLite/WAL and external backups can retain
+remnants: encryption-at-rest and backup lifecycle controls are **not** done.
+Never assume automatic learning has modified model weights.
+
+## Project references
+
+- [ROADMAP.md](ROADMAP.md) — v0.1–v1.0 acceptance criteria.
+- [AGENTS.md](AGENTS.md) — development, privacy and safety constraints.
+- [docs/LEARNING.md](docs/LEARNING.md) — detailed memory and coding controls.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — runtime component boundaries.

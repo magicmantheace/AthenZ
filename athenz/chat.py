@@ -9,6 +9,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 from .prompting import build_messages
+from .learning import LearningStore
 from .store import IdentityStore
 
 
@@ -28,9 +29,11 @@ class OllamaClient:
         if not self.model.strip():
             raise LocalModelError("Model name is required")
 
-    def generate(self, messages: list[dict], timeout: int = 180) -> str:
+    def generate(self, messages: list[dict], timeout: int = 180, json_mode: bool = False) -> str:
         payload = {"model": self.model, "messages": messages, "stream": False,
                    "options": {"num_ctx": 8192, "temperature": 0.35}}
+        if json_mode:
+            payload["format"] = "json"
         req = Request(self.endpoint + "/api/chat", data=json.dumps(payload).encode("utf-8"),
                       headers={"Content-Type": "application/json"}, method="POST")
         try:
@@ -48,6 +51,7 @@ def answer(store: IdentityStore, model: OllamaClient, prompt: str,
            mode: str = "agent", recent: list[dict] | None = None) -> str:
     messages = build_messages(store, prompt, mode=mode)
     if recent:
+        # Caller-supplied context remains untrusted and bounded to one session.
         valid = [{"role": r["role"], "content": r["content"][:4000]}
                  for r in recent[-10:] if r.get("role") in {"user", "assistant"}
                  and isinstance(r.get("content"), str)]
@@ -60,12 +64,13 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--home", type=Path)
     p.add_argument("--mode", choices=["twin", "agent"], default="agent")
     p.add_argument("--model", default=None)
+    p.add_argument("--session", default="default", help="Persistent session ID; stored locally")
     args = p.parse_args(argv)
-    store = IdentityStore(args.home)
+    store = LearningStore(args.home)
     try:
         model = OllamaClient(model=args.model)
         print(f"AthenZ local {args.mode} chat (model: {model.model}). /exit to quit")
-        history: list[dict] = []
+        history = store.conversation(args.session, args.mode, limit=10)
         while True:
             try:
                 q = input("You> ").strip()
@@ -82,8 +87,11 @@ def main(argv: list[str] | None = None) -> None:
                 print(f"Error: {error}")
                 continue
             print(f"\nAthenZ> {reply}\n")
-            history.extend([{"role": "user", "content": q}, {"role": "assistant", "content": reply}])
-            history = history[-10:]
+            # Only persist complete turns after successful inference.
+            store.add_message(args.session, args.mode, "user", q)
+            reply_id = store.add_message(args.session, args.mode, "assistant", reply)
+            print(f"(reply ID {reply_id} — use 'athenz feedback {reply_id} up|down' to rate)")
+            history = store.conversation(args.session, args.mode, limit=10)
     finally:
         store.close()
 
