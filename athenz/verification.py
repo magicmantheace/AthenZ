@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import stat
 from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
@@ -67,6 +68,43 @@ def snapshot_files(repo: Path, dest: Path) -> dict:
             'snapshot_bytes': total}
 
 
+
+def fingerprint_snapshot(snapshot: Path) -> dict:
+    """Remeasure a copied test tree; reject added files, links and changed bytes.
+
+    This detects ordinary file modification during a run. It is *not* a
+    cryptographic attestation against an adversary controlling the host.
+    """
+    total = 0
+    summary = hashlib.sha256()
+    count = 0
+    for path in sorted(snapshot.rglob('*'), key=lambda p: p.relative_to(snapshot).as_posix()):
+        mode = path.lstat().st_mode
+        if stat.S_ISDIR(mode):
+            continue
+        if not stat.S_ISREG(mode):
+            raise WorktreeError('Snapshot contains a symlink or non-regular file')
+        rel = path.relative_to(snapshot).as_posix()
+        count += 1
+        size = path.stat().st_size
+        if count > 2000 or size > MAX_SINGLE_FILE or total + size > MAX_SNAPSHOT_BYTES:
+            raise WorktreeError('Snapshot exceeds file or size limit')
+        total += size
+        file_hash = hashlib.sha256()
+        with path.open('rb') as handle:
+            for block in iter(lambda: handle.read(65536), b''):
+                file_hash.update(block)
+        summary.update(rel.encode('utf-8') + b'\0' + file_hash.hexdigest().encode('ascii') + b'\n')
+    return {'snapshot_sha256': summary.hexdigest(), 'tracked_files': count,
+            'snapshot_bytes': total}
+
+
+def validate_mount_source(path: Path) -> None:
+    """Docker --mount uses comma-separated options even when argv is not shelled."""
+    raw = str(path)
+    if any(c in raw for c in (',', '\n', '\r', '\x00')):
+        raise WorktreeError('Unsafe Docker bind-mount source path')
+
 def isolated_unittest(repo: Path, *, image: str, home: Path, timeout: int = 120) -> dict:
     """Execute a fixed unittest command on a copied tree; no host fallback."""
     if not IMAGE.fullmatch(image):
@@ -76,6 +114,7 @@ def isolated_unittest(repo: Path, *, image: str, home: Path, timeout: int = 120)
     if not shutil.which('docker'):
         raise WorktreeError('Docker is unavailable; refusing unisolated tests')
     base = home.resolve() / 'snapshots'
+    validate_mount_source(base)
     if base.is_symlink():
         raise WorktreeError('Snapshot directory must not be a symlink')
     base.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -83,7 +122,10 @@ def isolated_unittest(repo: Path, *, image: str, home: Path, timeout: int = 120)
         raise WorktreeError('Unsafe private snapshot directory')
     with tempfile.TemporaryDirectory(prefix='run-', dir=base) as folder:
         snapshot = Path(folder)
+        validate_mount_source(snapshot)
         metadata = snapshot_files(repo, snapshot)
+        if fingerprint_snapshot(snapshot) != metadata:
+            raise WorktreeError('Snapshot changed during creation; refusing execution')
         snapshot.chmod(0o755)  # source snapshot remains under private home
         container = 'athenz-full-' + uuid.uuid4().hex[:20]
         argv = ['docker', 'run', '--name', container, '--rm', '--pull', 'never',
@@ -109,6 +151,14 @@ def isolated_unittest(repo: Path, *, image: str, home: Path, timeout: int = 120)
             except (OSError, subprocess.TimeoutExpired):
                 cleanup = 'cleanup UNCONFIRMED'
             output = f'Test timed out after {timeout}s; {cleanup}; container {container}'
+        # Re-hash the actual copied files after the Docker client exits. This
+        # refuses a passing result if a host process modified the bound tree.
+        try:
+            if fingerprint_snapshot(snapshot) != metadata:
+                raise WorktreeError('Snapshot contents changed during execution')
+        except (WorktreeError, OSError) as exc:
+            code = 125
+            output = 'Snapshot integrity FAILED after container execution: ' + str(exc)
         return {**metadata, 'image': image, 'returncode': code,
                 'output': output[-8000:], 'output_sha256': hashlib.sha256(output.encode('utf-8')).hexdigest(),
                 'cleanup': cleanup, 'runner': 'docker-local-observation',
