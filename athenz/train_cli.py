@@ -12,6 +12,7 @@ from .chat import OllamaClient
 from .finetune import create_run, describe_run, execute_run
 from .adapters import register_adapter, selection, select_for_review, rollback_selection
 from .runtime import status as runtime_status, activate as activate_runtime, rollback as rollback_runtime, checked_active_tag
+from .ollama_import import prepare_import, verify_import, import_local
 
 
 def parser() -> argparse.ArgumentParser:
@@ -67,6 +68,18 @@ def parser() -> argparse.ArgumentParser:
     x = sub.add_parser('runtime-rollback', help='Restore the pinned baseline as AthenZ chat default')
     x.add_argument('--revision', type=int, required=True)
     x.add_argument('--confirm', action='store_true')
+    x = sub.add_parser('prepare-import', help='Prepare a full merged GGUF model import; NO Ollama change')
+    x.add_argument('run_id')
+    x.add_argument('gguf', type=Path)
+    x.add_argument('--candidate', required=True, help='Registered candidate tag: athenz/name:tag')
+    x.add_argument('--ack-merge', action='store_true', help='I independently merged the exact approved adapter and base')
+    x.add_argument('--confirm', action='store_true')
+    x = sub.add_parser('verify-import', help='Verify private GGUF/adapter lineage and optional Ollama tag')
+    x.add_argument('run_id')
+    x.add_argument('--check-ollama', action='store_true')
+    x = sub.add_parser('import-local', help='Explicitly create a fresh LOCAL Ollama tag from complete GGUF')
+    x.add_argument('run_id')
+    x.add_argument('--confirm', action='store_true')
     x = sub.add_parser('rollback-adapter', help='Revert private review pointer, not Ollama')
     x.add_argument('--revision', type=int, required=True)
     x.add_argument('--confirm', action='store_true')
@@ -108,6 +121,13 @@ def main(argv: list[str] | None = None) -> None:
         elif args.command == 'runtime-rollback':
             result = rollback_runtime(store, expected_revision=args.revision,
                                       confirmed=args.confirm)
+        elif args.command == 'prepare-import':
+            result = prepare_import(store, args.run_id, args.gguf, candidate_tag=args.candidate,
+                                    confirmed=args.confirm, acknowledge_merge=args.ack_merge)
+        elif args.command == 'verify-import':
+            result = verify_import(store, args.run_id, verify_ollama=args.check_ollama)
+        elif args.command == 'import-local':
+            result = import_local(store, args.run_id, confirmed=args.confirm)
         elif args.command == 'rollback-adapter':
             result = rollback_selection(store, expected_revision=args.revision,
                                         confirmed=args.confirm)
