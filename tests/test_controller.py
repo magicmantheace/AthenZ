@@ -183,3 +183,16 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(original, duplicate)
         self.assertEqual(self.ctl.status('math')['phase'], 'exported')
         self.worker.cleanup('math', discard_changes=True)
+
+    def test_apply_recovery_refuses_tampered_workspace(self):
+        model = FakeModel()
+        self.plan(model)
+        review = self.ctl.prepare('math', model)
+        self.ctl.apply('math', review['sha256'])
+        self.ctl._transition('math', 'awaiting_review')  # interrupted checkpoint
+        workspace = Path(self.worker.resume('math')['state']['workspace'])
+        (workspace / 'calc.py').write_text('TAMPERED = True\n')
+        with self.assertRaises(ControllerError):
+            self.ctl.apply('math', review['sha256'])
+        self.assertEqual(self.ctl.status('math')['phase'], 'awaiting_review')
+        self.worker.cleanup('math', discard_changes=True)
