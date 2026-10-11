@@ -98,7 +98,15 @@ class Worker:
         if Path(_git(path, 'rev-parse', '--show-toplevel')).resolve() != path:
             raise WorktreeError('Worktree path no longer matches Git checkout')
         listing = _git(repo, 'worktree', 'list', '--porcelain')
-        if f'worktree {path}\n' not in listing + '\n':
+        # Git for Windows emits slash-separated paths, while pathlib prints
+        # backslashes. Compare resolved native paths, never their raw spelling.
+        expected = os.path.normcase(str(path.resolve(strict=True)))
+        registered = []
+        for line in listing.splitlines():
+            if line.startswith('worktree '):
+                candidate = Path(line[len('worktree '):]).resolve(strict=False)
+                registered.append(os.path.normcase(str(candidate)))
+        if expected not in registered:
             raise WorktreeError('Workspace is not registered under the authorized repository')
         if _git(path, 'rev-parse', '--verify', 'HEAD') != state['base_sha']:
             raise WorktreeError('Workspace HEAD unexpectedly changed')
