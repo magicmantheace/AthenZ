@@ -43,7 +43,7 @@ class AdaptersTests(unittest.TestCase):
             out.mkdir()
             (out / 'adapter_model.safetensors').write_bytes(b'bytes-'+tag.encode())
             (out / 'adapter_config.json').write_text(json.dumps({
-                'peft_type':'LORA', 'base_model_name_or_path':str(self.model_dir)}))
+                'peft_type':'LORA', 'base_model_name_or_path':str(self.model_dir.resolve())}))
             return {'adapter_dir':str(out),'examples_used':1}
         execute_run(self.store, run['run_id'], backend=backend, confirmed=True)
         return run['run_id']
