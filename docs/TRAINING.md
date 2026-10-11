@@ -201,3 +201,40 @@ supported directive. AthenZ therefore does not automate LoRA import or assume
 that a separately named candidate includes a given adapter. Actual Ollama
 adapter interoperability must be validated on a supported release and target
 hardware before an installation pipeline is enabled.
+
+## Offline merged-GGUF handoff to Ollama (experimental)
+
+Current Ollama documentation describes `FROM /path/to/file.gguf` to import a
+**complete** model. It does **not** currently document a supported direct
+import of AthenZ's Qwen2.5 PEFT/QLoRA safetensors adapter. Therefore the
+handoff is deliberately restricted to a *separately merged and converted full
+GGUF model*; it never silently treats LoRA weights as a complete model.
+
+After separately reviewing/merging a trained adapter into the **exact matching
+base weights**, converting/quantizing the resulting complete model to GGUF,
+and verifying the model yourself, run:
+
+```sh
+athenz-training prepare-import <run-id> /path/to/merged.gguf \
+  --candidate athenz-my-candidate:trial --ack-merge --confirm
+athenz-training verify-import <run-id>
+# Only after reviewing the private Modelfile and the candidate name:
+athenz-training import-local <run-id> --confirm
+athenz-training verify-import <run-id> --check-ollama
+```
+
+The first command writes a private, immutable Modelfile with a `FROM` directive
+for the complete GGUF and binds it to an approved adapter record and an exact
+GGUF SHA-256. The owner acknowledges the merge lineage; a digest **does not
+cryptographically prove** the merged model came from that adapter. The import
+requires a fresh, dedicated `athenz-…:…` tag, checks for an existing
+Ollama tag before creating (not atomic against concurrent writers), pins local CLI traffic to loopback, and does not call `ollama
+push`, `ollama pull`, `ollama rm`, or activate AthenZ's chat routing.
+
+If `ollama create` crashes or fails after starting, the run intentionally stays
+in `running` state to prevent unattended retries or ambiguous overwrites. A
+person must inspect Ollama and explicitly resolve the incomplete import. No
+OS-level model sandbox, external lineage attestation, adapter merger, actual
+CUDA fine-tune or Windows/WSL2 conversion/inference test is claimed here.
+
+Official import docs: https://docs.ollama.com/import

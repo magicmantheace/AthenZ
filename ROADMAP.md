@@ -74,3 +74,8 @@ periodic model updates. It is not a literal copy of a human consciousness.
 - [ ] Create robust held-out regression benchmarks, an owner-approved installer/rollback integration, and signed training provenance.
 
 An adapter registry entry or review selection does NOT affect AthenZ inference, install model weights or authorize promotion. A model comparison alone is insufficient to establish an adapter's identity or quality.
+
+## v0.5 merged-GGUF Ollama handoff (experimental)
+- [x] Owner-reviewed private Modelfile for an externally merged full GGUF with source/adapter hashes, consent checks and an opt-in local Ollama `create` command.
+- [x] Dedicated candidate tag, existing-tag preflight, private import-intent checkpoint and observed installed-model digest without automatic model selection or remote publishing.
+- [ ] The actual Qwen LoRA merge/GGUF conversion, independently verified adapter lineage, target-PC import and inference tests remain outstanding. A model fingerprint proves bytes, not their training ancestry.

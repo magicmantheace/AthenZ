@@ -121,9 +121,35 @@ reviewed private evidence before sending each prompt. If consent is revoked or
 a tag is replaced, chat fails closed until manual rollback/review. Explicit
 `--model` always means a deliberate owner override of the configured route.
 
-**This does not create, convert, import, train, deploy, or replace Ollama model
+**Runtime routing itself does not create, convert, import, train, deploy, or replace Ollama model
 weights.** The registered adapter-to-candidate association is *owner-attested*,
 not independently proven. `runtime-rollback` switches only AthenZ's private
 tag preference back to the exact pinned baseline (if it is still installed),
 not the Ollama daemon's installed files. No outbound model requests or remote
 network calls are authorized. See [docs/TRAINING.md](docs/TRAINING.md).
+
+## Reviewed merged-GGUF import to local Ollama (experimental v0.5)
+
+AthenZ can now **prepare and explicitly invoke a local import** for an
+externally merged, converted **complete GGUF model**. It never directly imports
+a Qwen PEFT/QLoRA adapter as though it were a complete Ollama model; current
+Ollama import documentation only guarantees the documented full-model routes.
+
+```sh
+athenz-training prepare-import RUN_ID /path/to/merged.gguf \
+  --candidate athenz-experiment:trial --ack-merge --confirm
+athenz-training verify-import RUN_ID
+athenz-training import-local RUN_ID --confirm
+athenz-training verify-import RUN_ID --check-ollama
+```
+
+The merged GGUF must be created separately from the **exact matching base
+weights** and its completed private adapter. The owner explicitly acknowledges
+this lineage; hashes verify unchanged artifacts but cannot prove how the GGUF
+was produced. The importer requires a new dedicated tag, records its observed
+local digest, and never activates it or pushes anything. Ollama create is not
+an atomic compare-and-swap operation; a concurrent external tag creation still
+requires a trusted local Ollama environment and separate review.
+
+This new bridge remains untested against the user's actual Ollama/RTX 3060
+installation. See [docs/TRAINING.md](docs/TRAINING.md).
