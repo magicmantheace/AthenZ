@@ -132,8 +132,11 @@ def main(argv: list[str] | None = None) -> None:
         elif args.cmd == 'list':
             print(json.dumps(store.list_items(args.table, args.status), indent=2))
         elif args.cmd == 'decision':
-            print(f'Pending decision #{store.add_decision(args.scenario, args.choice, args.rationale, source=args.source, source_ref=args.source_ref, exception=args.exception,
-                options=args.options, split=args.split)}')
+            decision_id = store.add_decision(
+                args.scenario, args.choice, args.rationale, source=args.source,
+                source_ref=args.source_ref, exception=args.exception,
+                options=args.options, split=args.split)
+            print(f'Pending decision #{decision_id}')
         elif args.cmd == 'decision-status':
             print('Updated' if store.decision_status(args.id, args.state) else 'Unknown ID')
         elif args.cmd == 'sample':

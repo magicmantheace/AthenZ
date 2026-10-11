@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from athenz.evaluation import evaluate_decisions
+from athenz.cli import main
 from athenz.learning import LearningStore
 from athenz.prompting import build_messages
 
@@ -68,6 +69,15 @@ class DecisionEvaluationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.store.add_decision('Yet another scenario', 'X', 'Reason', source='owner',
                                     split='test')
+
+    def test_cli_create_heldout_case(self):
+        main(['--home', str(self.store.home), 'decision', 'CLI test scenario', 'Wait',
+              'Important synthetic reason', '--option', 'Ship', '--option', 'Wait',
+              '--split', 'test'])
+        row = self.store.list_items('decisions')[0]
+        self.assertEqual(row['split'], 'test')
+        self.assertEqual(row['status'], 'pending')
+        self.assertNotIn('CLI test scenario', str(build_messages(self.store, 'Now?', 'twin')))
 
     def test_calibration_and_test_scoring_separate(self):
         a = self.store.add_decision('Q1', 'A', 'R', source='owner',
