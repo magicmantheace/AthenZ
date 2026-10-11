@@ -110,7 +110,11 @@ class TrainingDatasetTests(unittest.TestCase):
         with self.assertRaisesRegex(DatasetError, 'outside any Git'):
             build_dataset(stored, confirmed=True)
         self.pair('Normal?', 'Approval')
-        (self.store.home / 'datasets').symlink_to(self.root)
+        try:
+            (self.store.home / 'datasets').symlink_to(self.root)
+        except (OSError, NotImplementedError):
+            # Windows runners may not grant symlink creation privileges.
+            return
         with self.assertRaisesRegex(DatasetError, 'symlink'):
             build_dataset(self.store, confirmed=True)
 
