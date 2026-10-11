@@ -55,3 +55,13 @@ See [ROADMAP.md](ROADMAP.md), [AGENTS.md](AGENTS.md),
 [docs/LEARNING.md](docs/LEARNING.md), [docs/WORKER.md](docs/WORKER.md), and
 [docs/CONTROLLER.md](docs/CONTROLLER.md). Encryption at rest, robust local
 backup erasure, attested testing, and target-PC validation remain unfinished.
+
+## v0.4 experimental sequential worktree tasks
+
+`athenz-sequence` supports up to five owner-scoped, independently approved
+Python patch stages in one disposable worktree. A fresh digest approval is
+required per stage; previous approved edits remain intact while the active
+stage is syntax-checked and retried. Once all stages pass **syntax-only**
+checks, an immutable combined patch can be exported locally. No host project
+execution, autonomous commit/push, or model-weight training occurs. See
+[docs/SEQUENCE.md](docs/SEQUENCE.md) for examples, recovery and limitations.
