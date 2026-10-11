@@ -12,7 +12,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from .coding import allowed_file, diff_for, digest
+from .coding import allowed_file, diff_for, digest, read_exact
 from .worker import Worker, WorktreeError
 
 
@@ -167,7 +167,7 @@ class CodingController:
             changes = json.loads(row['changes_json'])
             for change in changes:
                 target = allowed_file(workspace, change['path'])
-                if digest(target.read_text(encoding='utf-8')) != change['after_sha256']:
+                if digest(read_exact(target)) != change['after_sha256']:
                     raise ControllerError('Applied file differs from the reviewed proposal')
             changed = len(changes)
         else:
