@@ -58,3 +58,7 @@ periodic model updates. It is not a literal copy of a human consciousness.
 - [x] Cascade deletion and regression tests for artifacts and disputed episodes.
 - [ ] Independent run attestation / signed CI provenance. Local file hashing
       alone does not prove that an external test actually ran.
+
+### v0.4 initial supervised-worktree slice (2026-10-11)
+- Implemented: explicitly authorized clean-repository worktree, checkpoint restore, reviewed multi-file proposals, host-safe AST parsing, optional digest-pinned container-only unittest command and explicit disposable worktree cleanup.
+- Remaining: true multi-step bounded coding loop, cancellation and retry budget, independent test provenance, Windows/WSL2 validation and owner-approved commit/push. Worktrees are not a security boundary by themselves.
