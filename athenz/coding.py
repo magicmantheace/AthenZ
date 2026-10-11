@@ -25,6 +25,17 @@ def digest(content: str) -> str:
     return hashlib.sha256(content.encode('utf-8')).hexdigest()
 
 
+
+def read_exact(path: Path) -> str:
+    """Read UTF-8 source preserving CRLF/LF bytes for fingerprinted undo.
+
+    pathlib.read_text translates newline bytes on Windows and would corrupt
+    a byte-for-byte undo of a CRLF checkout. Coding patches must not do that.
+    """
+    with path.open('r', encoding='utf-8', newline='') as handle:
+        return handle.read()
+
+
 def allowed_file(repo: Path, rel: str) -> Path:
     if not isinstance(rel, str) or not rel or '\\' in rel or Path(rel).is_absolute():
         raise ValueError(f'Unsafe path: {rel}')
@@ -49,7 +60,7 @@ def propose(store: LearningStore, model, repo_path: str, task: str, files: list[
     repo = Path(repo_path).expanduser().resolve()
     if not repo.is_dir() or not task.strip() or not 1 <= len(files) <= 4 or len(set(files)) != len(files):
         raise ValueError('Select a repository, task and 1-4 distinct existing files')
-    source = {rel: allowed_file(repo, rel).read_text(encoding='utf-8') for rel in files}
+    source = {rel: read_exact(allowed_file(repo, rel)) for rel in files}
     if sum(len(text) for text in source.values()) > MAX_TOTAL:
         raise ValueError('Code exceeds context limit')
     instructions = ("Return ONLY a JSON object of the form "
@@ -117,7 +128,7 @@ def change_status(store: LearningStore, proposal_id: int, *, undo: bool = False)
     targets = []
     for change in json.loads(row['changes_json']):
         path = allowed_file(Path(row['repo']), change['path'])
-        original = path.read_text(encoding='utf-8')
+        original = read_exact(path)
         if digest(original) != change['after_sha256' if undo else 'base_sha256']:
             raise ValueError(f'File changed since proposal: {change["path"]}')
         targets.append((path, original, change['before' if undo else 'after']))
@@ -156,7 +167,7 @@ def run_tests(store: LearningStore, proposal_id: int, kind: str = 'compile', tim
     code = 0
     for item in changed:
         path = allowed_file(repo, item['path'])
-        content = path.read_text(encoding='utf-8')
+        content = read_exact(path)
         if digest(content) != item['after_sha256']:
             raise ValueError(f'Stale file before syntax check: {item["path"]}')
         try:

@@ -111,3 +111,7 @@ cannot become a verified procedural lesson. The old `--kind unittest` path
 has been removed from the legacy command: use `athenz-worker test` with the
 explicit digest-pinned Docker image and review confirmation instead. Existing
 stored `python -m py_compile` evidence is excluded from procedural retrieval.
+
+## Windows path and original-line-ending integrity
+
+Git for Windows can report a registered worktree with forward slashes while Python's Windows `Path` prints backslashes. Registration checks now compare normalized absolute paths, rather than raw strings. File-scoped proposals and undo use an exact-newline UTF-8 reader: original CRLF bytes are preserved across apply/undo so a cancelled or retried change does not leave a Git working tree dirty. This is covered by synthetic CRLF round-trip regression tests on Linux and a Windows Python 3.11 CI job. Windows CI checks do not replace real WSL2/Docker validation on the owner's PC.

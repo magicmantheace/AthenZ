@@ -18,7 +18,7 @@ import subprocess
 import uuid
 from pathlib import Path
 
-from .coding import allowed_file, change_status, digest, propose
+from .coding import allowed_file, change_status, digest, propose, read_exact
 from .experience import ExperienceStore
 
 KEY = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}\Z")
@@ -98,7 +98,15 @@ class Worker:
         if Path(_git(path, 'rev-parse', '--show-toplevel')).resolve() != path:
             raise WorktreeError('Worktree path no longer matches Git checkout')
         listing = _git(repo, 'worktree', 'list', '--porcelain')
-        if f'worktree {path}\n' not in listing + '\n':
+        # Git for Windows emits slash-separated paths, while pathlib prints
+        # backslashes. Compare resolved native paths, never their raw spelling.
+        expected = os.path.normcase(str(path.resolve(strict=True)))
+        registered = []
+        for line in listing.splitlines():
+            if line.startswith('worktree '):
+                candidate = Path(line[len('worktree '):]).resolve(strict=False)
+                registered.append(os.path.normcase(str(candidate)))
+        if expected not in registered:
             raise WorktreeError('Workspace is not registered under the authorized repository')
         if _git(path, 'rev-parse', '--verify', 'HEAD') != state['base_sha']:
             raise WorktreeError('Workspace HEAD unexpectedly changed')
@@ -174,10 +182,10 @@ class Worker:
         output = []
         for change in changes:
             path = allowed_file(workspace, change['path'])
-            if digest(path.read_text('utf-8')) != change['after_sha256']:
+            if digest(read_exact(path)) != change['after_sha256']:
                 raise WorktreeError('File has changed since proposal; re-review it')
             try:
-                ast.parse(path.read_text('utf-8'), filename=change['path'])
+                ast.parse(read_exact(path), filename=change['path'])
                 output.append(change['path'] + ': parsed')
             except SyntaxError as exc:
                 output.append(f'{change["path"]}: line {exc.lineno}: invalid syntax')
@@ -212,7 +220,7 @@ class Worker:
         workspace = Path(item['state']['workspace'])
         changes = json.loads(self.store.get_proposal(pid)['changes_json'])
         for change in changes:
-            if digest(allowed_file(workspace, change['path']).read_text('utf-8')) != change['after_sha256']:
+            if digest(read_exact(allowed_file(workspace, change['path']))) != change['after_sha256']:
                 raise WorktreeError('Changed file no longer matches reviewed proposal')
         # A stable, non-user-controlled Docker name permits forced cleanup even
         # after Python kills a timed-out docker CLI process.
@@ -299,7 +307,7 @@ class Worker:
         if not expected or len(expected) != len(changes):
             raise WorktreeError('Invalid reviewed change set')
         for c in changes:
-            if digest(allowed_file(workspace, c['path']).read_text(encoding='utf-8')) != c['after_sha256']:
+            if digest(read_exact(allowed_file(workspace, c['path']))) != c['after_sha256']:
                 raise WorktreeError('Source no longer matches reviewed changes')
         # NUL-delimited Git porcelain avoids assuming filename quoting rules.
         status = _git(workspace, 'status', '--porcelain=v1', '-z', '--untracked-files=all')

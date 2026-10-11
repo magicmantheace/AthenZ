@@ -77,7 +77,7 @@ class WorktreeTests(unittest.TestCase):
         self.worker.apply('bundle')
         review = self.worker.export_review('bundle')
         path = Path(review['path'])
-        self.assertTrue(path.is_relative_to(self.store.home / 'reviews'))
+        self.assertTrue(path.resolve().is_relative_to((self.store.home / 'reviews').resolve()))
         self.assertEqual(review['verification'], 'not-verified')
         self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), review['sha256'])
         self.assertIn('return a + b', path.read_text())
