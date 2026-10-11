@@ -6,6 +6,7 @@ athenz.cli / athenz.chat
         v
 IdentityStore + LearningStore  ---->  ~/.athenz/identity.sqlite3 (v2)
   | approved identity/decision facts   | conversation by mode/session
+  | train/calibration/test decisions  | test gold excluded from prompts
   | pending owner writing samples      | owner feedback and reviewed pairs
   | reviewed experiences/tests         | scoped proposals, revisions
   v

@@ -6,7 +6,7 @@ import sqlite3
 def migrate_v2(db: sqlite3.Connection) -> None:
     version = db.execute('PRAGMA user_version').fetchone()[0]
     if version != 1:
-        if version == 2:
+        if version >= 2:
             return
         raise RuntimeError(f'Unexpected schema version {version}')
     # All records from the identity v1 tables remain intact.
@@ -64,6 +64,27 @@ def migrate_v2(db: sqlite3.Connection) -> None:
         CREATE INDEX idx_experiences_status ON experiences(status,outcome);
         PRAGMA user_version = 2;
         COMMIT;
+        ''')
+    except Exception:
+        db.rollback()
+        raise
+
+
+def migrate_v3(db: sqlite3.Connection) -> None:
+    """Separate held-out owner choices from retrieved training demonstrations."""
+    version = db.execute('PRAGMA user_version').fetchone()[0]
+    if version == 3:
+        return
+    if version != 2:
+        raise RuntimeError(f'Unexpected schema version {version}; expected 2 or 3')
+    try:
+        db.executescript('''BEGIN IMMEDIATE;
+            ALTER TABLE decisions ADD COLUMN options_json TEXT NOT NULL DEFAULT '[]';
+            ALTER TABLE decisions ADD COLUMN split TEXT NOT NULL DEFAULT 'train'
+                CHECK(split IN ('train','calibration','test'));
+            CREATE INDEX idx_decision_eval ON decisions(status,split,id);
+            PRAGMA user_version=3;
+            COMMIT;
         ''')
     except Exception:
         db.rollback()
