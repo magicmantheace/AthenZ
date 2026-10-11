@@ -62,7 +62,7 @@ class ImportTests(unittest.TestCase):
             data=self.prepare()
             runner.assert_not_called()
         self.assertEqual(data['deployment'],'not-imported')
-        self.assertTrue(Path(data['modelfile']).is_relative_to(self.store.home))
+        self.assertTrue(Path(data['modelfile']).resolve().is_relative_to(self.store.home.resolve()))
         self.assertIn('FROM ',Path(data['modelfile']).read_text())
         self.assertNotIn('ADAPTER ',Path(data['modelfile']).read_text())
         self.assertEqual(self.prepare()['revision'],1)
