@@ -214,7 +214,11 @@ class Worker:
         for change in changes:
             if digest(allowed_file(workspace, change['path']).read_text('utf-8')) != change['after_sha256']:
                 raise WorktreeError('Changed file no longer matches reviewed proposal')
-        argv = ['docker', 'run', '--rm', '--pull', 'never', '--network', 'none', '--cap-drop', 'ALL',
+        # A stable, non-user-controlled Docker name permits forced cleanup even
+        # after Python kills a timed-out docker CLI process.
+        container_name = 'athenz-test-' + uuid.uuid4().hex[:20]
+        argv = ['docker', 'run', '--name', container_name, '--rm', '--pull', 'never',
+                '--network', 'none', '--ipc', 'none', '--cap-drop', 'ALL',
                 '--security-opt', 'no-new-privileges', '--read-only', '--pids-limit', '64',
                 '--memory', '512m', '--cpus', '1', '--user', '65534:65534',
                 '--mount', f'type=bind,src={workspace},dst=/src,readonly',
@@ -227,7 +231,22 @@ class Worker:
             returncode = result.returncode
             output = (result.stdout + '\n' + result.stderr)[-8000:]
         except subprocess.TimeoutExpired:
-            returncode, output = 124, 'Container test timed out; execution stopped'
+            # A killed Docker *client* does not guarantee the daemon killed its
+            # container. Attempt a bounded forced removal by its random name.
+            # NEVER report test success if cleanup could not be confirmed.
+            returncode = 124
+            try:
+                removed = subprocess.run(['docker', 'rm', '-f', container_name],
+                                         capture_output=True, text=True, check=False,
+                                         timeout=20)
+                if removed.returncode == 0:
+                    output = 'Container test timed out; forced removal confirmed'
+                else:
+                    output = ('Container test timed out; Docker cleanup UNCONFIRMED. '
+                              'Inspect Docker manually for ' + container_name)
+            except (OSError, subprocess.TimeoutExpired):
+                output = ('Container test timed out; Docker cleanup UNCONFIRMED. '
+                          'Inspect Docker manually for ' + container_name)
         fingerprint = digest(''.join(x['path'] + x['after_sha256'] for x in changes))
         test_id = self.store.record_test(pid, 'docker:isolated unittest', returncode,
                                          output, fingerprint,
