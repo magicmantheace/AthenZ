@@ -2,7 +2,7 @@
 
 **AthenZ** is a private, local-first project to build a personal digital twin, an autonomous-but-bounded coding assistant, and an evidence-driven learning system.
 
-**Current status:** v0.2 identity foundation (pre-release). The earlier Adam Twin v0.1 chat/coding prototype is not yet migrated into this repository. Local model inference, self-directed coding and LoRA fine-tuning are **not** implemented in this branch.
+**Current status:** v0.2 identity foundation (pre-release), plus a local-only Ollama chat entry point. The earlier Adam Twin v0.1 coding/feedback prototype is not yet migrated into this repository. Ollama inference on the target PC has not been tested; self-directed coding and LoRA fine-tuning are **not** implemented.
 
 ## Operating modes
 
@@ -17,6 +17,7 @@
 - Granular deletion of records and exact-source purge (including revision history).
 - Importable approved-only context builder, separate Twin/Agent prompt policies.
 - CLI controls and a synthetic unit test suite.
+- Optional interactive local Ollama chat, with Twin/Agent modes and approved profile context. Session history is currently in-memory, not persisted.
 
 ## Quick start (Python 3.11+)
 
@@ -30,6 +31,10 @@ athenz decision "Ship now or verify first?" "Verify first" "Avoid regressions"
 athenz decision-status 1 approved
 athenz context
 python -m unittest discover -s tests -v
+# After Ollama is installed and the model has been pulled:
+ollama pull qwen3.5:2b
+python -m athenz.chat --mode twin
+# or python -m athenz.chat --mode agent
 ```
 
 Run from Windows PowerShell with `py -3.11 -m pip install -e .` if `python` is not the desired interpreter.
