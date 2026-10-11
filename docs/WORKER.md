@@ -86,3 +86,18 @@ The exported patch survives worktree cleanup and can be applied manually with
 `git apply --check /path/to/patch` followed by `git apply /path/to/patch` after
 review. Do not export a patch to an untrusted destination or Git repository;
 private source fragments may be present in it.
+
+## Container timeout and procedural learning restrictions
+
+A Python syntax check is useful but **cannot** be approved as a proven
+procedural lesson. Historical syntax-only lessons are also excluded from
+retrieval. A behavioral test result and explicit human approval are required
+for that memory path; model descriptions alone remain insufficient evidence.
+
+Docker test containers are assigned random names. If `docker run` times out,
+AthenZ attempts `docker rm -f <name>` with a separate bounded timeout.
+If the Docker daemon does not confirm removal, the run is recorded as failed
+and **cleanup UNCONFIRMED**; inspect your Docker daemon manually. Killing a
+Docker CLI process alone is not proof its container stopped. This timeout path
+is unit-tested with a simulated Docker client, but has not yet been validated
+on the owner's Windows/WSL2 machine.

@@ -3,6 +3,7 @@ import json
 import hashlib
 import os
 import subprocess
+from unittest import mock
 import tempfile
 import unittest
 from pathlib import Path
@@ -56,8 +57,9 @@ class WorktreeTests(unittest.TestCase):
         result = reloaded.syntax_check('work1')
         self.assertEqual(result['returncode'], 0)
         lesson = reloaded.store.list_items('experiences')[0]
-        reloaded.store.set_review('experiences', lesson['id'], 'approved')
-        self.assertEqual(len(reloaded.store.approved_experiences(query='Fix arithmetic')), 1)
+        with self.assertRaisesRegex(ValueError, 'Syntax parsing'):
+            reloaded.store.set_review('experiences', lesson['id'], 'approved')
+        self.assertEqual(reloaded.store.approved_experiences(query='Fix arithmetic'), [])
         self.assertIn('util.py', reloaded.diff('work1'))
         with self.assertRaises(WorktreeError):
             reloaded.cleanup('work1')
@@ -100,6 +102,59 @@ class WorktreeTests(unittest.TestCase):
         self.assertEqual(review['verification'], 'syntax-only')
         self.assertIsInstance(review['test_run_id'], int)
         self.worker.cleanup('bundle2', discard_changes=True)
+
+    def test_container_timeout_attempts_forced_cleanup_and_never_reports_success(self):
+        self.worker.begin('timeout', self.repo, 'Fix synthetic arithmetic')
+        self.worker.propose('timeout', StubModel(), ['calc.py', 'util.py'])
+        self.worker.apply('timeout')
+        actual_run = subprocess.run
+        calls = []
+
+        def simulated_docker(argv, *args, **kwargs):
+            if argv[0] == 'docker':
+                calls.append(argv)
+                if argv[1] == 'run':
+                    self.assertIn('--network', argv)
+                    self.assertIn('none', argv)
+                    self.assertIn('--read-only', argv)
+                    raise subprocess.TimeoutExpired(argv, 120)
+                if argv[1:3] == ['rm', '-f']:
+                    return subprocess.CompletedProcess(argv, 0, stdout='removed', stderr='')
+                raise AssertionError(argv)
+            return actual_run(argv, *args, **kwargs)
+
+        with mock.patch('athenz.worker.shutil.which', return_value='/usr/bin/docker'), \
+             mock.patch('athenz.worker.subprocess.run', side_effect=simulated_docker):
+            response = self.worker.container_tests('timeout',
+                image='python@sha256:' + ('a' * 64))
+        self.assertEqual(response['returncode'], 124)
+        self.assertIn('forced removal confirmed', response['output'])
+        self.assertEqual(calls[0][1], 'run')
+        self.assertEqual(calls[1][1:3], ['rm', '-f'])
+        self.assertEqual(calls[0][calls[0].index('--name') + 1], calls[1][3])
+        self.assertEqual(self.store.approved_experiences(query='arithmetic'), [])
+        self.worker.cleanup('timeout', discard_changes=True)
+
+    def test_container_timeout_reports_unknown_cleanup(self):
+        self.worker.begin('unknown', self.repo, 'Fix synthetic arithmetic')
+        self.worker.propose('unknown', StubModel(), ['calc.py', 'util.py'])
+        self.worker.apply('unknown')
+        actual_run = subprocess.run
+
+        def simulated_docker(argv, *args, **kwargs):
+            if argv[0] == 'docker':
+                if argv[1] == 'run':
+                    raise subprocess.TimeoutExpired(argv, 120)
+                return subprocess.CompletedProcess(argv, 1, stdout='', stderr='not available')
+            return actual_run(argv, *args, **kwargs)
+
+        with mock.patch('athenz.worker.shutil.which', return_value='/usr/bin/docker'), \
+             mock.patch('athenz.worker.subprocess.run', side_effect=simulated_docker):
+            response = self.worker.container_tests('unknown',
+                image='python@sha256:' + ('b' * 64))
+        self.assertEqual(response['returncode'], 124)
+        self.assertIn('cleanup UNCONFIRMED', response['output'])
+        self.worker.cleanup('unknown', discard_changes=True)
 
     def test_invalid_workspace_and_no_host_fallback(self):
         (self.repo / 'untracked').touch()
