@@ -81,3 +81,47 @@ alongside exact-match accuracy. Training and held-out duplicate scenario titles
 are rejected. Evaluation does not modify model weights or save training data.
 A real owner-written held-out corpus and target-PC inference are still needed
 before any identity-performance claim can be made.
+
+## v0.3 reviewed episodic memory and resumable task checkpoints
+
+Episodes are manually proposed observations, **not verified facts**. They remain
+pending until owner review, and only relevant approved episodes enter the prompt.
+Keyword/tag overlap is a conservative relevance filter; it does not perform
+semantic contradiction detection. Topical overlaps are surfaced for review, and
+an approved superseding episode rejects the older episode in one transaction.
+
+```sh
+athenz observe "Python testing preference" "Prefer regression tests" \
+  --tag python --tag testing --source owner:cli --source-ref example
+athenz list episodes --status pending
+athenz conflicts 1
+athenz review-episode 1 approved
+athenz recall "python regression"
+athenz observe "Python testing preference" "Prefer isolated regression tests" \
+  --tag python --tag testing --supersedes 1
+athenz review-episode 2 approved
+athenz forget-episode 2
+athenz purge-source owner:cli --source-ref example
+```
+
+Resumable task checkpoints only store private JSON data; the contents are **never
+executed or treated as authorization**. Revision checks prevent stale workers
+from overwriting newer state.
+
+```sh
+athenz checkpoint-save coding-task "Fix the parser" \
+  --state-json '{"next_step":"review patch"}' --status paused
+athenz checkpoint-show coding-task
+athenz checkpoint-save coding-task "Fix the parser" \
+  --state-json '{"next_step":"run scoped checks"}' --status running --revision 1
+athenz checkpoint-forget coding-task
+```
+
+The SQLite database migrates forward to schema v4. Its event log records only
+event names, record IDs and timestamps, with triggers preventing alteration.
+Deleting episodes and checkpoints deletes their **content** while retaining
+non-textual event metadata. Store `ATHENZ_HOME` outside Git. Checkpoints do not
+run in the background, and there is no autonomous coding loop or model-weight
+training yet. Existing verified code lessons are retrieved only when the
+underlying patch remains applied, its test evidence is the newest passing run,
+and the current question is topically relevant.

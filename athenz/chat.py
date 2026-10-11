@@ -9,7 +9,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 from .prompting import build_messages
-from .learning import LearningStore
+from .experience import ExperienceStore
 from .store import IdentityStore
 
 
@@ -69,7 +69,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--model", default=None)
     p.add_argument("--session", default="default", help="Persistent session ID; stored locally")
     args = p.parse_args(argv)
-    store = LearningStore(args.home)
+    store = ExperienceStore(args.home)
     try:
         model = OllamaClient(model=args.model)
         print(f"AthenZ local {args.mode} chat (model: {model.model}). /exit to quit")

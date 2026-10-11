@@ -73,7 +73,7 @@ def migrate_v2(db: sqlite3.Connection) -> None:
 def migrate_v3(db: sqlite3.Connection) -> None:
     """Separate held-out owner choices from retrieved training demonstrations."""
     version = db.execute('PRAGMA user_version').fetchone()[0]
-    if version == 3:
+    if version >= 3:
         return
     if version != 2:
         raise RuntimeError(f'Unexpected schema version {version}; expected 2 or 3')
@@ -84,6 +84,44 @@ def migrate_v3(db: sqlite3.Connection) -> None:
                 CHECK(split IN ('train','calibration','test'));
             CREATE INDEX idx_decision_eval ON decisions(status,split,id);
             PRAGMA user_version=3;
+            COMMIT;
+        ''')
+    except Exception:
+        db.rollback()
+        raise
+
+
+def migrate_v4(db: sqlite3.Connection) -> None:
+    """Private reviewed episodes, resumable task data and immutable metadata events."""
+    version = db.execute('PRAGMA user_version').fetchone()[0]
+    if version == 4:
+        return
+    if version != 3:
+        raise RuntimeError(f'Unexpected schema version {version}; expected 3 or 4')
+    try:
+        db.executescript('''BEGIN IMMEDIATE;
+            CREATE TABLE episodes (
+                id INTEGER PRIMARY KEY, topic TEXT NOT NULL, detail TEXT NOT NULL,
+                tags_json TEXT NOT NULL, source TEXT NOT NULL,
+                source_ref TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'pending'
+                    CHECK(status IN ('pending','approved','rejected')),
+                supersedes_id INTEGER REFERENCES episodes(id) ON DELETE SET NULL,
+                created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+            );
+            CREATE INDEX idx_episodes_review ON episodes(status,id);
+            CREATE INDEX idx_episodes_source ON episodes(source,source_ref);
+            CREATE TABLE checkpoints (
+                id INTEGER PRIMARY KEY, task_key TEXT UNIQUE NOT NULL,
+                task TEXT NOT NULL, state_json TEXT NOT NULL,
+                status TEXT NOT NULL CHECK(status IN
+                  ('queued','running','paused','failed','complete')),
+                revision INTEGER NOT NULL CHECK(revision > 0), updated_at TEXT NOT NULL
+            );
+            CREATE TRIGGER events_append_only_update BEFORE UPDATE ON events
+                BEGIN SELECT RAISE(ABORT, 'events are append-only'); END;
+            CREATE TRIGGER events_append_only_delete BEFORE DELETE ON events
+                BEGIN SELECT RAISE(ABORT, 'events are append-only'); END;
+            PRAGMA user_version=4;
             COMMIT;
         ''')
     except Exception:

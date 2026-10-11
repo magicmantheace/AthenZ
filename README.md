@@ -7,7 +7,7 @@ works for the owner and learns from reviewed, test-backed work evidence.
 
 **Status: v0.2 pre-release integration.** Identity, private conversation
 persistence, feedback and training candidates, opt-in writing imports, and
-scoped code proposals and an experimental held-out decision evaluator are implemented. No autonomous daemon, isolated coding
+scoped code proposals are implemented. No autonomous daemon, isolated coding
 sandbox, self-directed training, LoRA model deployment or desktop app exists
 yet. The target PC's Ollama inference remains unverified.
 
@@ -65,21 +65,6 @@ Test-backed experiences remain pending unless approved. A reverted proposal
 revokes any approved lesson attached to it. Tests passing are observations,
 not proof of code correctness.
 
-## Held-out Twin evaluation
-
-```sh
-athenz decision "Ship with failing tests?" "Fix first" "Avoid regressions" \
-  --option "Ship" --option "Fix first" --split test
-athenz decision-status 1 approved
-athenz evaluate-decisions --split test --seed 42
-```
-
-`calibration` and `test` decisions never enter the normal prompt context.
-Scoring uses shuffled multiple-choice options, a repeatable seed, and a
-model response captured at temperature zero. An actual owner-authored test
-corpus and hardware inference are needed before reporting personal accuracy.
-See [docs/LEARNING.md](docs/LEARNING.md) for the review/evaluation process.
-
 ## Privacy and limitations
 
 Local data is held in `~/.athenz/identity.sqlite3` or `ATHENZ_HOME`. Do not
@@ -100,3 +85,22 @@ Never assume automatic learning has modified model weights.
 - [AGENTS.md](AGENTS.md) — development, privacy and safety constraints.
 - [docs/LEARNING.md](docs/LEARNING.md) — detailed memory and coding controls.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — runtime component boundaries.
+
+## v0.3 experience-learning foundation (experimental)
+
+Reviewable episodic memory and non-executing task checkpoints are available:
+
+```bash
+athenz observe "Python testing" "Use mocks for network calls" --tag python --tag tests
+athenz list episodes --status pending
+athenz review-episode 1 approved
+athenz recall "python tests"
+athenz checkpoint-save parser-fix "Improve parser" --state-json '{"step":1}'
+athenz checkpoint-show parser-fix
+```
+
+Approved episodes are retrieved only for matching topics, and recorded coding
+lessons require current passing test evidence. See
+[docs/LEARNING.md](docs/LEARNING.md) for conflict review, source purge, revision
+checks, and limitations. This does **not** yet make AthenZ a self-training or
+unattended autonomous agent. Checkpoints store data but cannot execute tasks.

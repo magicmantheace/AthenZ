@@ -79,14 +79,14 @@ class LearningTests(unittest.TestCase):
         eid = self.store.list_items('experiences')[0]['id']
         with self.assertRaises(ValueError):
             self.store.set_review('experiences', eid, 'approved')
-        self.assertNotIn('Failed lesson', str(build_messages(self.store, 'Review?', 'agent')))
+        self.assertNotIn('Failed lesson', str(build_messages(self.store, 'Synthetic task lesson', 'agent')))
         self.store.record_test(pid, 'test-command', 0, 'PASS', 'hash-files', 'Owner reviewed valid lesson')
         eid = self.store.list_items('experiences')[0]['id']
         self.store.set_review('experiences', eid, 'approved')
-        self.assertIn('Owner reviewed valid lesson', str(build_messages(self.store, 'Review?', 'agent')))
-        self.assertNotIn('Owner reviewed valid lesson', str(build_messages(self.store, 'Review?', 'twin')))
+        self.assertIn('Owner reviewed valid lesson', str(build_messages(self.store, 'Synthetic task lesson', 'agent')))
+        self.assertNotIn('Owner reviewed valid lesson', str(build_messages(self.store, 'Synthetic task lesson', 'twin')))
         self.store.forget_runtime('proposals', pid)
-        self.assertNotIn('Owner reviewed valid lesson', str(build_messages(self.store, 'Review?', 'agent')))
+        self.assertNotIn('Owner reviewed valid lesson', str(build_messages(self.store, 'Synthetic task lesson', 'agent')))
 
     def test_superseded_and_failed_tests_revoke_procedures(self):
         pid = self.store.new_proposal('/fake', 'Synthetic task', [{'path': 'x.py'}], 'proposed')
@@ -144,7 +144,7 @@ class LearningTests(unittest.TestCase):
         db.close()
         upgraded = LearningStore(original.parent)
         self.addCleanup(upgraded.close)
-        self.assertEqual(upgraded.db.execute('PRAGMA user_version').fetchone()[0], 3)
+        self.assertEqual(upgraded.db.execute('PRAGMA user_version').fetchone()[0], 4)
         self.assertEqual(upgraded.context()['identity'][0]['text'], 'retain me')
         self.assertEqual(upgraded.conversation('session', 'agent'), [])
 

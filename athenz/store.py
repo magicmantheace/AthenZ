@@ -43,7 +43,7 @@ class IdentityStore:
     def _migrate(self) -> None:
         # Never blindly ALTER a live database or silently rewrite private records.
         version = self.db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 3:
+        if version > 4:
             raise RuntimeError(f"Database schema v{version} is newer than this application")
         if version == 0:
             with self.db:
@@ -81,9 +81,10 @@ class IdentityStore:
                 PRAGMA user_version = 1;
                 """)
 
-        from .migrations import migrate_v2, migrate_v3
+        from .migrations import migrate_v2, migrate_v3, migrate_v4
         migrate_v2(self.db)
         migrate_v3(self.db)
+        migrate_v4(self.db)
 
     def _event(self, operation: str, subject_type: str, subject_id: int | None) -> None:
         # Deliberately exclude content from event logs so deleting content truly removes it.
@@ -192,7 +193,7 @@ class IdentityStore:
             raise ValueError("Source must not be blank")
         counts = {}
         with self.db:
-            for table in ("identity", "decisions", "writing_samples"):
+            for table in ("identity", "decisions", "writing_samples", "episodes"):
                 # Remove identity revision content as well.
                 if table == "identity":
                     self.db.execute("""DELETE FROM identity_revisions WHERE identity_id IN
@@ -204,9 +205,9 @@ class IdentityStore:
         return counts
 
     def list_items(self, table: str, status: str | None = None, limit: int = 200) -> list[dict]:
-        if table not in {"identity", "decisions", "writing_samples", "events", "identity_revisions", "messages", "feedback", "train_pairs", "proposals", "test_runs", "experiences"}:
+        if table not in {"identity", "decisions", "writing_samples", "events", "identity_revisions", "messages", "feedback", "train_pairs", "proposals", "test_runs", "experiences", "episodes", "checkpoints"}:
             raise ValueError("Unsupported table")
-        if status is not None and table not in {"identity", "decisions", "writing_samples", "train_pairs", "experiences"}:
+        if status is not None and table not in {"identity", "decisions", "writing_samples", "train_pairs", "experiences", "episodes"}:
             raise ValueError("This table does not contain status")
         if status is not None and status not in STATES:
             raise ValueError("Invalid status")
@@ -237,7 +238,9 @@ class IdentityStore:
                 "train_pairs": self.list_items("train_pairs", limit=100000),
                 "proposals": self.list_items("proposals", limit=100000),
                 "test_runs": self.list_items("test_runs", limit=100000),
-                "experiences": self.list_items("experiences", limit=100000)}
+                "experiences": self.list_items("experiences", limit=100000),
+                "episodes": self.list_items("episodes", limit=100000),
+                "checkpoints": self.list_items("checkpoints", limit=100000)}
 
     def close(self) -> None:
         self.db.close()
