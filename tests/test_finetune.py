@@ -56,7 +56,7 @@ class FinetuneTests(unittest.TestCase):
         self.assertEqual(recipe['quantization'], 'nf4-4bit')
         self.assertEqual(recipe['gradient_accumulation'], 8)
         self.assertEqual(checkpoint['revision'], 1)
-        self.assertTrue(folder.is_relative_to(self.store.home / 'runs'))
+        self.assertTrue(folder.resolve().is_relative_to((self.store.home / 'runs').resolve()))
         self.assertFalse(list(self.root.glob('**/adapter_model.safetensors')))
 
     def test_no_symlink_or_changed_base_weights(self):
