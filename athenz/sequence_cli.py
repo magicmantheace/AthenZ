@@ -29,6 +29,11 @@ def parser() -> argparse.ArgumentParser:
     x.add_argument('key')
     x.add_argument('--sha256', required=True)
     x.add_argument('--confirm', required=True, action='store_true')
+    x = sub.add_parser('test', help='Owner-approved full-sequence unittest in pinned Docker')
+    x.add_argument('key')
+    x.add_argument('--image', required=True)
+    x.add_argument('--timeout', type=int, default=120)
+    x.add_argument('--confirm', action='store_true', required=True)
     x = sub.add_parser('export')
     x.add_argument('key')
     x.add_argument('--confirm', required=True, action='store_true')
@@ -52,6 +57,10 @@ def main(argv: list[str] | None = None) -> None:
             if not args.confirm:
                 raise ValueError('Explicit --confirm required')
             result = {'changed_files': ctl.apply(args.key, args.sha256)}
+        elif args.command == 'test':
+            if not args.confirm:
+                raise ValueError('Explicit --confirm required for container execution')
+            result = ctl.verify_container(args.key, image=args.image, timeout=args.timeout)
         elif args.command == 'export':
             if not args.confirm:
                 raise ValueError('Explicit --confirm required')

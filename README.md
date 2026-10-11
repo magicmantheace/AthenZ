@@ -65,3 +65,13 @@ stage is syntax-checked and retried. Once all stages pass **syntax-only**
 checks, an immutable combined patch can be exported locally. No host project
 execution, autonomous commit/push, or model-weight training occurs. See
 [docs/SEQUENCE.md](docs/SEQUENCE.md) for examples, recovery and limitations.
+
+### Complete-task test observation (experimental)
+
+After all sequential stages are approved and advanced, use
+`athenz-sequence test <key> --image python@sha256:<trusted-digest> --confirm`
+to run fixed unittest discovery in a restricted Docker container against a
+throwaway snapshot of the **combined final result**. The review export records
+whether container tests were observed passing or failing and pins their
+snapshot fingerprint. If Docker is unavailable, the operation fails closed.
+This is not independent attestation and is still unverified on Windows/WSL2.

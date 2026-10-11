@@ -16,6 +16,7 @@ from pathlib import Path
 from .coding import allowed_file, change_status, digest, diff_for, propose
 from .controller import proposal_digest
 from .worker import Worker, WorktreeError, _git
+from .verification import isolated_unittest, snapshot_files
 
 
 class SequenceError(WorktreeError):
@@ -245,6 +246,43 @@ class SequenceController:
         self._save(key, item, seq)
         return self.status(key)
 
+    def verify_container(self, key: str, *, image: str, timeout: int = 120) -> dict:
+        """Owner-approved full-task behavioral test; syntax-only is not proof.
+
+        Verified bytes are copied into a private, disposable snapshot. The
+        observed Docker outcome and hashes are retained in the private store,
+        but never promoted as a learned lesson without additional review.
+        """
+        item, seq = self._load(key)
+        if seq['phase'] != 'complete':
+            raise SequenceError('Finish all approved stages before behavioral verification')
+        self._integrity(item, seq)
+        workspace = Path(item['state']['workspace'])
+        result = isolated_unittest(workspace, image=image, home=self.store.home, timeout=timeout)
+        # Snapshot data was independently hashed after copying; re-check the
+        # live workspace before recording the result to reject obvious drift.
+        self._integrity(item, seq)
+        proposal_id = seq['approved'][-1]['proposal_id']
+        files_digest = result['snapshot_sha256']
+        test_id = self.store.record_test(
+            proposal_id, 'docker:sequence unittest (local observation)',
+            result['returncode'], result['output'], files_digest,
+            'Full sequence unittest result (owner review required)')
+        row = self.store.db.execute('SELECT output_sha256 FROM test_runs WHERE id=?',
+                                    (test_id,)).fetchone()
+        item, seq = self._load(key)
+        seq = dict(seq)
+        seq['behavioral_evidence'] = {
+            'test_run_id': test_id, 'runner': result['runner'], 'image': result['image'],
+            'returncode': result['returncode'], 'snapshot_sha256': files_digest,
+            'output_sha256': result['output_sha256'],
+            'stored_excerpt_sha256': row['output_sha256'],
+            'cleanup': result['cleanup'], 'tracked_files': result['tracked_files'],
+            'snapshot_bytes': result['snapshot_bytes'],
+        }
+        self._save(key, item, seq)
+        return {**result, 'test_run_id': test_id}
+
     def export(self, key: str) -> dict:
         item, seq = self._load(key)
         if seq['phase'] not in {'complete', 'exported'}:
@@ -282,9 +320,27 @@ class SequenceController:
             if dest.is_symlink() or hashlib.sha256(dest.read_bytes()).hexdigest() != sha:
                 raise SequenceError('Conflicting review artifact exists')
             # Crash recovery: immutable patch created before checkpoint update.
+        evidence = seq.get('behavioral_evidence')
+        if evidence is not None:
+            # A test result is only meaningful for the exact final snapshot.
+            # Compute on a disposable temp copy; never execute project code.
+            import tempfile
+            with tempfile.TemporaryDirectory(prefix='athenz-check-') as temp:
+                snapshot = snapshot_files(workspace, Path(temp))
+            if snapshot['snapshot_sha256'] != evidence['snapshot_sha256']:
+                raise SequenceError('Behavioral evidence does not match final workspace')
+            row = self.store.db.execute('SELECT * FROM test_runs WHERE id=?',
+                                        (evidence['test_run_id'],)).fetchone()
+            if row is None or row['files_sha256'] != evidence['snapshot_sha256'] \
+                    or row['returncode'] != evidence['returncode'] \
+                    or row['output_sha256'] != evidence['stored_excerpt_sha256']:
+                raise SequenceError('Behavioral evidence record is missing or contradictory')
+        level = ('container-tests-observed' if evidence and evidence['returncode'] == 0
+                 else 'container-tests-failed' if evidence else 'syntax-only')
         output = {'path': str(dest), 'sha256': sha, 'files': files,
                   'base_sha': item['state']['base_sha'], 'stages': len(seq['approved']),
-                  'verification': 'syntax-only', 'test_run_ids': [e['test_run_id'] for e in seq['approved']]}
+                  'verification': level, 'behavioral_evidence': evidence,
+                  'test_run_ids': [e['test_run_id'] for e in seq['approved']]}
         seq = dict(seq)
         seq['final_review'] = output
         seq['phase'] = 'exported'
