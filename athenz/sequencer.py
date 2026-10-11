@@ -207,7 +207,7 @@ class SequenceController:
         failed = any('invalid syntax' in line for line in lines)
         files_hash = digest(''.join(p + h for p, h in sorted(self._hashes(seq, row).items())))
         observed = '\n'.join(lines)
-        test_id = self.store.record_test(row['id'], 'athenz:sequence ast.parse (no execution)',
+        test_id = self.store.record_test(row['id'], 'athenz:ast.parse (no execution)',
                                          1 if failed else 0, observed, files_hash,
                                          'All authorized Python files parsed without execution')
         item, seq = self._load(key)

@@ -64,6 +64,12 @@ class SequenceTests(unittest.TestCase):
     def test_two_steps_keep_prior_changes_and_export_combined_patch(self):
         first = self._reviewed()
         self.assertTrue(self.controller.syntax('task')['passed'])
+        # Static syntax is not behavioral test evidence and cannot become
+        # an approved procedural lesson, even when syntax parsing succeeds.
+        pending = self.store.list_items('experiences', 'pending')
+        self.assertEqual(len(pending), 1)
+        with self.assertRaisesRegex(ValueError, 'Syntax parsing'):
+            self.store.set_review('experiences', pending[0]['id'], 'approved')
         self.assertEqual(self.controller.advance('task')['stage'], 2)
         ws = Path(self.controller.worker.resume('task')['state']['workspace'])
         self.assertIn('a + b', (ws / 'calc.py').read_text())
