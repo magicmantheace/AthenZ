@@ -5,8 +5,10 @@ A checkpoint is stored data, NEVER permission to execute a command.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
+from pathlib import Path
 
 from .learning import LearningStore
 from .store import STATES, utc_now
@@ -81,7 +83,10 @@ class ExperienceStore(LearningStore):
         if not 0 < limit <= 50:
             raise ValueError("Invalid limit")
         ranked = []
-        for r in self.db.execute("SELECT * FROM episodes WHERE status='approved'"):
+        for r in self.db.execute("""SELECT * FROM episodes e
+            WHERE e.status='approved' AND NOT EXISTS (
+                SELECT 1 FROM episode_disputes d WHERE d.status='unresolved'
+                    AND (d.episode_a=e.id OR d.episode_b=e.id))"""):
             labels = json.loads(r["tags_json"])
             score = relevance(query, r["topic"] + " " + r["detail"], labels)
             if score:
@@ -160,3 +165,76 @@ class ExperienceStore(LearningStore):
             if cur.rowcount:
                 self._event("deleted", "checkpoints", None)
         return bool(cur.rowcount)
+
+    def dispute(self, first_id: int, second_id: int, note: str) -> int:
+        """Quarantine BOTH approved memories pending human adjudication."""
+        if first_id == second_id or not note.strip() or len(note) > 1000:
+            raise ValueError("Two distinct episodes and a short explanation are required")
+        a, b = sorted((first_id, second_id))
+        with self.db:
+            rows = self.db.execute("SELECT id,status FROM episodes WHERE id IN (?,?)", (a, b)).fetchall()
+            if len(rows) != 2 or any(r['status'] != 'approved' for r in rows):
+                raise ValueError("Only two approved episodes may be disputed")
+            cur = self.db.execute("""INSERT INTO episode_disputes
+                (episode_a,episode_b,note,status,created_at,updated_at)
+                VALUES (?,?,?,'unresolved',?,?)""", (a, b, note.strip(), utc_now(), utc_now()))
+            self._event("disputed", "episode_disputes", cur.lastrowid)
+        return int(cur.lastrowid)
+
+    def resolve_dispute(self, dispute_id: int, winner_id: int) -> bool:
+        """Human chooses an already approved record; reject other as superseded."""
+        with self.db:
+            row = self.db.execute("SELECT * FROM episode_disputes WHERE id=?", (dispute_id,)).fetchone()
+            if row is None:
+                return False
+            if row['status'] != 'unresolved' or winner_id not in (row['episode_a'], row['episode_b']):
+                raise ValueError("Invalid or previously resolved dispute decision")
+            winner = self.db.execute("SELECT status FROM episodes WHERE id=?", (winner_id,)).fetchone()
+            if winner is None or winner['status'] != 'approved':
+                raise ValueError("Chosen winner is not approved")
+            loser_id = row['episode_b'] if winner_id == row['episode_a'] else row['episode_a']
+            self.db.execute("UPDATE episodes SET status='rejected',updated_at=? WHERE id=?",
+                            (utc_now(), loser_id))
+            self.db.execute("""UPDATE episode_disputes SET status='resolved',winner_id=?,updated_at=?
+                               WHERE id=?""", (winner_id, utc_now(), dispute_id))
+            self._event("dispute-resolved", "episode_disputes", dispute_id)
+        return True
+
+    def record_artifact(self, test_run_id: int, artifact_id: str, path: Path) -> int:
+        """Hash existing local evidence; never retain its bytes or path in the database.
+
+        This records the file as observed locally. It does NOT by itself attest
+        to a trusted CI run or grant any learning approval.
+        """
+        if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,79}", artifact_id):
+            raise ValueError("Artifact identifier must be short and opaque")
+        if not self.db.execute("SELECT 1 FROM test_runs WHERE id=?", (test_run_id,)).fetchone():
+            raise ValueError("Unknown test run")
+        path = Path(path).expanduser()
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > 32 * 1024 * 1024:
+            raise ValueError("Select a regular local evidence file up to 32 MiB")
+        digest = hashlib.sha256()
+        with path.open('rb') as handle:
+            for chunk in iter(lambda: handle.read(65536), b''):
+                digest.update(chunk)
+        with self.db:
+            cur = self.db.execute("""INSERT INTO evidence_artifacts
+                (test_run_id,artifact_id,sha256,size_bytes,observed_at)
+                VALUES (?,?,?,?,?)""", (test_run_id, artifact_id, digest.hexdigest(),
+                                             path.stat().st_size, utc_now()))
+            self._event('artifact-hashed', 'evidence_artifacts', cur.lastrowid)
+        return int(cur.lastrowid)
+
+    def verify_artifact(self, artifact_record_id: int, path: Path) -> bool:
+        record = self.db.execute("SELECT * FROM evidence_artifacts WHERE id=?",
+                                 (artifact_record_id,)).fetchone()
+        if record is None:
+            raise ValueError("Unknown artifact evidence")
+        path = Path(path).expanduser()
+        if path.is_symlink() or not path.is_file() or path.stat().st_size != record['size_bytes']:
+            return False
+        digest = hashlib.sha256()
+        with path.open('rb') as handle:
+            for chunk in iter(lambda: handle.read(65536), b''):
+                digest.update(chunk)
+        return digest.hexdigest() == record['sha256']

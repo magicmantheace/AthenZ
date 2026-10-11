@@ -125,3 +125,32 @@ run in the background, and there is no autonomous coding loop or model-weight
 training yet. Existing verified code lessons are retrieved only when the
 underlying patch remains applied, its test evidence is the newest passing run,
 and the current question is topically relevant.
+
+## v0.3 contradiction quarantine and artifact fingerprints
+
+A topical overlap is only a possible conflict. To mark **two approved** episodes
+as genuinely contradictory, explicitly record a dispute. Both memories are
+immediately quarantined from Twin and Agent prompt retrieval until an owner
+selects which approved memory is correct. Resolving a dispute rejects the other
+memory; the record remains reviewable until explicitly deleted.
+
+```sh
+athenz dispute 3 4 --reason "The two approved instructions contradict each other"
+athenz list episode_disputes
+athenz resolve-dispute 1 4
+```
+
+For a recorded test run, AthenZ can attach a local file fingerprint (opaque ID,
+SHA-256 and length only). The file bytes and local path **are not stored**:
+
+```sh
+athenz artifact-hash 1 local-unit-results ~/private-check-output.txt
+athenz list evidence_artifacts
+athenz artifact-verify 1 ~/private-check-output.txt
+```
+
+`artifact-verify` detects whether supplied local bytes still match the observed
+fingerprint; it does not prove CI identity, execution provenance, or that the
+result was correct. Merely attaching evidence does not approve an experience.
+Deleting the linked proposal or test run cascades to its artifact metadata.
+Migration to SQLite schema v5 is forward-only and preserves prior memories.

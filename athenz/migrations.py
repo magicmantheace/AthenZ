@@ -94,7 +94,7 @@ def migrate_v3(db: sqlite3.Connection) -> None:
 def migrate_v4(db: sqlite3.Connection) -> None:
     """Private reviewed episodes, resumable task data and immutable metadata events."""
     version = db.execute('PRAGMA user_version').fetchone()[0]
-    if version == 4:
+    if version >= 4:
         return
     if version != 3:
         raise RuntimeError(f'Unexpected schema version {version}; expected 3 or 4')
@@ -122,6 +122,42 @@ def migrate_v4(db: sqlite3.Connection) -> None:
             CREATE TRIGGER events_append_only_delete BEFORE DELETE ON events
                 BEGIN SELECT RAISE(ABORT, 'events are append-only'); END;
             PRAGMA user_version=4;
+            COMMIT;
+        ''')
+    except Exception:
+        db.rollback()
+        raise
+
+
+def migrate_v5(db: sqlite3.Connection) -> None:
+    """Explicit dispute quarantine and locally observed artifact fingerprints."""
+    version = db.execute('PRAGMA user_version').fetchone()[0]
+    if version == 5:
+        return
+    if version != 4:
+        raise RuntimeError(f'Unexpected schema version {version}; expected 4 or 5')
+    try:
+        db.executescript('''BEGIN IMMEDIATE;
+            CREATE TABLE episode_disputes (
+                id INTEGER PRIMARY KEY,
+                episode_a INTEGER NOT NULL REFERENCES episodes(id) ON DELETE CASCADE,
+                episode_b INTEGER NOT NULL REFERENCES episodes(id) ON DELETE CASCADE,
+                note TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'unresolved'
+                    CHECK(status IN ('unresolved','resolved')),
+                winner_id INTEGER REFERENCES episodes(id) ON DELETE SET NULL,
+                created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                UNIQUE(episode_a,episode_b), CHECK(episode_a < episode_b)
+            );
+            CREATE INDEX idx_episode_disputes_review ON episode_disputes(status,episode_a,episode_b);
+            CREATE TABLE evidence_artifacts (
+                id INTEGER PRIMARY KEY,
+                test_run_id INTEGER NOT NULL REFERENCES test_runs(id) ON DELETE CASCADE,
+                artifact_id TEXT NOT NULL, sha256 TEXT NOT NULL,
+                size_bytes INTEGER NOT NULL, observed_at TEXT NOT NULL,
+                UNIQUE(test_run_id,artifact_id)
+            );
+            PRAGMA user_version=5;
             COMMIT;
         ''')
     except Exception:

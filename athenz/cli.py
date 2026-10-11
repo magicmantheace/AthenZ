@@ -133,6 +133,20 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument('key')
     x = sub.add_parser('checkpoint-forget')
     x.add_argument('key')
+    x = sub.add_parser('dispute')
+    x.add_argument('first', type=int)
+    x.add_argument('second', type=int)
+    x.add_argument('--reason', required=True)
+    x = sub.add_parser('resolve-dispute')
+    x.add_argument('id', type=int)
+    x.add_argument('winner', type=int)
+    x = sub.add_parser('artifact-hash')
+    x.add_argument('test_run_id', type=int)
+    x.add_argument('artifact_id')
+    x.add_argument('path', type=Path)
+    x = sub.add_parser('artifact-verify')
+    x.add_argument('id', type=int)
+    x.add_argument('path', type=Path)
     return p
 
 
@@ -211,6 +225,14 @@ def main(argv: list[str] | None = None) -> None:
             print(json.dumps(store.get_checkpoint(args.key), indent=2))
         elif args.cmd == 'checkpoint-forget':
             print('Deleted' if store.forget_checkpoint(args.key) else 'Unknown checkpoint')
+        elif args.cmd == 'dispute':
+            print(f'Unresolved dispute #{store.dispute(args.first, args.second, args.reason)}; both memories quarantined')
+        elif args.cmd == 'resolve-dispute':
+            print('Resolved' if store.resolve_dispute(args.id, args.winner) else 'Unknown dispute')
+        elif args.cmd == 'artifact-hash':
+            print(f'Evidence fingerprint #{store.record_artifact(args.test_run_id, args.artifact_id, args.path)} recorded')
+        elif args.cmd == 'artifact-verify':
+            print('Artifact matches' if store.verify_artifact(args.id, args.path) else 'Artifact mismatch')
         elif args.cmd == 'code-propose':
             from .chat import OllamaClient
             from .coding import propose

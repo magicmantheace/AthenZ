@@ -49,3 +49,12 @@ periodic model updates. It is not a literal copy of a human consciousness.
 - [ ] Verified artifact IDs and reproducible external test attestations.
 - [ ] Semantic contradiction matching and explicit owner adjudication UI.
 - [ ] Scoped, isolated worktree coding runner and autonomous scheduler (v0.4).
+
+## v0.3 verification extension
+- [x] Explicit owner-reviewed contradiction links; unresolved disputes exclude
+      both affected episodes from prompts until an approved winner is chosen.
+- [x] Schema v5 adds hashed local artifact IDs linked to exact test runs,
+      without storing source evidence files in private memory.
+- [x] Cascade deletion and regression tests for artifacts and disputed episodes.
+- [ ] Independent run attestation / signed CI provenance. Local file hashing
+      alone does not prove that an external test actually ran.
