@@ -92,3 +92,7 @@ actions. A model cannot approve the patch, the container test, or publication.
 
 The branch and commit belong to the same local Git object database as the
 trusted source repository; do not run it on untrusted Git configurations.
+
+### Full-sequence Docker verification hardening
+
+The optional GitHub-hosted Linux Docker CI workflow exercises real pass/fail fixtures. The verifier now detects file drift in the copied snapshot before and after container tests and rejects unsafe Docker bind-mount source paths. This is still local observation, not independent attestation or Windows/WSL2 hardware validation. See [docs/SEQUENCE.md](docs/SEQUENCE.md).
