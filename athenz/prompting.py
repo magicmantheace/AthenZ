@@ -30,7 +30,7 @@ def build_messages(store: IdentityStore, user_message: str, mode: str = "agent")
         raise ValueError("Mode must be twin or agent")
     if not user_message.strip():
         raise ValueError("Prompt cannot be empty")
-    data = store.context()
+    data = store.context()  # never include pending or rejected assertions
     profile = {
         "approved_identity": [
             {"kind": r["kind"], "text": r["text"], "source": r["source"],
@@ -42,6 +42,9 @@ def build_messages(store: IdentityStore, user_message: str, mode: str = "agent")
             for r in data["decisions"][:20]
         ],
     }
+    if mode == "agent" and hasattr(store, "approved_experiences"):
+        # These lessons are user-reviewed, backed by recorded tests and evidence hashes.
+        profile["approved_work_lessons"] = store.approved_experiences(limit=10)
     system = (TWIN_POLICY if mode == "twin" else AGENT_POLICY) + "\n" + SHARED_POLICY
     return [
         {"role": "system", "content": system},

@@ -1,34 +1,40 @@
 # AthenZ — Roadmap to v1.0
 
-Mission: a local-first digital twin that models the owner's preferred style, decisions and values; a bounded coding agent that learns from verified work; and periodic evaluated model-weight updates. **Not** a literal copy of the human or an automatically self-modifying neural network.
+Mission: a local-first digital twin of the owner's preferred style and decisions,
+a bounded coding assistant that learns from verified work and carefully gated
+periodic model updates. It is not a literal copy of a human consciousness.
 
-## Contracts
-- Twin estimates how Adam might speak/choose. Agent accomplishes scoped tasks, informed by preferences. Never impersonate the actual person as fact.
-- Three learning rates: immediate approved memory; verified experience consolidation; reviewed, benchmark-gated LoRA fine-tuning.
-- All personal facts have origin, approval state and revocation. Never promote unverified speculation to known personal history.
-- Run code tools in authorized, isolated workspaces, with diff review and constrained commands. External messages, account changes, destructive operations and publishing require explicit approval.
-- Private data is stored locally by default, not committed to Git. Have export, deletion, audit and backup controls.
-- Model and experience upgrades require evidence, test results, repeatable versioning and rollback.
+## Safety contracts
+- Twin estimates owner behavior; Agent works for owner. Never invent lived history.
+- Three rates of learning: approved context, reviewed/test-backed experience,
+  and benchmark-gated explicit LoRA updates (not yet implemented).
+- Imported chat data remains pending by default; training export only includes
+  reviewed data. No private data or corpora in Git.
+- Explicit file scope, review and human action precede any code write; no
+  unattended code execution, commit, push, purchase, deployment or messages.
+- Evidence and evaluation determine promotion; rollbacks must revoke lessons
+  tied to reverted changes.
 
-## Versions and completion gates
+## Versions and gates
 | Version | Scope | Acceptance gate |
 | --- | --- | --- |
-| v0.1 | Prototype chat, local model, memories, feedback and proposals | Mocked prototype tests pass; target-PC inference still unverified |
-| v0.2 | Reviewable identity, provenance, revisions, decision cases, private export and granular deletion | Approved items only reach prompts; corrections tracked; import data removable |
-| v0.3 | Episodic, semantic and procedural memory; event ledger; contradiction resolution | Evidence-traceable lessons survive restart; contradictions visible |
-| v0.4 | Repository-aware autonomous coding loop in disposable worktrees | Multi-file fixes with bounded tests and approval-based commit/push |
-| v0.5 | Training candidate review, SFT/LoRA recipes, fixed benchmark and promotion gate | One repeatable adapter train/eval/promotion/rollback cycle |
-| v0.6 | Desktop interface and supervised background scheduler | Can pause/restart tasks and supervise changes without CLI |
-| v0.7 | Held-out decision matching and stronger reasoning | Identity score improves without fabricated experiences |
-| v0.8 | Optional voice and selected local/account connectors | Opt-in scope enforcement and independent disable controls |
-| v0.9 | Hardening, migrations, private backups, threat tests and packaging | Regression suite passes on target PC |
-| v1.0 | Stable personalized local agent with controlled learning | Measured identity, memory, coding, privacy and recoverability gates met |
+| v0.1 | Local Adam Twin prototype | Mocked tests passed; hardware inference unverified |
+| v0.2 | Provenance, conversation persistence, reviewable feedback, writing import and scoped code proposals | One private DB, migration, approvals and tests (implemented, awaiting hardware test) |
+| v0.3 | Episodic, semantic and procedural memory; event ledger; contradiction handling and checkpoints | Relevant approved lessons reliably retrieved, corrected or revoked |
+| v0.4 | Autonomous coding loop in disposable, isolated worktrees | Multi-file tasks with bounded tests and human review of commit/push |
+| v0.5 | SFT/LoRA dataset, fixed baseline, model version registry, promotion gate | Train/eval/promotion/rollback repeatable on supported GPU |
+| v0.6 | Desktop shell and supervised background scheduler | Pause/restart jobs and review proposed actions without CLI |
+| v0.7 | Held-out identity and decision evaluation | Predictions improve without leaking test cases into prompts |
+| v0.8 | Optional voice and local connectors | Per-integration opt-in and disable controls |
+| v0.9 | Privacy and reliability hardening, installer and Windows validation | Backup/erasure threat tests and regression gates pass |
+| v1.0 | Stable personalized local agent with controlled learning | Identity, coding, privacy, recoverability benchmarks met |
 
-## Immediate critical path
-1. Port the v0.1 prototype source safely into AthenZ; avoid copying any actual user data.
-2. Integrate v0.2 identity store into retrieval and split Twin / Agent instructions.
-3. Add a decision-scenario evaluation corpus with held-out cases.
-4. Build v0.3 experience ledger and safe coding runner; only then tackle LoRA.
-5. Benchmark Ollama inference and VRAM use on RTX 3060 12 GB Windows/WSL2.
-
-All timeline estimates are deliberately omitted until a baseline is benchmarked.
+## Next critical path
+1. Record and evaluate user decisions with reproducible train/test splits (#3).
+2. Complete v0.3 event ledger with replay-safe checkpoints, indexed evidence,
+   contradiction review and relevant retrieval (#4). A preliminary test-backed
+   proposal/experience ledger already exists, but it is not yet a complete v0.3.
+3. Build OS-isolated coding execution (v0.4) instead of running arbitrary
+   repository tests in the host environment.
+4. Benchmark model inference on RTX 3060 12GB Windows/WSL2.
+5. Later: LoRA training should never self-promote an unreviewed model.

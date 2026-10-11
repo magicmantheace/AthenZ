@@ -1,18 +1,27 @@
 # Architecture
 
-## Runtime boundaries
 ```text
-Owner commands
-  ├── Twin mode → approved identity context → local Ollama → response
-  └── Agent mode → task plan → scoped tool policy → worktree → tests → review
-                                       ↓
-Private storage (<ATHENZ_HOME>), never Git
-  ├── Identity: provenance, approval, revisions, decision cases
-  ├── Episodic memory: observed events and results (planned v0.3)
-  ├── Procedural memory: verified lessons (planned v0.3)
-  └── Training candidates: owner-reviewed only (planned v0.5)
+athenz.cli / athenz.chat
+        |
+        v
+IdentityStore + LearningStore  ---->  ~/.athenz/identity.sqlite3 (v2)
+  | approved identity/decision facts   | conversation by mode/session
+  | pending owner writing samples      | owner feedback and reviewed pairs
+  | reviewed experiences/tests         | scoped proposals, revisions
+  v
+Prompt builder (untrusted data only) ---> loopback Ollama model
+                                      (no model-controlled tool access)
 
-Dataset version → LoRA training → fixed evaluation → manual promotion → rollback
+Code-propose: select 1-4 existing files -> model JSON -> diff -> human apply
+             -> explicit compile/unittest -> pending evidence -> human review
+             -> optional revert (revokes reviewed lessons)
+
+Later v0.3–v1.0: retrieval, contradiction engine, worktree isolation,
+training registry, LoRA, benchmark gate, desktop supervisor, secure retention.
 ```
 
-Initial v0.2 identity component is independently runnable and testable. The starter v0.1 runtime has not yet been migrated or wired to it. Private memory contents and untrusted repository text must not become instructions. Model-weight learning is not live.
+The v2 migration preserves existing v1 identity/decision rows. SQLite is the
+local state source of truth; Git is the source of truth for application code
+and roadmap, never a personal-data store. No model weights change in current
+versions. Git commits, network access and unsupervised shell execution are not
+part of the local coding proposal tool.

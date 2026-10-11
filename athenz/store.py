@@ -1,6 +1,7 @@
-"""Reviewable local identity store: approval, source provenance, revisions and deletion."""
+"""Reviewable identity store. No personal data is written to the source repository."""
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 from datetime import datetime, timezone
@@ -19,7 +20,7 @@ def default_home() -> Path:
 
 
 class IdentityStore:
-    """Private SQLite source of truth. Unapproved data never enters prompt context."""
+    """SQLite source-of-truth with provenance, revision history and explicit approval."""
 
     def __init__(self, home: Path | None = None):
         self.home = Path(home) if home is not None else default_home()
@@ -40,8 +41,9 @@ class IdentityStore:
             pass
 
     def _migrate(self) -> None:
+        # Never blindly ALTER a live database or silently rewrite private records.
         version = self.db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 1:
+        if version > 2:
             raise RuntimeError(f"Database schema v{version} is newer than this application")
         if version == 0:
             with self.db:
@@ -79,8 +81,11 @@ class IdentityStore:
                 PRAGMA user_version = 1;
                 """)
 
+        from .migrations import migrate_v2
+        migrate_v2(self.db)
+
     def _event(self, operation: str, subject_type: str, subject_id: int | None) -> None:
-        # Intentionally exclude personal content; deletion must not leave it in event logs.
+        # Deliberately exclude content from event logs so deleting content truly removes it.
         self.db.execute("INSERT INTO events(operation,subject_type,subject_id,created_at) VALUES (?,?,?,?)",
                         (operation, subject_type, subject_id, utc_now()))
 
@@ -97,7 +102,7 @@ class IdentityStore:
             cur = self.db.execute("""INSERT INTO identity
               (kind,text,source,source_ref,confidence,status,created_at,updated_at)
               VALUES (?,?,?,?,?,?,?,?)""", (kind, text.strip(), source, source_ref, confidence,
-                                             "approved" if approved else "pending", time, time))
+                                                "approved" if approved else "pending", time, time))
             self._event("created", "identity", cur.lastrowid)
         return int(cur.lastrowid)
 
@@ -120,6 +125,7 @@ class IdentityStore:
                 return False
             self.db.execute("""INSERT INTO identity_revisions(identity_id,prior_text,new_text,reason,changed_at)
                              VALUES (?,?,?,?,?)""", (item_id, old["text"], text.strip(), reason, utc_now()))
+            # Owner correction must be reviewed again; previous approval does not transfer.
             self.db.execute("UPDATE identity SET text=?,status='pending',updated_at=? WHERE id=?",
                             (text.strip(), utc_now(), item_id))
             self._event("revised", "identity", item_id)
@@ -167,12 +173,13 @@ class IdentityStore:
         return int(cur.lastrowid)
 
     def purge_source(self, source: str, source_ref: str = "") -> dict[str, int]:
-        """Remove items from one exact source; don't silently purge similarly named sources."""
+        """Forget everything imported under the exact source and reference pair."""
         if not source.strip():
             raise ValueError("Source must not be blank")
         counts = {}
         with self.db:
             for table in ("identity", "decisions", "writing_samples"):
+                # Remove identity revision content as well.
                 if table == "identity":
                     self.db.execute("""DELETE FROM identity_revisions WHERE identity_id IN
                       (SELECT id FROM identity WHERE source=? AND source_ref=?)""", (source, source_ref))
@@ -183,9 +190,9 @@ class IdentityStore:
         return counts
 
     def list_items(self, table: str, status: str | None = None, limit: int = 200) -> list[dict]:
-        if table not in {"identity", "decisions", "writing_samples", "events", "identity_revisions"}:
+        if table not in {"identity", "decisions", "writing_samples", "events", "identity_revisions", "messages", "feedback", "train_pairs", "proposals", "test_runs", "experiences"}:
             raise ValueError("Unsupported table")
-        if status is not None and table not in {"identity", "decisions"}:
+        if status is not None and table not in {"identity", "decisions", "writing_samples", "train_pairs", "experiences"}:
             raise ValueError("This table does not contain status")
         if status is not None and status not in STATES:
             raise ValueError("Invalid status")
@@ -198,17 +205,24 @@ class IdentityStore:
         return [dict(row) for row in self.db.execute(query, (*args, limit)).fetchall()]
 
     def context(self) -> dict:
+        """Never surface unapproved personal claims as facts."""
         return {
             "identity": self.list_items("identity", "approved"),
             "decisions": self.list_items("decisions", "approved"),
         }
 
     def export(self) -> dict:
-        """Private export; caller is responsible for secure destination and backup."""
-        return {"schema": 1, "identity": self.list_items("identity"),
+        """Export user-controlled identity data; output contains sensitive content."""
+        return {"schema": 2, "identity": self.list_items("identity"),
                 "identity_revisions": self.list_items("identity_revisions"),
                 "decisions": self.list_items("decisions"),
-                "writing_samples": self.list_items("writing_samples")}
+                "writing_samples": self.list_items("writing_samples"),
+                "messages": self.list_items("messages", limit=100000),
+                "feedback": self.list_items("feedback", limit=100000),
+                "train_pairs": self.list_items("train_pairs", limit=100000),
+                "proposals": self.list_items("proposals", limit=100000),
+                "test_runs": self.list_items("test_runs", limit=100000),
+                "experiences": self.list_items("experiences", limit=100000)}
 
     def close(self) -> None:
         self.db.close()
