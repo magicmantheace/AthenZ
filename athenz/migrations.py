@@ -10,8 +10,10 @@ def migrate_v2(db: sqlite3.Connection) -> None:
             return
         raise RuntimeError(f'Unexpected schema version {version}')
     # All records from the identity v1 tables remain intact.
-    with db:
-        db.executescript('''
+    try:
+        # sqlite3.executescript commits a pending transaction first, so we put
+        # BEGIN/COMMIT inside the SQL to make migrations crash-atomic.
+        db.executescript('''BEGIN IMMEDIATE;
         ALTER TABLE writing_samples ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'
             CHECK(status IN ('pending','approved','rejected'));
         CREATE TABLE messages (
@@ -61,4 +63,8 @@ def migrate_v2(db: sqlite3.Connection) -> None:
         );
         CREATE INDEX idx_experiences_status ON experiences(status,outcome);
         PRAGMA user_version = 2;
+        COMMIT;
         ''')
+    except Exception:
+        db.rollback()
+        raise

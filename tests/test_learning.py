@@ -73,6 +73,7 @@ class LearningTests(unittest.TestCase):
 
     def test_failing_experience_cannot_become_procedural_prompt(self):
         pid = self.store.new_proposal('/fake', 'Synthetic task', [{'path': 'x.py'}], 'model proposed')
+        self.store.update_proposal(pid, 'proposed', 'applied')
         tid = self.store.record_test(pid, 'test-command', 1, 'Failure', 'hash-files', 'Failed lesson')
         self.assertEqual(tid, 1)
         eid = self.store.list_items('experiences')[0]['id']
@@ -86,6 +87,18 @@ class LearningTests(unittest.TestCase):
         self.assertNotIn('Owner reviewed valid lesson', str(build_messages(self.store, 'Review?', 'twin')))
         self.store.forget_runtime('proposals', pid)
         self.assertNotIn('Owner reviewed valid lesson', str(build_messages(self.store, 'Review?', 'agent')))
+
+    def test_superseded_and_failed_tests_revoke_procedures(self):
+        pid = self.store.new_proposal('/fake', 'Synthetic task', [{'path': 'x.py'}], 'proposed')
+        self.store.update_proposal(pid, 'proposed', 'applied')
+        self.store.record_test(pid, 'compile', 0, 'pass', 'files-hash', 'First passed')
+        e1 = self.store.list_items('experiences')[0]['id']
+        self.store.record_test(pid, 'unittest', 0, 'pass', 'files-hash', 'More thorough passed')
+        with self.assertRaises(ValueError):
+            self.store.set_review('experiences', e1, 'approved')
+        self.store.set_review('experiences', self.store.list_items('experiences')[0]['id'], 'approved')
+        self.store.record_test(pid, 'unittest', 1, 'failure', 'files-hash', 'Failure observed')
+        self.assertEqual(self.store.approved_experiences(), [])
 
     def test_private_exports_refuse_git_and_refuse_overwrite(self):
         gitroot = self.root / 'project'

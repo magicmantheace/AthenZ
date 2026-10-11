@@ -56,8 +56,15 @@ class LearningStore(IdentityStore):
         row = self.db.execute(f'SELECT * FROM {table} WHERE id=?', (item_id,)).fetchone()
         if row is None:
             return False
-        if table == 'experiences' and state == 'approved' and row['outcome'] != 'test_pass':
-            raise ValueError('Cannot approve a failed test as a successful lesson')
+        if table == 'experiences' and state == 'approved':
+            if row['outcome'] != 'test_pass':
+                raise ValueError('Cannot approve a failed test as a successful lesson')
+            if self.get_proposal(row['proposal_id'])['status'] != 'applied':
+                raise ValueError('Cannot approve a lesson for an unapplied or undone patch')
+            latest = self.db.execute('SELECT MAX(id) FROM test_runs WHERE proposal_id=?',
+                                     (row['proposal_id'],)).fetchone()[0]
+            if row['test_run_id'] != latest:
+                raise ValueError('Cannot approve superseded test evidence')
         with self.db:
             self.db.execute(f'UPDATE {table} SET status=? WHERE id=?', (state, item_id))
             self._event('status:' + state, table, item_id)
@@ -109,6 +116,10 @@ class LearningStore(IdentityStore):
                 VALUES (?,?,?,?,?,?,?)''', (proposal_id, command, code, output[-8000:],
                                             raw_hash, files_sha256, utc_now()))
             task = self.get_proposal(proposal_id)['task']
+            if code != 0:
+                # Later failure invalidates previously promoted test-backed advice.
+                self.db.execute("UPDATE experiences SET status='rejected' WHERE proposal_id=? AND status='approved'",
+                                (proposal_id,))
             self.db.execute('''INSERT INTO experiences
                 (proposal_id,test_run_id,task,outcome,lesson,status,evidence_sha256,created_at)
                 VALUES (?,?,?,?,?,'pending',?,?)''',

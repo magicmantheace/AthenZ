@@ -43,6 +43,8 @@ class CodingTests(unittest.TestCase):
         self.assertEqual(change_status(self.store, pid, undo=True), 1)
         self.assertIn('return x-y', (self.repo / 'calc.py').read_text())
         self.assertEqual(self.store.approved_experiences(), [])
+        with self.assertRaises(ValueError):
+            self.store.set_review('experiences', lesson['id'], 'approved')
 
     def test_out_of_scope_duplicate_and_stale_changes(self):
         model = FakeModel([{'path': 'different.py', 'new_content': 'x=3'}])
