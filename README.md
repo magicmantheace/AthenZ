@@ -153,3 +153,14 @@ requires a trusted local Ollama environment and separate review.
 
 This new bridge remains untested against the user's actual Ollama/RTX 3060
 installation. See [docs/TRAINING.md](docs/TRAINING.md).
+
+## Reviewed offline adapter → GGUF conversion (experimental)
+
+AthenZ now has an **explicit, local CPU merge** for a completed Qwen2-family
+PEFT adapter and an owner-trusted, SHA-256-pinned llama.cpp Python converter.
+The output is a complete FP16 GGUF with a private provenance record; an Ollama
+import is a separate, explicitly approved step. No model is activated or
+uploaded, and failed conversion attempts are preserved for explicit recovery.
+See [docs/CONVERSION.md](docs/CONVERSION.md) for prerequisites, resource
+warnings, and the commands. **Real CPU/RAM/GGUF compatibility has not yet
+been validated on the target PC.**

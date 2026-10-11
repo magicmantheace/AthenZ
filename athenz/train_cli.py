@@ -13,6 +13,7 @@ from .finetune import create_run, describe_run, execute_run
 from .adapters import register_adapter, selection, select_for_review, rollback_selection
 from .runtime import status as runtime_status, activate as activate_runtime, rollback as rollback_runtime, checked_active_tag
 from .ollama_import import prepare_import, verify_import, import_local
+from .conversion import prepare_conversion, execute_conversion, conversion_status
 
 
 def parser() -> argparse.ArgumentParser:
@@ -68,6 +69,18 @@ def parser() -> argparse.ArgumentParser:
     x = sub.add_parser('runtime-rollback', help='Restore the pinned baseline as AthenZ chat default')
     x.add_argument('--revision', type=int, required=True)
     x.add_argument('--confirm', action='store_true')
+    x = sub.add_parser('prepare-conversion', help='Freeze adapter merge and trusted local llama.cpp converter fingerprint')
+    x.add_argument('run_id')
+    x.add_argument('--converter', type=Path, required=True, help='Trusted local convert_hf_to_gguf.py path')
+    x.add_argument('--sha256', required=True, help='SHA-256 of the exact trusted converter script')
+    x.add_argument('--trust-converter', action='store_true', help='I reviewed/trust this local Python script and packages')
+    x.add_argument('--confirm', action='store_true')
+    x = sub.add_parser('run-conversion', help='Merge LoRA into HF and convert to GGUF on this PC; no Ollama mutation')
+    x.add_argument('run_id')
+    x.add_argument('--resume', action='store_true', help='Start a new private attempt after interrupted/failed run')
+    x.add_argument('--confirm', action='store_true')
+    x = sub.add_parser('verify-conversion', help='Revalidate approved inputs, converter and complete GGUF artifact')
+    x.add_argument('run_id')
     x = sub.add_parser('prepare-import', help='Prepare a full merged GGUF model import; NO Ollama change')
     x.add_argument('run_id')
     x.add_argument('gguf', type=Path)
@@ -121,6 +134,15 @@ def main(argv: list[str] | None = None) -> None:
         elif args.command == 'runtime-rollback':
             result = rollback_runtime(store, expected_revision=args.revision,
                                       confirmed=args.confirm)
+        elif args.command == 'prepare-conversion':
+            result = prepare_conversion(store, args.run_id, args.converter,
+                                        converter_sha256=args.sha256, confirmed=args.confirm,
+                                        trust_converter=args.trust_converter)
+        elif args.command == 'run-conversion':
+            result = execute_conversion(store, args.run_id, confirmed=args.confirm,
+                                        resume=args.resume)
+        elif args.command == 'verify-conversion':
+            result = conversion_status(store, args.run_id)
         elif args.command == 'prepare-import':
             result = prepare_import(store, args.run_id, args.gguf, candidate_tag=args.candidate,
                                     confirmed=args.confirm, acknowledge_merge=args.ack_merge)
