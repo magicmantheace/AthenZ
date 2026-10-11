@@ -171,8 +171,11 @@ athenz-training runtime-rollback --revision CURRENT_RUNTIME_REVISION --confirm
 `runtime-activate` checks that the registered adapter, approved dataset and
 held-out evaluation report still agree, ensures that both Ollama tags exist on
 an **explicit loopback** endpoint, reads their SHA-256 digests from `/api/tags`,
+requires that both hashes match the digests recorded during the *held-out model comparison*,
 and runs a small synthetic smoke prompt against the candidate. It never sends
-owner private text for that smoke test. The installed tag is not modified.
+owner private text for that smoke test. The installed tag is not modified. Older evaluation reports created
+before model digest pinning cannot authorize runtime activation; rerun the
+comparison with the candidate actually installed.
 Activation uses a compare-and-swap checkpoint revision to avoid stale writes.
 
 Without `--model`, AthenZ chat consults the private selected route before

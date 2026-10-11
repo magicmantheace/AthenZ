@@ -69,6 +69,7 @@ class RoutingTests(unittest.TestCase):
         ids = [r[0] for r in self.s.db.execute('SELECT id FROM decisions ORDER BY id')]
         report = {'schema': 1, 'dataset_sha256': self.dataset, 'split': 'calibration',
                   'candidate': 'candidate-a', 'baseline': 'base', 'cases': 12,
+                  'candidate_digest': CANDIDATE, 'baseline_digest': BASE,
                   'eligible_for_review': True, 'accuracy_gain': 0.2,
                   'attestation': 'local-model-observation-only', 'promotion': 'not-authorized',
                   'case_ids_sha256': hashlib.sha256(json.dumps(ids).encode()).hexdigest(),
@@ -125,6 +126,14 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(checked_active_tag(self.s), 'base')
         with self.assertRaisesRegex(RoutingError, 'No current'):
             rollback(self.s, expected_revision=2, confirmed=True)
+
+    def test_unbenchmarked_replaced_candidate_is_rejected_before_smoke(self):
+        self.select()
+        self.seen['candidate-a'] = 'f' * 64
+        with self.assertRaisesRegex(RoutingError, 'differ from evaluated'):
+            self.activate()
+        self.assertEqual(status(self.s)['revision'], 0)
+        self.assertEqual(self.probe.calls, [])
 
     def test_digest_drift_fails_closed_and_rollback_ignores_missing_candidate(self):
         self.select()

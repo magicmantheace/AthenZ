@@ -82,6 +82,8 @@ def _check_lineage(store: ExperienceStore, state: dict) -> None:
     if (report.get('dataset_sha256') != entry['dataset_sha256'] or
             report.get('candidate') != entry['candidate_model'] or
             report.get('baseline') != state.get('baseline_tag') or
+            report.get('baseline_digest') != state.get('baseline_digest') or
+            report.get('candidate_digest') != state.get('active_digest') or
             state.get('active_tag') != entry['candidate_model']):
         raise RoutingError('Candidate/evaluation/adapter lineage no longer agrees')
 
@@ -147,6 +149,9 @@ def activate(store: ExperienceStore, *, expected_revision: int, baseline_tag: st
     candidate_sha = model_digest(candidate, endpoint=endpoint)
     if baseline_sha == candidate_sha:
         raise RoutingError('Baseline and candidate have identical Ollama digests')
+    if (report.get('baseline_digest') != baseline_sha or
+            report.get('candidate_digest') != candidate_sha):
+        raise RoutingError('Installed model digests differ from evaluated model digests')
     if previous and (previous.get('baseline_tag') != baseline_tag
                      or previous.get('baseline_digest') != baseline_sha):
         raise RoutingError('Baseline drifted since previous runtime selection')
@@ -164,7 +169,8 @@ def activate(store: ExperienceStore, *, expected_revision: int, baseline_tag: st
         raise RoutingError('Candidate tag changed during smoke test')
     # Source approval may be revoked during the smoke inference.
     _check_lineage(store, {'active_run_id': run_id, 'evaluation_sha256': report_sha,
-                           'baseline_tag': baseline_tag, 'active_tag': candidate})
+                           'baseline_tag': baseline_tag, 'active_tag': candidate,
+                           'baseline_digest': baseline_sha, 'active_digest': candidate_sha})
     state = {'active_tag': candidate, 'active_digest': candidate_sha,
              'baseline_tag': baseline_tag, 'baseline_digest': baseline_sha,
              'active_run_id': run_id, 'evaluation_sha256': report_sha}
