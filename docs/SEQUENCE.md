@@ -112,3 +112,26 @@ branch's tree and base commit before completing the private checkpoint. If a
 branch already exists with different content, publication refuses to replace
 it. Review and push/cherry-pick manually when you choose. Cancellation removes
 the disposable worktree but intentionally **does not delete the local branch**.
+
+## Snapshot integrity, hostile path testing, and real Docker CI
+
+`isolated_unittest` rejects private snapshot directories with commas, newlines,
+carriage returns, or NUL bytes before constructing Docker's comma-delimited
+`--mount` syntax. It hashes every copied file **again** immediately after the
+container returns; unexpected files, symlinks, size changes, or modified file
+bytes invalidate a passing result (`returncode=125`). A pre-run fingerprint
+check also refuses a copy changed during preparation. The snapshot is still
+owned by the local host user, so this is drift detection rather than
+independent remote attestation, and it cannot defeat an attacker who changes
+files and restores the original bytes between hash checks.
+
+The opt-in `tests/test_docker_integration.py` exercises actual Linux Docker with
+passing and failing unit-test fixtures, read-only snapshot mounts, and source
+isolation. A separate GitHub Actions workflow resolves a Python image to its
+immutable registry digest, runs both tests on an Ubuntu runner, and verifies
+Docker behavior beyond mocks. CI evidence here applies to that Linux runner,
+not the owner's Windows/WSL2 installation. `ATHENZ_INTEGRATION_DOCKER=1` and
+`ATHENZ_TEST_IMAGE=<trusted image@sha256:...>` allow an owner to run it locally.
+
+The sandbox still does not establish independent execution attestation. Source
+repositories must already be trusted; containers share the host kernel.
