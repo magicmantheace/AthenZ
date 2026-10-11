@@ -378,4 +378,5 @@ class SequenceController:
         return {'key': key, 'phase': seq['phase'], 'stage': seq['index'] + 1,
                 'total_stages': len(seq['stages']), 'approved_steps': len(seq['approved']),
                 'failures': seq['failures'], 'max_failures': seq['max_failures'],
-                'current_proposal_id': seq['current'], 'last_error': seq['last_error']}
+                'current_proposal_id': seq['current'], 'last_error': seq['last_error'],
+                'published': seq.get('published')}

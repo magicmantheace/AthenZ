@@ -87,3 +87,28 @@ This is **locally observed evidence, not independently authenticated execution
 attestation or proof of correctness**. Evidence cannot enter the personality
 model without deliberate human review. This controller still does not commit,
 push, publish, or run in the background.
+
+## Controlled local Git handoff
+
+After a **passing** owner-invoked container test and a complete review export,
+copy its `sha256` and run:
+
+```sh
+athenz-sequence publish-local fix-math --sha256 <exact-exported-patch-hash> --confirm
+```
+
+Only the exact reviewed paths are written into a **temporary Git index**, and
+Git objects are created locally from the approved byte content. The command
+creates a brand-new `athenz/<task>-<hash>` local Git branch without moving the
+original repository's HEAD, staging anything in its checkout, or pushing. It
+requires an exact patch digest and an observed passing Docker result; syntax
+parsing alone is insufficient. Repository hooks are disabled, and the operation
+never accepts model-supplied commands or remote addresses. The source Git
+configuration itself must already be trusted.
+
+The ref is created atomically only if absent. If an earlier invocation was
+interrupted after ref creation, repeating the command verifies the local
+branch's tree and base commit before completing the private checkpoint. If a
+branch already exists with different content, publication refuses to replace
+it. Review and push/cherry-pick manually when you choose. Cancellation removes
+the disposable worktree but intentionally **does not delete the local branch**.
