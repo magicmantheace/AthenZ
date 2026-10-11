@@ -62,3 +62,15 @@ periodic model updates. It is not a literal copy of a human consciousness.
 ### v0.4 initial supervised-worktree slice (2026-10-11)
 - Implemented: explicitly authorized clean-repository worktree, checkpoint restore, reviewed multi-file proposals, host-safe AST parsing, optional digest-pinned container-only unittest command and explicit disposable worktree cleanup.
 - Remaining: true multi-step bounded coding loop, cancellation and retry budget, independent test provenance, Windows/WSL2 validation and owner-approved commit/push. Worktrees are not a security boundary by themselves.
+
+
+## v0.5 private offline QLoRA groundwork (2026-10-11)
+- [x] Reviewed SFT dataset creation, deterministic fingerprints, held-out exact-match exclusion and opt-in export.
+- [x] Aggregate-only baseline/candidate evaluation with source-consent invalidation.
+- [x] Explicit and bounded local Qwen2-family NF4/LoRA training recipe and optional CUDA execution path, private source/model fingerprints and explicit checkpoint resumption.
+- [x] Adapter checksum registry and tamper-detecting private selection/rollback pointer, with a current held-out report and owner lineage acknowledgment.
+- [ ] **Hardware unverified:** run the QLoRA backend on the target RTX 3060 and verify CUDA/WSL2 dependency versions, available VRAM and saved adapter compatibility.
+- [ ] Independently prove that a candidate served by Ollama contains the evaluated adapter; conversion/loading and promotion are NOT implemented.
+- [ ] Create robust held-out regression benchmarks, an owner-approved installer/rollback integration, and signed training provenance.
+
+An adapter registry entry or review selection does NOT affect AthenZ inference, install model weights or authorize promotion. A model comparison alone is insufficient to establish an adapter's identity or quality.
