@@ -44,7 +44,9 @@ def build_messages(store: IdentityStore, user_message: str, mode: str = "agent")
     }
     if mode == "agent" and hasattr(store, "approved_experiences"):
         # These lessons are user-reviewed, backed by recorded tests and evidence hashes.
-        profile["approved_work_lessons"] = store.approved_experiences(limit=10)
+        profile["approved_work_lessons"] = store.approved_experiences(limit=10, query=user_message)
+    if hasattr(store, "relevant_episodes"):
+        profile["approved_relevant_episodes"] = store.relevant_episodes(user_message, limit=5)
     system = (TWIN_POLICY if mode == "twin" else AGENT_POLICY) + "\n" + SHARED_POLICY
     return [
         {"role": "system", "content": system},

@@ -31,7 +31,7 @@ class IdentityStoreTests(unittest.TestCase):
         self.store.revise(a, "Corrected export", "fix")
         self.store.add_decision("Which?", "A", "Because", source="import", source_ref="file-1")
         self.store.add_sample("My style", source="import", source_ref="file-1")
-        self.assertEqual(self.store.purge_source("import", "file-1"), {"identity": 1, "decisions": 1, "writing_samples": 1})
+        self.assertEqual(self.store.purge_source("import", "file-1"), {"identity": 1, "decisions": 1, "writing_samples": 1, "episodes": 0})
         self.assertEqual(len(self.store.list_items("identity_revisions")), 0)
         self.assertEqual(self.store.list_items("identity")[0]["id"], b)
         self.assertNotIn("From export", str(self.store.export()))
@@ -59,7 +59,7 @@ class IdentityStoreTests(unittest.TestCase):
         reopened = IdentityStore(self.home)
         self.addCleanup(reopened.close)
         self.assertEqual(reopened.context()["decisions"][0]["choice"], "Choice")
-        self.assertEqual(reopened.db.execute("PRAGMA user_version").fetchone()[0], 3)
+        self.assertEqual(reopened.db.execute("PRAGMA user_version").fetchone()[0], 4)
 
     def test_cli_smoke(self):
         main(["--home", str(self.home), "init"])

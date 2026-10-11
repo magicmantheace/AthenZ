@@ -30,8 +30,7 @@ periodic model updates. It is not a literal copy of a human consciousness.
 | v1.0 | Stable personalized local agent with controlled learning | Identity, coding, privacy, recoverability benchmarks met |
 
 ## Next critical path
-1. Populate a real owner-authored held-out decision corpus, measure a baseline,
-   and review errors (#3). Deterministic split/option scoring is implemented.
+1. Record and evaluate user decisions with reproducible train/test splits (#3).
 2. Complete v0.3 event ledger with replay-safe checkpoints, indexed evidence,
    contradiction review and relevant retrieval (#4). A preliminary test-backed
    proposal/experience ledger already exists, but it is not yet a complete v0.3.
@@ -39,3 +38,14 @@ periodic model updates. It is not a literal copy of a human consciousness.
    repository tests in the host environment.
 4. Benchmark model inference on RTX 3060 12GB Windows/WSL2.
 5. Later: LoRA training should never self-promote an unreviewed model.
+
+## v0.3 incremental development (experience memory)
+- [x] Private schema v4 migration preserving historical identity and feedback.
+- [x] Owner-reviewed episodes with exact-source purge, topic-tag retrieval,
+      supersession review and inspection of potentially conflicting topics.
+- [x] Current-test evidence gating for retrieved procedural lessons.
+- [x] Revision-checked, restart-safe task checkpoints; contents do not execute.
+- [x] Append-only metadata event triggers and synthetic lifecycle tests.
+- [ ] Verified artifact IDs and reproducible external test attestations.
+- [ ] Semantic contradiction matching and explicit owner adjudication UI.
+- [ ] Scoped, isolated worktree coding runner and autonomous scheduler (v0.4).

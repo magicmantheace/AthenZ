@@ -74,11 +74,22 @@ class LearningStore(IdentityStore):
         return [{'instruction': r['instruction'], 'output': r['ideal_answer']}
                 for r in self.list_items('train_pairs', 'approved', 100000)]
 
-    def approved_experiences(self, limit: int = 10) -> list[dict]:
-        # Kept out of prompt context until the owner approves a test-backed lesson.
-        rows = self.db.execute('''SELECT task,lesson,evidence_sha256 FROM experiences
-            WHERE status='approved' AND outcome='test_pass' ORDER BY id DESC LIMIT ?''', (limit,))
-        return [dict(r) for r in rows]
+    def approved_experiences(self, limit: int = 10, query: str | None = None) -> list[dict]:
+        """Retrieve *relevant*, human-reviewed lessons with CURRENT passing evidence."""
+        from .experience import relevance
+        rows = self.db.execute("""SELECT e.task,e.lesson,e.evidence_sha256
+            FROM experiences e
+            JOIN proposals p ON p.id=e.proposal_id AND p.status='applied'
+            JOIN test_runs t ON t.id=e.test_run_id AND t.returncode=0
+            WHERE e.status='approved' AND e.outcome='test_pass'
+              AND t.id=(SELECT MAX(t2.id) FROM test_runs t2 WHERE t2.proposal_id=e.proposal_id)
+              AND e.evidence_sha256=t.output_sha256
+            ORDER BY e.id DESC""")
+        ranked = [(relevance(query, r['task'] + ' ' + r['lesson']) if query is not None else 1,
+                   i, dict(r)) for i, r in enumerate(rows)]
+        ranked = [r for r in ranked if r[0] > 0]
+        ranked.sort(key=lambda x: (x[0], -x[1]), reverse=True)
+        return [r[2] for r in ranked[:limit]]
 
     def new_proposal(self, repo: str, task: str, changes: list[dict], summary: str) -> int:
         if not changes or not task.strip():

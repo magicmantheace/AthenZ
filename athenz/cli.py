@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from .learning import LearningStore
+from .experience import ExperienceStore
 from .store import KINDS
 
 
@@ -45,7 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument('table', choices=['identity', 'decisions', 'writing_samples'])
     x.add_argument('id', type=int)
     x = sub.add_parser('forget-runtime')
-    x.add_argument('table', choices=['messages', 'feedback', 'train_pairs', 'proposals', 'test_runs', 'experiences'])
+    x.add_argument('table', choices=['messages', 'feedback', 'train_pairs', 'proposals', 'test_runs', 'experiences', 'episodes', 'checkpoints'])
     x.add_argument('id', type=int)
     x = sub.add_parser('delete-session')
     x.add_argument('session')
@@ -54,7 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument('--source-ref', default='')
     x = sub.add_parser('list')
     x.add_argument('table', choices=['identity', 'decisions', 'writing_samples', 'events',
-       'identity_revisions', 'messages', 'feedback', 'train_pairs', 'proposals', 'test_runs', 'experiences'])
+       'identity_revisions', 'messages', 'feedback', 'train_pairs', 'proposals', 'test_runs', 'experiences', 'episodes', 'checkpoints'])
     x.add_argument('--status', choices=['approved', 'pending', 'rejected'])
     x = sub.add_parser('decision')
     x.add_argument('scenario')
@@ -106,12 +106,39 @@ def build_parser() -> argparse.ArgumentParser:
     x = sub.add_parser('code-test')
     x.add_argument('id', type=int)
     x.add_argument('--kind', choices=['compile', 'unittest'], default='compile')
+    # v0.3 episodic memory and durable task checkpoints. No command execution.
+    x = sub.add_parser('observe')
+    x.add_argument('topic')
+    x.add_argument('detail')
+    x.add_argument('--tag', dest='tags', action='append', default=[])
+    x.add_argument('--source', default='owner:cli')
+    x.add_argument('--source-ref', default='')
+    x.add_argument('--supersedes', type=int)
+    x = sub.add_parser('review-episode')
+    x.add_argument('id', type=int)
+    x.add_argument('state', choices=['approved', 'rejected', 'pending'])
+    x = sub.add_parser('recall')
+    x.add_argument('query')
+    x = sub.add_parser('conflicts')
+    x.add_argument('id', type=int)
+    x = sub.add_parser('forget-episode')
+    x.add_argument('id', type=int)
+    x = sub.add_parser('checkpoint-save')
+    x.add_argument('key')
+    x.add_argument('task')
+    x.add_argument('--state-json', required=True)
+    x.add_argument('--status', choices=['queued','running','paused','failed','complete'], default='paused')
+    x.add_argument('--revision', type=int, help='Required when updating existing checkpoint')
+    x = sub.add_parser('checkpoint-show')
+    x.add_argument('key')
+    x = sub.add_parser('checkpoint-forget')
+    x.add_argument('key')
     return p
 
 
 def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
-    store = LearningStore(args.home)
+    store = ExperienceStore(args.home)
     try:
         if args.cmd == 'init':
             print(f'Initialized private AthenZ store at {store.path}')
@@ -168,6 +195,22 @@ def main(argv: list[str] | None = None) -> None:
             print(json.dumps({k: v for k, v in result.items() if k != 'cases'}, indent=2))
         elif args.cmd == 'context':
             print(json.dumps(store.context(), indent=2))
+        elif args.cmd == 'observe':
+            print(f'Pending episode #{store.observe(args.topic, args.detail, tags=args.tags, source=args.source, source_ref=args.source_ref, supersedes_id=args.supersedes)}')
+        elif args.cmd == 'review-episode':
+            print('Updated' if store.review_episode(args.id, args.state) else 'Unknown ID')
+        elif args.cmd == 'recall':
+            print(json.dumps(store.relevant_episodes(args.query), indent=2))
+        elif args.cmd == 'conflicts':
+            print(json.dumps(store.potential_conflicts(args.id), indent=2))
+        elif args.cmd == 'forget-episode':
+            print('Deleted' if store.forget_episode(args.id) else 'Unknown ID')
+        elif args.cmd == 'checkpoint-save':
+            print(f'Checkpoint #{store.checkpoint(args.key, args.task, json.loads(args.state_json), status=args.status, expected_revision=args.revision)} saved')
+        elif args.cmd == 'checkpoint-show':
+            print(json.dumps(store.get_checkpoint(args.key), indent=2))
+        elif args.cmd == 'checkpoint-forget':
+            print('Deleted' if store.forget_checkpoint(args.key) else 'Unknown checkpoint')
         elif args.cmd == 'code-propose':
             from .chat import OllamaClient
             from .coding import propose
