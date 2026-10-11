@@ -58,3 +58,32 @@ Review artifacts survive cancellation and must be deleted separately by the
 owner when no longer needed. No code or personal memory is uploaded to GitHub
 by the controller. Docker integration and independent execution attestation
 are still outstanding and the Windows/WSL2 runtime is not yet verified.
+
+## Full-sequence behavior check (new, owner-invoked)
+
+Once all stages have been `advance`d, a pinned Docker image can run the
+**entire final combined source tree**, rather than testing just one stage:
+
+```sh
+athenz-sequence test fix-math --image python@sha256:<verified-image-digest> --confirm
+athenz-sequence export fix-math --confirm
+```
+
+The sequence runner copies the Git-tracked tree to a short-lived private
+snapshot, rejects symlinks and known credential filenames, and mounts that
+snapshot read-only. It then launches a fixed unittest discovery command in a
+network-disabled, non-root, resource-capped Docker container. Neither the
+model nor source files can select a shell command, new file scope, or image.
+No Docker means **no test**, not an unsafe host-side fallback. Docker images
+must be trusted, already local, and explicitly pinned by digest. Choose
+images that contain the dependencies your tests need. Windows/WSL2 is not yet
+validated.
+
+A local observation record stores the pinned image, snapshot SHA-256, output
+fingerprint, exit status, cleanup result, and local test-run reference under
+`ATHENZ_HOME`. After a passing run the combined private patch export may say
+`container-tests-observed`; on failure it says `container-tests-failed`.
+This is **locally observed evidence, not independently authenticated execution
+attestation or proof of correctness**. Evidence cannot enter the personality
+model without deliberate human review. This controller still does not commit,
+push, publish, or run in the background.
