@@ -157,3 +157,12 @@ with PyInstaller and runs an offline packaged `--self-test` using a disposable
 profile. It is not an installer, does not create a Windows startup entry, does
 not publish to GitHub Releases, and does not sign the binary. See
 [WINDOWS_PORTABLE.md](WINDOWS_PORTABLE.md) for limitations and instructions.
+
+## Manual SQLite profile backups
+
+The **Setup** tab also has owner-initiated **Back up private SQLite…** and
+**Verify latest backup** actions, executed on separate UI worker threads.
+Backups are consistent, SHA-256-checked, remain inside the private home and
+are **unencrypted**. No backup happens automatically, and restoring a backup
+into a live database is deliberately unsupported. These snapshots do **not**
+include adapter/model/dataset files. See [BACKUP.md](BACKUP.md).

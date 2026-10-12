@@ -203,3 +203,11 @@ Ollama**. Python CLI: `athenz-doctor [--probe-ollama]`.
 
 See [Windows portable notes](docs/WINDOWS_PORTABLE.md). Native Windows display,
 HiDPI, CUDA GPU and WSL2 Docker tests remain outstanding.
+
+## Manual local backups (v0.6)
+
+The Desktop Setup tab and `athenz-backup` CLI can create, list and verify
+**plaintext SQLite-only** snapshots under your private AthenZ home using the
+SQLite backup API (no automatic upload, Git commit, model activation or
+restore). These are **not encrypted**, do not include model/dataset files and
+must be protected like the original private database. See [Backup limitations](docs/BACKUP.md).

@@ -440,19 +440,36 @@ def launch(home: Path | None = None) -> None:
         setup_text.insert('1.0', '\n'.join(lines))
         setup_text.config(state='disabled')
 
-    def refresh_setup(*, ollama: bool = False) -> None:
+    def refresh_setup(*, ollama: bool = False, backup_action: str | None = None) -> None:
         if setup_busy['running']:
             return
+        if backup_action == 'create':
+            if not messagebox.askyesno('Create private SQLite backup',
+                    'Create a local PLAINTEXT SQLite-only backup in your private '
+                    'AthenZ home? It contains personal records, is NOT encrypted, '
+                    'and does NOT include models or training artifacts. No upload or restore.'):
+                return
         setup_busy['running'] = True
-        setup_basic.config(state='disabled')
-        setup_ollama.config(state='disabled')
-        set_status('Checking local installation (no private data submitted)…')
+        for button in (setup_basic, setup_ollama, setup_backup, setup_verify):
+            button.config(state='disabled')
+        set_status('Working locally… no automatic model or coding operations')
         def worker() -> None:
             try:
-                setup_results.put(('ok', installation_report(probe_ollama=ollama)))
+                if backup_action == 'create':
+                    from .backup import create_backup
+                    setup_results.put(('backup-created', create_backup(home, confirmed=True)))
+                elif backup_action == 'verify':
+                    from .backup import list_backups, verify_backup
+                    ids = list_backups(home)
+                    if not ids:
+                        raise DesktopError('No local SQLite backups found')
+                    setup_results.put(('backup-verified', verify_backup(home, ids[0])))
+                else:
+                    setup_results.put(('ok', installation_report(probe_ollama=ollama)))
             except Exception:
-                setup_results.put(('error', 'Local setup check failed'))
-        threading.Thread(target=worker, name='athenz-local-readiness', daemon=True).start()
+                # No exception traceback or sensitive filesystem paths in UI.
+                setup_results.put(('error', 'Local setup/backup operation failed; inspect private files'))
+        threading.Thread(target=worker, name='athenz-local-setup', daemon=True).start()
 
     setup_basic = ttk.Button(setup_controls, text='Check prerequisites',
                              command=lambda: refresh_setup())
@@ -460,6 +477,12 @@ def launch(home: Path | None = None) -> None:
     setup_ollama = ttk.Button(setup_controls, text='Probe Ollama (loopback only)',
                               command=lambda: refresh_setup(ollama=True))
     setup_ollama.pack(side='left')
+    setup_backup = ttk.Button(setup_controls, text='Back up private SQLite…',
+                              command=lambda: refresh_setup(backup_action='create'))
+    setup_backup.pack(side='left', padx=(8, 4))
+    setup_verify = ttk.Button(setup_controls, text='Verify latest backup',
+                              command=lambda: refresh_setup(backup_action='verify'))
+    setup_verify.pack(side='left')
     ttk.Label(setup_tab, text='Ollama is contacted only when you press its probe button.').pack(
         anchor='w', pady=(8, 0))
 
@@ -468,11 +491,15 @@ def launch(home: Path | None = None) -> None:
             while True:
                 state, report = setup_results.get_nowait()
                 setup_busy['running'] = False
-                setup_basic.config(state='normal')
-                setup_ollama.config(state='normal')
+                for button in (setup_basic, setup_ollama, setup_backup, setup_verify):
+                    button.config(state='normal')
                 if state == 'ok':
                     show_setup(report)
                     set_status('Local readiness checked; no model or task started')
+                elif state == 'backup-created':
+                    set_status('Private SQLite-only plaintext backup created; verify before relying on it')
+                elif state == 'backup-verified':
+                    set_status('Latest private SQLite backup verified against checksum and integrity')
                 else:
                     set_status(report)
         except queue.Empty:
