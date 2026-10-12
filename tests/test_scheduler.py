@@ -98,6 +98,24 @@ class SchedulerTests(unittest.TestCase):
         self.assertEqual(two['result']['stage'], 2)
         self.assertEqual(self.scheduler.get('demo')['state'], 'review')
 
+    def test_arm_is_bound_to_exact_stage_even_if_owner_advances_manually(self):
+        self.add(); self.scheduler.arm('demo', confirmed=True)
+        assert self.scheduler.get('demo')['armed_stage'] == 0
+        proposal = self.ui.prepare('demo', model=Model())
+        self.ui.apply('demo', proposal['sha256'], confirmed=True)
+        self.assertTrue(self.ui.syntax('demo')['passed'])
+        self.ui.advance('demo', confirmed=True)
+        fake = Model()
+        event = self.scheduler.run_once(confirmed=True, model_factory=lambda _: fake)
+        self.assertEqual(event['status'], 'paused')
+        self.assertEqual(fake.calls, 0)
+        self.scheduler.arm('demo', confirmed=True)
+        self.assertEqual(self.scheduler.get('demo')['armed_stage'], 1)
+        fresh = self.scheduler.run_once(confirmed=True, model_factory=lambda _: fake)
+        self.assertEqual(fresh['status'], 'review')
+        self.assertEqual(fresh['result']['stage'], 2)
+        self.assertEqual(fake.calls, 1)
+
     def test_pause_blocks_tick_and_is_persistent(self):
         self.add(); self.scheduler.arm('demo', confirmed=True)
         self.scheduler.pause('demo')

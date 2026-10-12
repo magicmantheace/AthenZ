@@ -32,7 +32,8 @@ already running model request which may finish before it is terminated).
 The **desktop Coding tasks tab** exposes Queue (paused), Arm next stage, Pause,
 Run queued once, Recover stopped job, and Remove queue. Merely opening the
 window never starts scheduling or inference. The queue stores owner-selected
-model tag, authorized task/repository/worktree/stage fingerprint and lease in
+model tag, authorized task/repository/worktree/stage fingerprint,
+**exact armed stage index**, and lease in
 private `ATHENZ_HOME/identity.sqlite3` metadata. This is **not independently
 attested authorization**; access to the private SQLite database remains a
 trusted-local-user boundary.

@@ -55,6 +55,7 @@ class ProposalScheduler:
                 task_key TEXT PRIMARY KEY,
                 scope_sha256 TEXT NOT NULL,
                 model_name TEXT NOT NULL,
+                armed_stage INTEGER NOT NULL,
                 state TEXT NOT NULL CHECK(state IN ('paused','armed','running','review')),
                 lease TEXT,
                 last_result TEXT NOT NULL DEFAULT '',
@@ -113,8 +114,8 @@ class ProposalScheduler:
                 if store.db.execute('SELECT 1 FROM proposal_schedule WHERE task_key=?', (key,)).fetchone():
                     raise SchedulerError('Job already exists; pause, inspect or remove before changing authority')
                 store.db.execute('''INSERT INTO proposal_schedule
-                    (task_key,scope_sha256,model_name,state,lease,created_at,updated_at)
-                    VALUES (?,?,?,'paused',NULL,?,?)''', (key, expected, model, utc_now(), utc_now()))
+                    (task_key,scope_sha256,model_name,armed_stage,state,lease,created_at,updated_at)
+                    VALUES (?,?,?,?,'paused',NULL,?,?)''', (key, expected, model, seq['index'], utc_now(), utc_now()))
         return self.get(key)
 
     def arm(self, key: str, *, confirmed: bool = False) -> dict:
@@ -133,8 +134,8 @@ class ProposalScheduler:
                     raise SchedulerError('Job is missing, already armed or has an unreconciled in-flight lease')
                 if _scope(item, seq) != row['scope_sha256']:
                     raise SchedulerError('Owner-authorized repository, task or stage scope changed')
-                store.db.execute("UPDATE proposal_schedule SET state='armed',last_result='',updated_at=? WHERE task_key=?",
-                                 (utc_now(), key))
+                store.db.execute("UPDATE proposal_schedule SET state='armed',armed_stage=?,last_result='',updated_at=? WHERE task_key=?",
+                                 (seq['index'], utc_now(), key))
         return self.get(key)
 
     def pause(self, key: str) -> dict:
@@ -208,7 +209,8 @@ class ProposalScheduler:
             # processes can pause while local inference is in flight.
             try:
                 ctl, item, seq = self._load(store, key)
-                if seq['phase'] != 'ready' or _scope(item, seq) != row['scope_sha256']:
+                if (seq['phase'] != 'ready' or seq['index'] != row['armed_stage']
+                        or _scope(item, seq) != row['scope_sha256']):
                     raise SchedulerError('Stage or originally authorized task scope changed')
                 ctl._integrity(item, seq)
                 model = model_factory(row['model_name']) if model_factory else OllamaClient(model=row['model_name'])
