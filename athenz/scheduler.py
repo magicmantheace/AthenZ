@@ -212,6 +212,21 @@ class ProposalScheduler:
                     raise SchedulerError('Stage or originally authorized task scope changed')
                 ctl._integrity(item, seq)
                 model = model_factory(row['model_name']) if model_factory else OllamaClient(model=row['model_name'])
+
+                class LeasedModel:
+                    # If a pause/revocation occurs during model construction,
+                    # refuse BEFORE transmitting any source context to Ollama.
+                    # The post-inference SQLite writer fence independently
+                    # blocks persistence if permission changes after sending.
+                    def generate(self, *args, **kwargs):
+                        status = store.db.execute(
+                            'SELECT state,lease FROM proposal_schedule WHERE task_key=?',
+                            (key,)).fetchone()
+                        if (status is None or status['state'] != 'running'
+                                or status['lease'] != lease):
+                            raise SchedulerError('Model request was paused or revoked before generation')
+                        return model.generate(*args, **kwargs)
+
                 def fence() -> None:
                     # Executed under the proposal's SQLite IMMEDIATE writer
                     # transaction, never while network inference is pending.
@@ -229,7 +244,7 @@ class ProposalScheduler:
                             _scope(verified_item, verified_seq) != row['scope_sha256']):
                         raise SchedulerError('Authorized stage changed while preparing a proposal')
                     verified_ctl._integrity(verified_item, verified_seq)
-                result = ctl.prepare(key, model, before_persist=fence)
+                result = ctl.prepare(key, LeasedModel(), before_persist=fence)
                 outcome, note = 'review', 'proposal awaits owner SHA-256 review'
             except Exception as exc:
                 # An error after inference but before checkpoint could leave a

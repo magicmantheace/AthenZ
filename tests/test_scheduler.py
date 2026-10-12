@@ -134,6 +134,21 @@ class SchedulerTests(unittest.TestCase):
             self.assertEqual(store.db.execute('SELECT count(*) FROM proposals').fetchone()[0], 0)
         self.assertEqual(self.scheduler.run_once(confirmed=True)['status'], 'idle')
 
+    def test_pause_during_model_initialization_blocks_outbound_prompt(self):
+        self.add(); self.scheduler.arm('demo', confirmed=True)
+        scheduler = self.scheduler
+        model = Model()
+        def pause_in_factory(_):
+            scheduler.pause('demo')
+            return model
+        result = scheduler.run_once(confirmed=True, model_factory=pause_in_factory)
+        self.assertEqual(result['status'], 'paused')
+        self.assertEqual(model.calls, 0)
+        self.assertEqual(self.ui.detail('demo')['phase'], 'ready')
+        self.assertEqual(scheduler.get('demo')['state'], 'paused')
+        with scheduler._open() as store:
+            self.assertEqual(store.db.execute('SELECT count(*) FROM proposals').fetchone()[0], 0)
+
     def test_pausing_from_inside_model_generation_discards_response(self):
         self.add(); self.scheduler.arm('demo', confirmed=True)
         scheduler = self.scheduler

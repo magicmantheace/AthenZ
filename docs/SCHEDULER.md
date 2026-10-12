@@ -48,7 +48,8 @@ trusted-local-user boundary.
   finish at the Ollama server, but a lease check under the SQLite proposal-write
   lock discards its output if the pause committed first. No proposal or
   checkpoint is created. The owner must explicitly re-arm to request another
-  proposal. Pausing cannot forcibly interrupt an active HTTP request.
+  proposal. A pause observed before sending the request also prevents the
+  outbound model call. Pausing cannot forcibly interrupt an active HTTP request.
 - If the process terminates before recording completion, the persistent
   `running` lease prevents a second scheduler from replaying the call.
   **First ensure the old worker is no longer running.** Then explicitly use
