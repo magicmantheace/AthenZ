@@ -256,3 +256,13 @@ other readiness buttons triggers it. The existing CLI alternative is
 `athenz-doctor --probe-gpu --confirm` and remains fully opt-in.
 
 Use `athenz-doctor --probe-gpu --confirm` to request a read-only **local** NVIDIA VRAM inventory. The tool returns only sanitized GPU counts and MiB totals; no GPU UUID, serial number, model name, raw process output, personal data or external request is collected. It is **off by default** and is not proof that CUDA, WSL2, Ollama or QLoRA training works. See [docs/HARDWARE_PROBE.md](docs/HARDWARE_PROBE.md).
+
+## Offline local validation and owner release checklist (archival work)
+
+`python -m tools.local_validation --mode policy|full|wheel|all` runs selected
+local checks without invoking GitHub Actions; see [CI budget](docs/CI_BUDGET.md).
+`athenz-release-readiness plan|status|record` documents and privately records
+**owner-reported** target-hardware observations; those records never certify
+release readiness or authorize a model deployment. See
+[release readiness](docs/RELEASE_READINESS.md). This archival branch has not
+been merged to `main`, and the current Actions quota remains protected.

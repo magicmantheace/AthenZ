@@ -59,3 +59,31 @@ Windows changes, Docker integration only when container-sandbox code changes,
 and the Windows portable build when a packaged binary is actually needed.
 Never push small speculative fixes solely to watch CI fail: prepare and
 consolidate them locally first, then update GitHub in one reviewed batch.
+
+## Offline validation runner (added in archival development)
+
+Use a **reviewed local checkout** and run from its root. None of these
+commands dispatches GitHub Actions or invokes GitHub's API:
+
+```sh
+python -m tools.local_validation --mode policy
+python -m tools.local_validation --mode full --timeout 300
+python -m tools.local_validation --mode wheel
+python -m tools.local_validation --mode all --timeout 300
+```
+
+The runner first rejects any automatic Actions event in the checked-out
+workflow files, then runs a hard-coded validation command. Full mode runs
+unittest discovery. Wheel mode stages a temporary copy of the package, then
+uses `pip wheel --no-index --no-deps --no-build-isolation` without modifying
+tracked source. Every run uses a disposable `ATHENZ_HOME`, bounded step
+timeouts, and reports a clear pass/fail summary. Failed checks abort subsequent
+steps. The wheel command requires preinstalled build dependencies.
+
+**Not a sandbox:** local source and unit tests are trusted code. They might
+have network capabilities of their own; `PIP_NO_INDEX=1` prevents index
+package downloads but does not isolate Python processes from the network.
+The runner is not an attestation of Windows GUI/CUDA behavior, and it never
+checks GitHub billing. Keep feature pushes on non-triggering archive refs
+until the manual-only workflows are in force on `main` and the owner approves
+resuming cloud validation.
