@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from athenz.evaluation import evaluate_decisions
+from athenz.evaluation import evaluate_decisions, _wilson_interval
 from athenz.cli import main
 from athenz.experience import ExperienceStore
 from athenz.prompting import build_messages
@@ -171,6 +171,26 @@ class DecisionEvaluationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'contaminated'):
             evaluate_decisions(self.store, model)
         self.assertEqual(model.calls, [])
+
+    def test_uncertainty_metrics_and_invalid_model_letters(self):
+        empty = evaluate_decisions(self.store, Stub())
+        self.assertIsNone(empty['accuracy_interval_95'])
+        self.assertEqual(empty['invalid_predictions'], 0)
+        self.store.add_decision('Unexpected model response case', 'Wait',
+            'Synthetic rationale', source='synthetic', approved=True,
+            options=['Go', 'Wait'], split='test')
+        result = evaluate_decisions(self.store, Stub(choice='Z'))
+        self.assertEqual(result['correct'], 0)
+        self.assertEqual(result['invalid_predictions'], 1)
+        self.assertIsNone(result['cases'][0]['predicted'])
+        self.assertEqual(result['accuracy_interval_95'], _wilson_interval(0, 1))
+        self.assertAlmostEqual(result['accuracy_interval_95'][1], 0.79345068562)
+
+    def test_wilson_intervals_are_deterministic(self):
+        self.assertIsNone(_wilson_interval(0, 0))
+        self.assertAlmostEqual(_wilson_interval(1, 1)[0], 0.206549314377)
+        self.assertAlmostEqual(_wilson_interval(1, 2)[0], 0.094531205734)
+        self.assertEqual(_wilson_interval(2, 2)[1], 1.0)
 
     def test_safe_prediction_parsing_for_non_object_json(self):
         self.store.add_decision('Test invalid JSON output', 'A', 'Private gold',
