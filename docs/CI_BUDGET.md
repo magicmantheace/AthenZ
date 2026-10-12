@@ -123,12 +123,12 @@ before invoking tests, and no GitHub Actions are invoked.
 ## Provisional testing on an incomplete local source checkout
 
 When the GitHub archive's full file inventory cannot be reconstructed locally,
-use \`python -m tools.local_validation --mode available\` to execute *all currently
+use `python -m tools.local_validation --mode available` to execute *all currently
 present* test modules without claiming a complete regression suite. On POSIX
-with \`xvfb-run\` installed this uses a fresh virtual display, including when a
-stale \`DISPLAY\` environment variable exists. The JSON report includes
-\`source_files_missing\`, \`virtual_display_used\`,
-\`source_inventory_complete\` and \`release_gate_passed\`. A successful
+with `xvfb-run` installed this uses a fresh virtual display, including when a
+stale `DISPLAY` environment variable exists. The JSON report includes
+`source_files_missing`, `virtual_display_used`,
+`source_inventory_complete` and `release_gate_passed`. A successful
 provisional test run is **not** a release gate or a complete source verification.
 Full and wheel modes still refuse incomplete source trees. No GitHub Actions
 are invoked by this command, but locally reviewed tests are not an OS sandbox.
