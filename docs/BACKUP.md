@@ -72,3 +72,21 @@ base weights, exported reviews, or local Ollama model installations. These
 external artifacts must be separately verified/reconstructed before model
 training or candidate activation. The recovered database contains sensitive
 plaintext, and a restored directory is **not automatically made active**.
+
+## Explicit temporary SQLite restore rehearsal
+
+`athenz-rehearse-backup BACKUP_ID --confirm` verifies an existing local
+SQLite-only snapshot, checks free scratch disk space, restores into a brand-new
+private temporary folder outside the active profile and all Git checkouts,
+checks integrity and that stale scheduler leases, running checkpoints, and
+active model routing have been disarmed, then removes the recovered copy.
+The command does not run automatically, switch the active profile, access
+Ollama, deploy models, or contact GitHub. `--scratch EXISTING_TRUSTED_DIR`
+selects a trusted local scratch parent. The rehearsal refuses snapshots over
+2 GiB or insufficient temporary disk space (approximately 2x snapshot size
+plus 32 MiB). Explicit `--confirm` is mandatory.
+
+The temporary data is **plaintext**; deletion is not secure erasure. The
+backend may touch source SQLite WAL/SHM state while reading the snapshot.
+This is *not* a complete profile-bundle or installed-model recovery test,
+Windows/RTX 3060 validation, or independent release certification.

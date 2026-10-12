@@ -222,3 +222,11 @@ integrity/schema metadata, never private row contents. The command does not
 perform migrations, recovery, downloads, inference, training or deployment.
 See [docs/PROFILE_HEALTH.md](docs/PROFILE_HEALTH.md). A successful quick check
 is **not** proof that a backup or an installed model can be restored.
+
+### Manual temporary SQLite restore rehearsal
+
+Run `athenz-rehearse-backup BACKUP_ID --confirm` to rehearse a verified
+SQLite-only backup in a disposable private profile, check cleared scheduling
+leases and model routing, and remove the temporary copy. Nothing activates
+or overwrites the live profile. Scratch contents are plaintext and not
+securely erased; details: [docs/BACKUP.md](docs/BACKUP.md).

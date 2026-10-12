@@ -51,3 +51,14 @@ signed release engineering remain separate milestones.
 
 Neither a synthetic unit test nor a local status flag replaces any of these.
 Do not claim a certified release before target-hardware and independent tests.
+
+## Optional SQLite recovery rehearsal
+
+`athenz-rehearse-backup BACKUP_ID --confirm` checks a verified SQLite
+snapshot by restoring it to a disposable new profile and requiring integrity,
+paused checkpoints, no active scheduler lease, and reset model routing.
+It deletes the temporary restored files, but neither securely erases scratch
+media nor validates external models, datasets, Windows/WSL2 hardware,
+complete-profile restore, or independent release acceptance. Owner-reported
+`profile-recovery` remains a distinct manual acceptance checkpoint.
+See [BACKUP.md](BACKUP.md).
