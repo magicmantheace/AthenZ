@@ -101,14 +101,10 @@ class TrainingDatasetTests(unittest.TestCase):
         risky = self.root / 'repo'
         risky.mkdir()
         (risky / '.git').mkdir()
-        stored = ExperienceStore(risky / 'data')
-        self.addCleanup(stored.close)
-        stored.add_message('s', 'agent', 'user', 'Question')
-        stored.add_message('s', 'agent', 'assistant', 'Answer')
-        stored.add_feedback(2, 'up')
-        stored.set_review('train_pairs', 1, 'approved')
-        with self.assertRaisesRegex(DatasetError, 'outside any Git'):
-            build_dataset(stored, confirmed=True)
+        # Reject unsafe profile creation itself, before training can access it.
+        with self.assertRaisesRegex(ValueError, 'Git checkout'):
+            ExperienceStore(risky / 'data')
+        self.assertFalse((risky / 'data').exists())
         self.pair('Normal?', 'Approval')
         try:
             (self.store.home / 'datasets').symlink_to(self.root)

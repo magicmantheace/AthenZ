@@ -79,7 +79,7 @@ class BackupTests(unittest.TestCase):
 
     def test_backups_refuse_git_home(self):
         (self.root/'.git').mkdir()
-        with self.assertRaisesRegex(BackupError, 'Git checkout'):
+        with self.assertRaisesRegex(ValueError, 'Git checkout'):
             create_backup(self.home, confirmed=True)
 
     def test_deletion_explicit_scoped_and_idempotent(self):

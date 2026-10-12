@@ -19,16 +19,40 @@ def default_home() -> Path:
     return Path(os.environ.get("ATHENZ_HOME", str(Path.home() / ".athenz"))).expanduser()
 
 
+def private_home_path(home: Path | None = None) -> Path:
+    """Validate private SQLite storage BEFORE creating directories or files.
+
+    Refuse source checkouts and symlinked ancestors to prevent accidentally
+    committing personal memory, and reject existing DB/WAL pointers. This
+    guards common configuration mistakes but is not an atomic filesystem
+    sandbox against a concurrent hostile process replacing path components.
+    """
+    raw = Path(home if home is not None else default_home()).expanduser().absolute()
+    if any(path.is_symlink() or getattr(path, 'is_junction', lambda: False)()
+           for path in (raw, *raw.parents)):
+        raise ValueError('AthenZ private profile cannot use symlinks or junctions')
+    if any((path / '.git').exists() or (path / '.git').is_symlink()
+           for path in (raw, *raw.parents)):
+        raise ValueError('AthenZ private profile cannot be stored inside a Git checkout')
+    for filename in ('identity.sqlite3', 'identity.sqlite3-wal', 'identity.sqlite3-shm'):
+        path = raw / filename
+        if path.is_symlink() or getattr(path, 'is_junction', lambda: False)():
+            raise ValueError('AthenZ SQLite database or sidecar cannot be a pointer')
+    return raw
+
+
 class IdentityStore:
     """SQLite source-of-truth with provenance, revision history and explicit approval."""
 
     def __init__(self, home: Path | None = None):
-        self.home = Path(home) if home is not None else default_home()
-        self.home.mkdir(parents=True, exist_ok=True)
+        self.home = private_home_path(home)
+        self.home.mkdir(parents=True, exist_ok=True, mode=0o700)
         try:
             self.home.chmod(0o700)
         except OSError:
             pass
+        if os.name != 'nt' and self.home.stat().st_mode & 0o077:
+            raise ValueError('AthenZ private profile permissions are not owner-only')
         self.path = self.home / "identity.sqlite3"
         self.db = sqlite3.connect(self.path)
         self.db.row_factory = sqlite3.Row
@@ -43,7 +67,7 @@ class IdentityStore:
     def _migrate(self) -> None:
         # Never blindly ALTER a live database or silently rewrite private records.
         version = self.db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 5:
+        if version > 4:
             raise RuntimeError(f"Database schema v{version} is newer than this application")
         if version == 0:
             with self.db:
@@ -81,11 +105,10 @@ class IdentityStore:
                 PRAGMA user_version = 1;
                 """)
 
-        from .migrations import migrate_v2, migrate_v3, migrate_v4, migrate_v5
+        from .migrations import migrate_v2, migrate_v3, migrate_v4
         migrate_v2(self.db)
         migrate_v3(self.db)
         migrate_v4(self.db)
-        migrate_v5(self.db)
 
     def _event(self, operation: str, subject_type: str, subject_id: int | None) -> None:
         # Deliberately exclude content from event logs so deleting content truly removes it.
@@ -206,7 +229,7 @@ class IdentityStore:
         return counts
 
     def list_items(self, table: str, status: str | None = None, limit: int = 200) -> list[dict]:
-        if table not in {"identity", "decisions", "writing_samples", "events", "identity_revisions", "messages", "feedback", "train_pairs", "proposals", "test_runs", "experiences", "episodes", "checkpoints", "episode_disputes", "evidence_artifacts"}:
+        if table not in {"identity", "decisions", "writing_samples", "events", "identity_revisions", "messages", "feedback", "train_pairs", "proposals", "test_runs", "experiences", "episodes", "checkpoints"}:
             raise ValueError("Unsupported table")
         if status is not None and table not in {"identity", "decisions", "writing_samples", "train_pairs", "experiences", "episodes"}:
             raise ValueError("This table does not contain status")
@@ -241,9 +264,7 @@ class IdentityStore:
                 "test_runs": self.list_items("test_runs", limit=100000),
                 "experiences": self.list_items("experiences", limit=100000),
                 "episodes": self.list_items("episodes", limit=100000),
-                "checkpoints": self.list_items("checkpoints", limit=100000),
-                "episode_disputes": self.list_items("episode_disputes", limit=100000),
-                "evidence_artifacts": self.list_items("evidence_artifacts", limit=100000)}
+                "checkpoints": self.list_items("checkpoints", limit=100000)}
 
     def close(self) -> None:
         self.db.close()
