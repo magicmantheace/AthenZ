@@ -12,6 +12,7 @@ from athenz.experience import ExperienceStore
 from athenz.finetune import create_run, execute_run
 from athenz.training import build_dataset
 from athenz.model_gate import save_report, _heldout_fingerprint
+from athenz.evaluation import _reference_fingerprint
 
 
 class AdaptersTests(unittest.TestCase):
@@ -43,7 +44,7 @@ class AdaptersTests(unittest.TestCase):
             out.mkdir()
             (out / 'adapter_model.safetensors').write_bytes(b'bytes-'+tag.encode())
             (out / 'adapter_config.json').write_text(json.dumps({
-                'peft_type':'LORA', 'base_model_name_or_path':str(self.model_dir.resolve())}))
+                'peft_type':'LORA', 'base_model_name_or_path':str(self.model_dir)}))
             return {'adapter_dir':str(out),'examples_used':1}
         execute_run(self.store, run['run_id'], backend=backend, confirmed=True)
         return run['run_id']
@@ -55,7 +56,8 @@ class AdaptersTests(unittest.TestCase):
              'eligible_for_review':eligible,'accuracy_gain':gain,
              'attestation':'local-model-observation-only','promotion':'not-authorized',
              'case_ids_sha256':hashlib.sha256(json.dumps(ids).encode()).hexdigest(),
-             'heldout_fingerprint':_heldout_fingerprint(self.store,'calibration',12)}
+             'heldout_fingerprint':_heldout_fingerprint(self.store,'calibration',12),
+             'reference_fingerprint':_reference_fingerprint(self.store)}
         return save_report(self.store,obj,confirmed=True)['sha256']
 
     def test_completed_run_registration_requires_explicit_confirmation(self):
@@ -116,6 +118,15 @@ class AdaptersTests(unittest.TestCase):
         self.store.set_review('train_pairs',self.pair,'rejected')
         with self.assertRaisesRegex(Exception,'stale'):
             verified_registry_entry(self.store,run)
+
+    def test_reference_memory_change_blocks_old_adapter_review(self):
+        run=self.completed()
+        register_adapter(self.store,run,'candidate-a',confirmed=True)
+        report=self.report()
+        self.store.propose('style', 'new approved preference', source='synthetic', approved=True)
+        with self.assertRaisesRegex(AdapterError,'reference evidence is stale'):
+            select_for_review(self.store,run,report,expected_revision=0,
+                              confirmed=True,lineage_acknowledged=True)
 
     def test_rollback_restores_prior_pointer_and_requires_revision(self):
         run=self.completed('candidate-a')

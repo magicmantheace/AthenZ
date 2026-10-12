@@ -14,6 +14,7 @@ import re
 from .experience import ExperienceStore
 from .finetune import TrainingError, file_sha256, verify_run
 from .model_gate import _heldout_fingerprint
+from .evaluation import _reference_fingerprint
 from .training import DatasetError, _private_root
 
 SHA = re.compile(r'[a-f0-9]{64}\Z')
@@ -116,6 +117,8 @@ def _read_review(store: ExperienceStore, sha: str) -> dict:
         raise AdapterError('Evaluation report is not eligible for owner review')
     if _heldout_fingerprint(store, report['split'], report['cases']) != report.get('heldout_fingerprint'):
         raise AdapterError('Held-out evaluation evidence is stale')
+    if report.get('reference_fingerprint') != _reference_fingerprint(store):
+        raise AdapterError('Approved reference evidence is stale; new evaluation required')
     rows = [r[0] for r in store.db.execute(
         'SELECT id FROM decisions WHERE status=? AND split=? ORDER BY id LIMIT ?',
         ('approved', report['split'], report['cases']))]

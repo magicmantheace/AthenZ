@@ -151,5 +151,21 @@ class EvaluationGateTests(unittest.TestCase):
                 compare_models(self.store, Model('base'), Model('candidate'), self.sha)
 
 
+    def test_saving_completed_comparison_refuses_newly_approved_reference(self):
+        with mock.patch('athenz.model_gate.evaluate_decisions', side_effect=self.observations()):
+            report = compare_models(self.store, Model('base'), Model('candidate'), self.sha)
+        self.store.propose('style', 'Changed owner reference', source='synthetic', approved=True)
+        with self.assertRaisesRegex(BenchmarkError, 'evidence changed before saving'):
+            save_report(self.store, report, confirmed=True)
+
+    def test_saving_completed_comparison_refuses_changed_heldout_rationale(self):
+        with mock.patch('athenz.model_gate.evaluate_decisions', side_effect=self.observations()):
+            report = compare_models(self.store, Model('base'), Model('candidate'), self.sha)
+        self.store.db.execute("UPDATE decisions SET rationale='different' WHERE split='calibration' AND id=1")
+        self.store.db.commit()
+        with self.assertRaisesRegex(BenchmarkError, 'evidence changed before saving'):
+            save_report(self.store, report, confirmed=True)
+
+
 if __name__ == '__main__':
     unittest.main()

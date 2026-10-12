@@ -106,6 +106,15 @@ def save_report(store: ExperienceStore, comparison: dict, *, confirmed: bool = F
     verify_dataset(store, sha)
     if comparison.get('promotion') != 'not-authorized' or comparison.get('attestation') != 'local-model-observation-only':
         raise BenchmarkError('Only non-deploying observed benchmarks can be stored')
+    # The comparison is an earlier observation. Consent or model evidence may
+    # change between evaluation and its owner-confirmed disk persistence.
+    split, count = comparison.get('split'), comparison.get('cases')
+    if (split not in {'calibration', 'test'} or type(count) is not int
+            or not 2 <= count <= 1000):
+        raise BenchmarkError('Invalid held-out comparison scope')
+    if (comparison.get('heldout_fingerprint') != _heldout_fingerprint(store, split, count)
+            or comparison.get('reference_fingerprint') != _reference_fingerprint(store)):
+        raise BenchmarkError('Evaluation evidence changed before saving; rerun comparison')
     root = _private_root(store) / 'evaluations'
     if root.is_symlink():
         raise DatasetError('Private evaluation directory may not be a symlink')

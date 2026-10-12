@@ -12,3 +12,5 @@ The evaluator rechecks both the individual held-out case and the approved refere
 A SQLite transaction is **not** held across potentially slow model requests. Concurrent edits can be detected but not prevented. Unapproved records must still be handled through their separate owner review gates. Real Ollama model comparison, RTX 3060 VRAM constraints and held-out benchmark quality remain unverified on the target PC.
 
 **Compatibility:** Held-out SHA fingerprints now include case provenance as well as gold choices/options. Older experimental evaluation reports using choice-only fingerprints are intentionally stale for adapter review and should be regenerated after an owner-controlled benchmark; no older model is automatically activated or removed.
+
+**Post-evaluation review gate:** Saving a comparison and later selecting an adapter both recheck current approved references and held-out case provenance. Historical experimental reports missing these stronger fingerprints cannot authorize new adapter selection; regenerate a reviewed comparison.

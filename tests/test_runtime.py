@@ -11,6 +11,7 @@ from athenz.chat import LocalModelError
 from athenz.experience import ExperienceStore
 from athenz.finetune import create_run, execute_run
 from athenz.model_gate import save_report, _heldout_fingerprint
+from athenz.evaluation import _reference_fingerprint
 from athenz.runtime import (RoutingError, activate, checked_active_tag,
                             model_digest, rollback, status)
 from athenz.train_cli import parser
@@ -73,7 +74,8 @@ class RoutingTests(unittest.TestCase):
                   'eligible_for_review': True, 'accuracy_gain': 0.2,
                   'attestation': 'local-model-observation-only', 'promotion': 'not-authorized',
                   'case_ids_sha256': hashlib.sha256(json.dumps(ids).encode()).hexdigest(),
-                  'heldout_fingerprint': _heldout_fingerprint(self.s, 'calibration', 12)}
+                  'heldout_fingerprint': _heldout_fingerprint(self.s, 'calibration', 12),
+                  'reference_fingerprint': _reference_fingerprint(self.s)}
         self.report_sha = save_report(self.s, report, confirmed=True)['sha256']
         self.probe = FakeModel()
         self.digest_patcher = mock.patch('athenz.runtime.model_digest', side_effect=self._digest)
