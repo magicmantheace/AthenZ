@@ -110,39 +110,44 @@ class SequenceController:
         if seq['phase'] != 'ready' or seq['index'] >= len(seq['stages']):
             raise SequenceError('Current stage is not ready for a proposal')
         self._integrity(item, seq)
+
+        def check_authority() -> None:
+            # Caller holds BEGIN IMMEDIATE: a sequence modification, revised
+            # task, or worktree edit during inference invalidates this result.
+            if before_persist is not None:
+                before_persist()
+            latest_item, latest_seq = self._load(key)
+            if (latest_item['revision'] != item['revision']
+                    or latest_seq['phase'] != 'ready'):
+                raise SequenceError('Sequence checkpoint changed while preparing proposal')
+            self._integrity(latest_item, latest_seq)
+
         if seq['current'] is not None:
             row = self._proposal(seq)
             if row['status'] != 'proposed':
                 raise SequenceError('Outstanding proposal needs review or rollback')
-            if before_persist is not None:
-                # Old checkpoint recovery still requires the active lease.
-                with self.store.db:
-                    self.store.db.execute('BEGIN IMMEDIATE')
-                    before_persist()
-                    self._save(key, item, {**seq, 'phase': 'awaiting_review'})
-                return self.review(key)
-        else:
-            files = seq['stages'][seq['index']]
-            # Only these owner-selected files are readable by the model. The
-            # model cannot change file scope by returning extra paths.
-            prompt = (f"{item['task']} (stage {seq['index'] + 1}/{len(seq['stages'])}). "
-                      f"Prior syntax error: {seq['last_error'][:500]}")
-            if before_persist is not None:
-                def persist_checkpoint(pid: int) -> None:
-                    # Runs under coding.propose's SQLite writer transaction.
-                    self._save(key, item, {**seq, 'current': pid,
-                                           'phase': 'awaiting_review'})
-                propose(self.store, model, item['state']['workspace'], prompt, files,
-                        before_persist=before_persist, after_persist=persist_checkpoint)
-                return self.review(key)
-            pid = propose(self.store, model, item['state']['workspace'], prompt, files)
-            seq = dict(seq)
-            seq['current'] = pid
-            self._save(key, item, seq)
-            item, seq = self._load(key)
-        seq = dict(seq)
-        seq['phase'] = 'awaiting_review'
-        self._save(key, item, seq)
+            # Legacy recovery of an already-stored proposal also needs the
+            # currently authorized lease, when invoked by the scheduler.
+            with self.store.db:
+                self.store.db.execute('BEGIN IMMEDIATE')
+                check_authority()
+                self._save(key, item, {**seq, 'phase': 'awaiting_review'})
+            return self.review(key)
+
+        files = seq['stages'][seq['index']]
+        # Only these owner-selected files are readable by the model. The
+        # model cannot change file scope by returning extra paths.
+        prompt = (f"{item['task']} (stage {seq['index'] + 1}/{len(seq['stages'])}). "
+                  f"Prior syntax error: {seq['last_error'][:500]}")
+
+        def persist_checkpoint(pid: int) -> None:
+            # Executed in coding.propose's SQLite IMMEDIATE transaction.
+            # A failed checkpoint rolls back its proposal insert as well.
+            self._save(key, item, {**seq, 'current': pid,
+                                   'phase': 'awaiting_review'})
+
+        propose(self.store, model, item['state']['workspace'], prompt, files,
+                before_persist=check_authority, after_persist=persist_checkpoint)
         return self.review(key)
 
     def review(self, key: str) -> dict:

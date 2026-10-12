@@ -4,6 +4,7 @@ import json
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from athenz.experience import ExperienceStore
@@ -60,6 +61,51 @@ class SequenceTests(unittest.TestCase):
         proposal = self.controller.prepare('task', self.model)
         self.assertEqual(self.controller.apply('task', proposal['sha256']), 1)
         return proposal
+
+    def test_manual_checkpoint_failure_rolls_back_proposal(self):
+        # Foreground tasks need the same atomic proposal/checkpoint boundary
+        # as scheduler-driven tasks: a failed save must not leak a proposal.
+        with mock.patch.object(ExperienceStore, 'checkpoint',
+                               side_effect=RuntimeError('synthetic disk write failure')):
+            with self.assertRaisesRegex(RuntimeError, 'synthetic disk write failure'):
+                self.controller.prepare('task', self.model)
+        self.assertEqual(self.controller.status('task')['phase'], 'ready')
+        self.assertEqual(self.store.db.execute(
+            'SELECT count(*) FROM proposals').fetchone()[0], 0)
+        review = self.controller.prepare('task', self.model)
+        self.assertEqual(self.controller.review('task')['sha256'], review['sha256'])
+        self.assertEqual(self.store.db.execute(
+            'SELECT count(*) FROM proposals').fetchone()[0], 1)
+
+    def test_foreground_inference_rejects_changed_checkpoint(self):
+        store = self.store
+        class InterferingModel(Model):
+            def generate(inner, messages, **kwargs):
+                original = store.get_checkpoint('task')
+                changed = dict(original['state'])
+                changed['attempts'] += 1
+                store.checkpoint('task', original['task'], changed, status='paused',
+                                 expected_revision=original['revision'])
+                return super().generate(messages, **kwargs)
+        with self.assertRaisesRegex(SequenceError, 'checkpoint changed'):
+            self.controller.prepare('task', InterferingModel())
+        self.assertEqual(self.store.db.execute(
+            'SELECT count(*) FROM proposals').fetchone()[0], 0)
+        self.assertEqual(self.controller.status('task')['phase'], 'ready')
+
+    def test_foreground_inference_rejects_dirty_worktree(self):
+        workspace = Path(self.controller.worker.resume('task')['state']['workspace'])
+        class DirtyModel(Model):
+            def generate(inner, messages, **kwargs):
+                (workspace / 'unexpected.txt').write_text('synthetic change')
+                return super().generate(messages, **kwargs)
+        try:
+            with self.assertRaises(SequenceError):
+                self.controller.prepare('task', DirtyModel())
+            self.assertEqual(self.store.db.execute(
+                'SELECT count(*) FROM proposals').fetchone()[0], 0)
+        finally:
+            (workspace / 'unexpected.txt').unlink(missing_ok=True)
 
     def test_two_steps_keep_prior_changes_and_export_combined_patch(self):
         first = self._reviewed()

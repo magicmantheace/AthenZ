@@ -52,7 +52,9 @@ trusted-local-user boundary.
   outbound model call. Pausing cannot forcibly interrupt an active HTTP request.
 - Proposal insertion and sequence transition to `awaiting_review` now share
   one lease-fenced SQLite transaction. A failed checkpoint rolls back the
-  proposal instead of leaving an orphan reviewable record.
+  proposal instead of leaving an orphan reviewable record. The same atomic
+  checkpoint boundary now covers owner-invoked foreground sequence proposals;
+  a changed checkpoint or dirty worktree during generation refuses persistence.
   A pause after that transaction commits preserves the already-reviewable
   proposal but the queue reports paused and does not automatically retry.
 - If the process terminates before recording completion, the persistent
