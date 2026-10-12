@@ -77,6 +77,46 @@ class LocalValidationTests(unittest.TestCase):
         self.assertNotEqual(run.call_args.kwargs['cwd'], self.root)
         self.assertTrue((self.root / 'athenz' / '__init__.py').exists())
 
+    def test_focused_mode_runs_only_reviewed_named_local_tests(self):
+        (self.root / 'tests' / 'test_profile_health.py').write_text('pass\n')
+        (self.root / 'tests' / 'test_local_validation.py').write_text('pass\n')
+        with patch('tools.local_validation.subprocess.run',
+                   return_value=subprocess.CompletedProcess([], 0)) as run:
+            result = validate(self.root, mode='focused',
+                              tests=('tests.test_profile_health', 'tests.test_local_validation'))
+        self.assertTrue(result['passed'])
+        self.assertFalse(result['source_inventory_complete'])
+        self.assertEqual(result['checks'][0]['check'], 'focused-unit-tests')
+        cmd = run.call_args.args[0]
+        self.assertEqual(cmd[1:], ['-m', 'unittest', 'tests.test_profile_health',
+                                   'tests.test_local_validation', '-q'])
+        self.assertNotEqual(run.call_args.kwargs['env']['ATHENZ_HOME'],
+                            str(Path.home() / '.athenz'))
+
+    def test_focused_mode_rejects_arbitrary_commands_and_missing_files(self):
+        for value in ('tests.test_missing', 'os.system', 'tests.test_example.some_method',
+                      '../unsafe', 'tests.test_foo;exit'):
+            with self.subTest(value=value):
+                with patch('tools.local_validation.subprocess.run',
+                           side_effect=AssertionError('not called')):
+                    with self.assertRaises(LocalValidationError):
+                        validate(self.root, mode='focused', tests=(value,))
+
+    def test_focused_mode_requires_nonempty_distinct_bounded_test_selection(self):
+        testname = 'tests.test_ci_budget'
+        (self.root / 'tests' / 'test_ci_budget.py').write_text('pass\n')
+        for options in ((), (testname, testname), (testname,) * 13):
+            with self.assertRaises(LocalValidationError):
+                validate(self.root, mode='focused', tests=options)
+        with self.assertRaises(LocalValidationError):
+            validate(self.root, mode='policy', tests=(testname,))
+
+    def test_focused_mode_rejects_symlinked_test_module(self):
+        filename = self.root / 'tests' / 'test_ci_budget.py'
+        filename.symlink_to(self.root / 'pyproject.toml')
+        with self.assertRaisesRegex(LocalValidationError, 'unsafe'):
+            validate(self.root, mode='focused', tests=('tests.test_ci_budget',))
+
     def test_failed_local_process_stops_checks(self):
         with patch('tools.local_validation.subprocess.run', return_value=subprocess.CompletedProcess([], 3)) as run:
             result = validate(self.root, mode='all')

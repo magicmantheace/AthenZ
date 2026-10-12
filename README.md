@@ -213,3 +213,12 @@ scheduled proposals pause, in-flight leases are cleared and active Ollama
 routing resets to unselected. Only SQLite data is recovered; model files and
 other private artifacts require separate owner-controlled recovery. See
 [the recovery notes](docs/BACKUP.md). No automatic overwrite or activation.
+
+## Explicit private SQLite health checks (experimental)
+
+Run `athenz-profile-health --confirm` to request a local read-only SQLite
+quick check before backup or update work. The report contains only sanitized
+integrity/schema metadata, never private row contents. The command does not
+perform migrations, recovery, downloads, inference, training or deployment.
+See [docs/PROFILE_HEALTH.md](docs/PROFILE_HEALTH.md). A successful quick check
+is **not** proof that a backup or an installed model can be restored.

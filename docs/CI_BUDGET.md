@@ -104,3 +104,18 @@ model weights, full behavior, or real PC hardware. Regenerate and review its
 expected path list if the project's source tree changes substantially. The
 runner returns `source_inventory_complete` separately from
 `source_content_verified: false` to prevent an unsupported attestation claim.
+
+## Running focused tests from an incomplete local reconstruction
+
+When the source-inventory preflight reports missing files, a *full* regression
+pass or release wheel is **not verified**. You can still run individual existing
+local test modules in a fresh temporary private profile without cloud CI:
+
+    python -m tools.local_validation --mode focused --test tests.test_profile_health
+    python -m tools.local_validation --mode focused --test tests.test_release_readiness --test tests.test_ci_budget
+
+Only safe `tests.test_*` module names (up to 12 per run) are accepted; no shell
+commands, arbitrary import strings, remote fetches, or non-test files. This is
+not a subprocess sandbox for untrusted tests and a focused pass must never be
+misreported as the complete regression suite. The policy audit always runs
+before invoking tests, and no GitHub Actions are invoked.

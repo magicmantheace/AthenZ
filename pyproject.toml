@@ -24,6 +24,7 @@ athenz-scheduler = "athenz.schedule_cli:main"
 athenz-verify-portable = "athenz.portable_integrity:main"
 athenz-stage-portable = "athenz.portable_stage:main"
 athenz-release-readiness = "athenz.release_readiness:main"
+athenz-profile-health = "athenz.profile_health:main"
 
 [tool.setuptools.packages.find]
 include = ["athenz*"]

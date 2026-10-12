@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -24,7 +25,8 @@ if __package__ in (None, ''):
         sys.path.insert(0, _source_root)
 
 
-MODES = ('policy', 'full', 'wheel', 'all')
+MODES = ('policy', 'focused', 'full', 'wheel', 'all')
+_TEST_MODULE = re.compile(r'tests\.test_[a-z0-9_]{1,80}\Z')
 MAX_TIMEOUT = 900
 
 
@@ -58,13 +60,34 @@ def _wheel_snapshot(root: Path, destination: Path) -> None:
         shutil.copy2(root / 'README.md', destination / 'README.md')
 
 
-def validate(root: Path, *, mode: str = 'policy', timeout: int = 180) -> dict:
+def _select_focused_tests(root: Path, selected: tuple[str, ...]) -> tuple[str, ...]:
+    """Accept only existing local unittest modules, never arbitrary CLI code."""
+    if (not isinstance(selected, (tuple, list)) or not 1 <= len(selected) <= 12
+            or len(set(selected)) != len(selected)):
+        raise LocalValidationError('Choose 1..12 distinct focused test modules')
+    directory = root / 'tests'
+    if directory.is_symlink() or not directory.is_dir():
+        raise LocalValidationError('Refusing unsafe tests directory')
+    for name in selected:
+        if not isinstance(name, str) or not _TEST_MODULE.fullmatch(name):
+            raise LocalValidationError('Choose only tests.test_* module names')
+        path = directory / (name.split('.')[-1] + '.py')
+        if path.is_symlink() or not path.is_file():
+            raise LocalValidationError('Focused test module not found or unsafe')
+    return tuple(selected)
+
+
+def validate(root: Path, *, mode: str = 'policy', timeout: int = 180,
+             tests: tuple[str, ...] = ()) -> dict:
     """Run explicitly selected local checks; return statuses, not source output."""
     if mode not in MODES:
         raise LocalValidationError('Choose policy, full, wheel or all')
     if type(timeout) is not int or not 1 <= timeout <= MAX_TIMEOUT:
         raise LocalValidationError('Timeout must be 1–900 seconds')
     root = _valid_root(root)
+    if mode != 'focused' and tests:
+        raise LocalValidationError('Focused --test modules only apply to focused mode')
+    selected = _select_focused_tests(root, tests) if mode == 'focused' else ()
     from tools.ci_budget import audit_workflows
     from tools.source_inventory import check_complete
     # A run never proceeds if CI may automatically trigger in the checkout.
@@ -76,6 +99,8 @@ def validate(root: Path, *, mode: str = 'policy', timeout: int = 180) -> dict:
     steps = []
     if mode in ('policy', 'all'):
         steps.append(('policy-unit-tests', [sys.executable, '-m', 'unittest', 'tests.test_ci_budget', '-q']))
+    if mode == 'focused':
+        steps.append(('focused-unit-tests', [sys.executable, '-m', 'unittest', *selected, '-q']))
     if mode in ('full', 'all'):
         steps.append(('full-unit-suite', [sys.executable, '-m', 'unittest', 'discover', '-s', 'tests', '-q']))
     if mode in ('wheel', 'all'):
@@ -122,8 +147,9 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument('--root', type=Path, default=Path(__file__).resolve().parents[1])
     p.add_argument('--mode', choices=MODES, default='policy')
     p.add_argument('--timeout', type=int, default=180)
+    p.add_argument('--test', action='append', default=[], help='Focused tests.test_* module (repeat up to 12)')
     args = p.parse_args(argv)
-    result = validate(args.root, mode=args.mode, timeout=args.timeout)
+    result = validate(args.root, mode=args.mode, timeout=args.timeout, tests=tuple(args.test))
     print(json.dumps(result, indent=2))
     if not result['passed']:
         raise SystemExit(1)
