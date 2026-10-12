@@ -257,8 +257,8 @@ class ProposalScheduler:
                 result = ctl.prepare(key, LeasedModel(), before_persist=fence)
                 outcome, note = 'review', 'proposal awaits owner SHA-256 review'
             except Exception as exc:
-                # An error after inference but before checkpoint could leave a
-                # proposal row in SQLite. Never retry automatically.
+                # Failed lease-fenced proposal/checkpoint transactions roll back
+                # together. Never retry inference automatically.
                 outcome, note = 'paused', ('refused: ' + type(exc).__name__)[:100]
                 result = {'status': 'refused', 'task_key': key, 'error': str(exc)[:400]}
             with store.db:
@@ -270,9 +270,12 @@ class ProposalScheduler:
                             last_result=?,updated_at=? WHERE task_key=?''',
                             (outcome, note, utc_now(), key))
                     elif actual['state'] == 'paused':
+                        # A pause after proposal persistence still wins the
+                        # visible queue state. Review remains owner-controlled.
+                        outcome = 'paused'
                         store.db.execute('''UPDATE proposal_schedule SET lease=NULL,
                             last_result=?,updated_at=? WHERE task_key=?''',
-                            ('paused during inference; inspect stage before re-arming', utc_now(), key))
+                            ('owner paused; inspect stage before re-arming', utc_now(), key))
             # Never auto-approve, apply, advance, perform host tests or push.
             return {'status': outcome, 'task_key': key, 'result': result}
 

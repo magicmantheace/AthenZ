@@ -53,6 +53,8 @@ trusted-local-user boundary.
 - Proposal insertion and sequence transition to `awaiting_review` now share
   one lease-fenced SQLite transaction. A failed checkpoint rolls back the
   proposal instead of leaving an orphan reviewable record.
+  A pause after that transaction commits preserves the already-reviewable
+  proposal but the queue reports paused and does not automatically retry.
 - If the process terminates before recording completion, the persistent
   `running` lease prevents a second scheduler from replaying the call.
   **First ensure the old worker is no longer running.** Then explicitly use

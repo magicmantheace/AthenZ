@@ -279,6 +279,26 @@ class SchedulerTests(unittest.TestCase):
         self.assertEqual(fresh['status'], 'review')
         self.assertEqual(self.ui.detail('demo')['phase'], 'awaiting_review')
 
+    def test_pause_after_proposal_commit_reports_paused_queue(self):
+        self.add(); self.scheduler.arm('demo', confirmed=True)
+        from athenz.sequencer import SequenceController
+        actual_prepare = SequenceController.prepare
+        def paused_after_commit(ctl, *args, **kwargs):
+            result = actual_prepare(ctl, *args, **kwargs)
+            self.scheduler.pause('demo')
+            return result
+        with mock.patch('athenz.scheduler.SequenceController.prepare',
+                        new=paused_after_commit):
+            outcome = self.scheduler.run_once(
+                confirmed=True, model_factory=lambda _: Model())
+        self.assertEqual(outcome['status'], 'paused')
+        self.assertEqual(self.scheduler.get('demo')['state'], 'paused')
+        self.assertIsNone(self.scheduler.get('demo')['lease'])
+        self.assertEqual(self.ui.detail('demo')['phase'], 'awaiting_review')
+        self.assertEqual(outcome['result']['sha256'],
+                         self.ui.review('demo')['sha256'])
+        self.assertEqual(self.scheduler.run_once(confirmed=True)['status'], 'idle')
+
     def test_model_failure_does_not_loop_or_run_host_commands(self):
         self.add(); self.scheduler.arm('demo', confirmed=True)
         def bad(_): raise RuntimeError('synthetic GPU error')
