@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from math import isfinite
 from pathlib import Path
 import re
 
@@ -112,8 +113,9 @@ def _read_review(store: ExperienceStore, sha: str) -> dict:
             or report.get('split') not in {'calibration', 'test'}
             or not isinstance(report.get('cases'), int) or not 10 <= report['cases'] <= 1000
             or report.get('eligible_for_review') is not True
-            or not isinstance(report.get('accuracy_gain'), (int, float))
-            or report['accuracy_gain'] <= 0):
+            or type(report.get('accuracy_gain')) not in (int, float)
+            or not isfinite(report['accuracy_gain'])
+            or not 0 < report['accuracy_gain'] <= 1):
         raise AdapterError('Evaluation report is not eligible for owner review')
     if _heldout_fingerprint(store, report['split'], report['cases']) != report.get('heldout_fingerprint'):
         raise AdapterError('Held-out evaluation evidence is stale')
