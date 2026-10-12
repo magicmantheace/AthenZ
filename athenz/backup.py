@@ -235,7 +235,7 @@ def restore_to_new_profile(home: Path | None, identifier: str, destination: Path
             if db.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
                 raise BackupError('Recovered SQLite database failed integrity check')
             schema = int(db.execute('PRAGMA user_version').fetchone()[0])
-            if not 1 <= schema <= 4:
+            if not 1 <= schema <= 5:
                 raise BackupError('Recovery database schema is unsupported')
             with db:
                 # Checkpoint metadata is evidence, NOT permission to execute.
