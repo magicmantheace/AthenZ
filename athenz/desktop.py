@@ -231,10 +231,11 @@ def launch(home: Path | None = None) -> None:
     status = tk.StringVar(value='Local only · No background actions')
     book = ttk.Notebook(window)
     book.pack(fill='both', expand=True, padx=12, pady=(12, 4))
-    chat_tab, review_tab, tasks_tab = (ttk.Frame(book, padding=12) for _ in range(3))
+    chat_tab, review_tab, tasks_tab, setup_tab = (ttk.Frame(book, padding=12) for _ in range(4))
     book.add(chat_tab, text='Chat')
     book.add(review_tab, text='Review memory')
     book.add(tasks_tab, text='Coding tasks')
+    book.add(setup_tab, text='Setup')
 
     chat_controls = ttk.Frame(chat_tab)
     chat_controls.pack(fill='x')
@@ -418,10 +419,71 @@ def launch(home: Path | None = None) -> None:
     from .task_panel import mount_task_panel
     mount_task_panel(tasks_tab, window, DesktopTasks(home), set_status)
 
+    # Local readiness screen; no external probes run automatically at startup.
+    from .preflight import installation_report
+    setup_text = tk.Text(setup_tab, wrap='word', state='disabled', height=14,
+                         padx=10, pady=10)
+    setup_text.pack(fill='both', expand=True, pady=(10, 8))
+    setup_controls = ttk.Frame(setup_tab)
+    setup_controls.pack(fill='x')
+    setup_results: queue.Queue = queue.Queue()
+    setup_busy = {'running': False}
+
+    def show_setup(report: dict) -> None:
+        lines = ['LOCAL AthenZ READINESS (not GPU certification)', '']
+        for check in report['checks']:
+            lines.append(f"{'OK' if check['ok'] else 'NOT READY'}  {check['name']}: {check['note']}")
+        lines.extend(['', 'Tests do not upload private content or install tools.',
+                      'GPU, WSL2, Windows display scaling and model training remain unverified.'])
+        setup_text.config(state='normal')
+        setup_text.delete('1.0', 'end')
+        setup_text.insert('1.0', '\n'.join(lines))
+        setup_text.config(state='disabled')
+
+    def refresh_setup(*, ollama: bool = False) -> None:
+        if setup_busy['running']:
+            return
+        setup_busy['running'] = True
+        setup_basic.config(state='disabled')
+        setup_ollama.config(state='disabled')
+        set_status('Checking local installation (no private data submitted)…')
+        def worker() -> None:
+            try:
+                setup_results.put(('ok', installation_report(probe_ollama=ollama)))
+            except Exception:
+                setup_results.put(('error', 'Local setup check failed'))
+        threading.Thread(target=worker, name='athenz-local-readiness', daemon=True).start()
+
+    setup_basic = ttk.Button(setup_controls, text='Check prerequisites',
+                             command=lambda: refresh_setup())
+    setup_basic.pack(side='left', padx=(0, 8))
+    setup_ollama = ttk.Button(setup_controls, text='Probe Ollama (loopback only)',
+                              command=lambda: refresh_setup(ollama=True))
+    setup_ollama.pack(side='left')
+    ttk.Label(setup_tab, text='Ollama is contacted only when you press its probe button.').pack(
+        anchor='w', pady=(8, 0))
+
+    def drain_setup() -> None:
+        try:
+            while True:
+                state, report = setup_results.get_nowait()
+                setup_busy['running'] = False
+                setup_basic.config(state='normal')
+                setup_ollama.config(state='normal')
+                if state == 'ok':
+                    show_setup(report)
+                    set_status('Local readiness checked; no model or task started')
+                else:
+                    set_status(report)
+        except queue.Empty:
+            pass
+        window.after(150, drain_setup)
+
     ttk.Label(window, textvariable=status, anchor='w').pack(fill='x', padx=16, pady=(0, 10))
     refresh_history()
     reload_reviews()
     window.after(100, drain)
+    window.after(150, drain_setup)
     window.mainloop()
 
 
@@ -429,7 +491,13 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description='Local AthenZ desktop shell (no daemon)')
     parser.add_argument('--home', type=Path, default=None,
                         help='Private local AthenZ directory, outside Git')
+    parser.add_argument('--self-test', action='store_true',
+                        help='Offline throwaway-profile packaged-runtime smoke; do not open a window')
     args = parser.parse_args(argv)
+    if args.self_test:
+        from .preflight import desktop_self_test
+        desktop_self_test()
+        return
     launch(args.home)
 
 

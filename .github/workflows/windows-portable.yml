@@ -1,0 +1,54 @@
+name: Windows portable desktop (unsigned)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'athenz/**'
+      - 'packaging/**'
+      - 'pyproject.toml'
+      - '.github/workflows/windows-portable.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'athenz/**'
+      - 'packaging/**'
+      - 'pyproject.toml'
+      - '.github/workflows/windows-portable.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  portable:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Build unsigned portable Windows directory
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check . 'pyinstaller==6.16.0'
+          python -m PyInstaller --noconfirm --clean --onedir --windowed --name AthenZ --collect-submodules athenz packaging/desktop_launcher.py
+      - name: Offline packaged application smoke test
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path 'dist/AthenZ/AthenZ.exe').Path
+          $process = Start-Process -FilePath $exe -ArgumentList '--self-test' -Wait -PassThru -NoNewWindow
+          if ($process.ExitCode -ne 0) { throw "Packaged desktop smoke failed with exit code $($process.ExitCode)" }
+          if (-not (Test-Path 'dist/AthenZ/_internal/tcl')) {
+            Write-Host 'Tcl resources not in standard path; import-based runtime smoke already passed.'
+          }
+      - name: Bundle unsigned portable folder
+        shell: pwsh
+        run: |
+          Compress-Archive -Path 'dist/AthenZ' -DestinationPath 'AthenZ-windows-unsigned-portable.zip' -CompressionLevel Optimal
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AthenZ-windows-unsigned-portable-${{ github.sha }}
+          path: AthenZ-windows-unsigned-portable.zip
+          retention-days: 7
+          if-no-files-found: error

@@ -90,3 +90,13 @@ hardware tests do not currently block further independent engineering.
 - [x] Bounded foreground polling CLI and desktop queue/pause/arm/tick controls; never an OS startup service.
 - [ ] Validate live model inference, desktop accessibility, Windows/WSL2 Docker and RTX 3060 integration on target machine.
 - [ ] Installer, trust boundary hardening for concurrent recovery and optional future authorized unattended policy (separate approval design required).
+
+### v0.6 Windows portable and setup readiness (experimental)
+
+- [x] Off-by-default local Setup tab with separate, explicit loopback Ollama
+  probe; no private content in diagnostic responses.
+- [x] Windows-only unsigned PyInstaller onedir packaging workflow, disposable
+  SQLite/Tcl self-test, 7-day artifact; no automatic release, OS startup or install.
+- [ ] Confirm actual frozen Windows CI artifact builds and offline smoke passes.
+- [ ] Native Windows 11 GUI/HiDPI/accessibility and RTX 3060 Ollama/WSL2 Docker
+  hardware acceptance; Windows installer, signing and rollback remain outstanding.

@@ -141,3 +141,19 @@ the disabled scheduling table **before** starting chat/review/task worker
 threads. This avoids concurrent first-run schema creation and does not arm or
 run any job. A headless regression test and Linux virtual-display startup test
 exercise this fresh-profile path; native Windows rendering remains unverified.
+
+## Setup and Windows portable build (v0.6)
+
+The **Setup** tab provides optional local readiness checks. Nothing is probed
+at launch: **Check prerequisites** reports Python, Tcl/Tk, Git and Docker
+availability in sanitized form; **Probe Ollama (loopback only)** explicitly
+issues a `GET /api/version` request, using the existing proxy-disabled,
+redirect-refusing HTTP transport. No private memory or prompts are transmitted.
+Availability alone does not verify CUDA, actual Docker execution or model
+inference. Checks are descriptive and never grant execution permissions.
+
+A Windows-only GitHub Actions job builds an **unsigned portable onedir ZIP**
+with PyInstaller and runs an offline packaged `--self-test` using a disposable
+profile. It is not an installer, does not create a Windows startup entry, does
+not publish to GitHub Releases, and does not sign the binary. See
+[WINDOWS_PORTABLE.md](WINDOWS_PORTABLE.md) for limitations and instructions.
