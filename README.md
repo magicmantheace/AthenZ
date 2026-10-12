@@ -234,3 +234,8 @@ Ctrl+1/2/3/4 switch to Chat, Review memory, Coding tasks and Setup; Ctrl+L focus
 ### Unsigned Windows ZIP integrity
 
 The portable Windows CI build now also checks the ZIP structure and uploads a SHA-256 text file. `athenz-verify-portable ZIP_PATH --sha256 EXPECTED_DIGEST` checks the checksum, CRCs, root executable, unsafe names, collisions, symlinks and suspicious expansion **without extracting** it. This detects corruption and some archive hazards, not malicious code or impersonation: the checksum is **not a publisher signature**. See [Windows portable instructions](docs/WINDOWS_PORTABLE.md).
+
+
+## Side-by-side portable update staging (experimental)
+
+Use `athenz-stage-portable stage ZIP DESTINATION --sha256 VERIFIED_SHA256 --name AthenZ-version --confirm` to copy an independently verified unsigned Windows ZIP to a **new** adjacent version folder. `athenz-stage-portable verify VERSION_FOLDER` rechecks its file manifest without running it. This never installs software, switches the active version, updates an existing folder, changes `~/.athenz`, or contacts Ollama. The unsigned ZIP and its checksum do **not** establish publisher authenticity. See [docs/PORTABLE_STAGING.md](docs/PORTABLE_STAGING.md) for limitations and safe manual rollback precautions.

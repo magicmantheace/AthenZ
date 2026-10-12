@@ -65,6 +65,18 @@ jobs:
           $digest = (Get-FileHash -Path $zip -Algorithm SHA256).Hash.ToLowerInvariant()
           python -m athenz.portable_integrity $zip --sha256 $digest
           Set-Content -Path 'AthenZ-windows-unsigned-portable.sha256' -Value "$digest  $zip" -Encoding ascii
+      - name: Stage and reverify Windows ZIP without installing or launching it
+        shell: pwsh
+        run: |
+          $zip = 'AthenZ-windows-unsigned-portable.zip'
+          $digest = (Get-FileHash -Path $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $parent = Join-Path $env:RUNNER_TEMP 'athenz-portable-versions'
+          New-Item -ItemType Directory -Path $parent -Force | Out-Null
+          python -m athenz.portable_stage stage $zip $parent --sha256 $digest --name AthenZ-ci-smoke --confirm
+          python -m athenz.portable_stage verify (Join-Path $parent 'AthenZ-ci-smoke')
+          if (-not (Test-Path (Join-Path $parent 'AthenZ-ci-smoke/AthenZ/AthenZ.exe'))) {
+            throw 'The side-by-side staged portable exe was missing'
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: AthenZ-windows-unsigned-portable-${{ github.sha }}
