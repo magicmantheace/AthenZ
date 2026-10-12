@@ -166,3 +166,9 @@ Backups are consistent, SHA-256-checked, remain inside the private home and
 are **unencrypted**. No backup happens automatically, and restoring a backup
 into a live database is deliberately unsupported. These snapshots do **not**
 include adapter/model/dataset files. See [BACKUP.md](BACKUP.md).
+
+## Keyboard navigation (v0.6)
+
+The desktop supports **Ctrl+1**, **Ctrl+2**, **Ctrl+3** and **Ctrl+4** to focus Chat, Review memory, Coding tasks and Setup respectively. **Ctrl+L** returns focus to the chat input. Tk notebook's **Ctrl+Tab** and **Ctrl+Shift+Tab** navigate tabs. The message input continues to use Enter to send when focused. These shortcuts **only change focus or tabs**, never approve data, arm the scheduler, run commands or submit coding patches. The review dialog still requires explicit confirmation.
+
+For a temporary, non-persistent GUI startup check, run `athenz-desktop --gui-self-test` (or the portable `AthenZ.exe --gui-self-test`). It opens the real four-tab window briefly using an automatically deleted profile, then exits. This checks Tk creation and event-loop startup, **not native accessibility, usable HiDPI scaling, model inference or your real private profile**. For an entirely windowless startup check use `--self-test`.
