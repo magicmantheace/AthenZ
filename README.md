@@ -239,3 +239,8 @@ The portable Windows CI build now also checks the ZIP structure and uploads a SH
 ## Side-by-side portable update staging (experimental)
 
 Use `athenz-stage-portable stage ZIP DESTINATION --sha256 VERIFIED_SHA256 --name AthenZ-version --confirm` to copy an independently verified unsigned Windows ZIP to a **new** adjacent version folder. `athenz-stage-portable verify VERSION_FOLDER` rechecks its file manifest without running it. This never installs software, switches the active version, updates an existing folder, changes `~/.athenz`, or contacts Ollama. The unsigned ZIP and its checksum do **not** establish publisher authenticity. See [docs/PORTABLE_STAGING.md](docs/PORTABLE_STAGING.md) for limitations and safe manual rollback precautions.
+
+
+## Optional local NVIDIA VRAM readiness
+
+Use `athenz-doctor --probe-gpu --confirm` to request a read-only **local** NVIDIA VRAM inventory. The tool returns only sanitized GPU counts and MiB totals; no GPU UUID, serial number, model name, raw process output, personal data or external request is collected. It is **off by default** and is not proof that CUDA, WSL2, Ollama or QLoRA training works. See [docs/HARDWARE_PROBE.md](docs/HARDWARE_PROBE.md).
