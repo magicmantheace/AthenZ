@@ -2,8 +2,8 @@
 
 Private, local-first digital twin and coding assistant. **Twin Mode** simulates
 style and choices based on approved examples; **Agent Mode** provides independent
-assistance without claiming to be the owner. Neither mode modifies model weights
-without a separate future training and evaluation pipeline.
+assistance without claiming to be the owner. Neither chat mode modifies model weights. A separate owner-confirmed,
+experimental fine-tuning pipeline exists, but target GPU training has not been validated.
 
 **Status: experimental v0.6 alpha (not a release).** Human review is required for identity
 claims and file changes. Task checkpoints, scoped patch proposals, reviewed
@@ -50,7 +50,8 @@ the `athenz-worker test` opt-in Docker runner with a trusted, digest-pinned imag
 There is no host-side project test command or Git commit/push action.
 
 Your reviewed feedback and independently checked results may inform future
-prompt context. Model-weight updates are a separate future milestone.
+prompt context. Model-weight updates are opt-in experiments, never initiated by chat feedback;
+training on the target RTX 3060 remains unverified.
 
 See [ROADMAP.md](ROADMAP.md), [AGENTS.md](AGENTS.md),
 [docs/LEARNING.md](docs/LEARNING.md), [docs/WORKER.md](docs/WORKER.md), and
@@ -256,6 +257,15 @@ other readiness buttons triggers it. The existing CLI alternative is
 `athenz-doctor --probe-gpu --confirm` and remains fully opt-in.
 
 Use `athenz-doctor --probe-gpu --confirm` to request a read-only **local** NVIDIA VRAM inventory. The tool returns only sanitized GPU counts and MiB totals; no GPU UUID, serial number, model name, raw process output, personal data or external request is collected. It is **off by default** and is not proof that CUDA, WSL2, Ollama or QLoRA training works. See [docs/HARDWARE_PROBE.md](docs/HARDWARE_PROBE.md).
+
+## First-run guidance (v0.6)
+
+The Setup tab displays a read-only **Getting started** guide and lets you
+reopen it without running probes. `athenz-onboarding` and
+`athenz-onboarding --json` provide the same public offline instructions
+without accessing the private profile. All actual checks and state-changing
+operations remain separate and explicitly owner-initiated.
+See [docs/ONBOARDING.md](docs/ONBOARDING.md).
 
 ## Offline local validation and owner release checklist (archival work)
 
