@@ -193,3 +193,12 @@ mouse. Ctrl+1–4, Ctrl+L and explicit review confirmations remain separate.
 This improves keyboard usability but **does not certify screen-reader support,
 Windows HiDPI behavior, font rendering or accessibility conformance**. Native
 testing on the target Windows machine remains necessary before release.
+
+## Offline first-run guidance
+
+Setup initially shows a read-only **Getting started** checklist. The same guide
+can be reopened using the Getting started button, or printed with
+`athenz-onboarding` (`--json` for structured public-only metadata).
+Viewing the guide neither probes Ollama/GPU nor authorizes model, memory,
+scheduler, coding, backup or training operations. See
+[ONBOARDING.md](ONBOARDING.md) for the precise privacy and hardware limitations.
