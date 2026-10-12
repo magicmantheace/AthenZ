@@ -603,6 +603,9 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
         if len(book.tabs()) != 4:
             window.destroy()
             raise DesktopError('GUI smoke did not create the expected tabs')
+        if 'Getting started with AthenZ' not in setup_text.get('1.0', 'end'):
+            window.destroy()
+            raise DesktopError('GUI smoke did not render offline setup guidance')
         window.after(smoke_duration_ms, window.destroy)
     window.mainloop()
 
