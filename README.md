@@ -256,3 +256,12 @@ other readiness buttons triggers it. The existing CLI alternative is
 `athenz-doctor --probe-gpu --confirm` and remains fully opt-in.
 
 Use `athenz-doctor --probe-gpu --confirm` to request a read-only **local** NVIDIA VRAM inventory. The tool returns only sanitized GPU counts and MiB totals; no GPU UUID, serial number, model name, raw process output, personal data or external request is collected. It is **off by default** and is not proof that CUDA, WSL2, Ollama or QLoRA training works. See [docs/HARDWARE_PROBE.md](docs/HARDWARE_PROBE.md).
+
+## First-run guidance (v0.6)
+
+The Setup tab displays a read-only **Getting started** guide and lets you
+reopen it without running probes. `athenz-onboarding` and
+`athenz-onboarding --json` provide the same public offline instructions
+without accessing the private profile. All actual checks and state-changing
+operations remain separate and explicitly owner-initiated.
+See [docs/ONBOARDING.md](docs/ONBOARDING.md).
