@@ -7,6 +7,7 @@ adapters, datasets, reviews and other files are not part of SQLite snapshots.
 from __future__ import annotations
 
 import argparse
+from contextlib import closing
 import hashlib
 import json
 import os
@@ -91,7 +92,7 @@ def create_backup(home: Path | None = None, *, confirmed: bool = False) -> dict:
                      getattr(os, 'O_NOFOLLOW', 0), 0o600)
         os.close(fd)
         try:
-            with sqlite3.connect(data) as destination:
+            with closing(sqlite3.connect(data)) as destination:
                 store.db.backup(destination, pages=256, sleep=0.1)
                 if destination.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
                     raise BackupError('New SQLite snapshot failed integrity check')
@@ -135,7 +136,7 @@ def verify_backup(home: Path | None, identifier: str) -> dict:
         # directory. No SQL from the database file is executed as code.
         db_uri = data.resolve(strict=True).as_uri() + '?mode=ro&immutable=1'
         try:
-            with sqlite3.connect(db_uri, uri=True) as connection:
+            with closing(sqlite3.connect(db_uri, uri=True)) as connection:
                 valid = connection.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
                 schema = connection.execute('PRAGMA user_version').fetchone()[0]
         except sqlite3.DatabaseError as exc:
