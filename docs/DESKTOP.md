@@ -201,3 +201,17 @@ can be reopened using the Getting started button, or printed with
 Viewing the guide neither probes Ollama/GPU nor authorizes model, memory,
 scheduler, coding, backup or training operations. See
 [ONBOARDING.md](ONBOARDING.md) for the precise privacy and hardware limitations.
+
+## Owner-controlled reply discard (experimental)
+
+While a chat response is pending, **Cancel reply** requests that AthenZ discard
+the generated response before storing it. If cancellation wins the commit race,
+neither the user's message nor a partial assistant reply is added to the private
+conversation. The pending draft remains in the input field for manual retry.
+
+Cancellation is **cooperative**: it does not terminate an in-flight Ollama HTTP
+request, free GPU memory immediately, or guarantee that a response already
+committed can be undone. The button remains disabled until a worker finishes.
+The feature never changes approved memory, scheduler permissions, code patches
+or model weights. Synthetic concurrency and atomic-turn tests are included;
+real Windows/Ollama integration testing is still outstanding.

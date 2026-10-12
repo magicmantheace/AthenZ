@@ -16,6 +16,7 @@ import re
 import threading
 
 from .chat import OllamaClient, answer
+from .chat_cancel import ReplyCancelled, ReplyCancelGate
 from .experience import ExperienceStore
 from .runtime import checked_active_tag
 
@@ -59,7 +60,8 @@ class DesktopService:
         finally:
             store.close()
 
-    def send(self, session: str, mode: str, prompt: str, *, model: str | None = None) -> dict:
+    def send(self, session: str, mode: str, prompt: str, *, model: str | None = None,
+             cancel_gate: ReplyCancelGate | None = None) -> dict:
         """Synchronous worker-thread operation; only successful replies persist.
 
         This method never calls GUI functions. The routed tag is revalidated
@@ -68,6 +70,8 @@ class DesktopService:
         _validate_session(session, mode)
         if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 4000:
             raise DesktopError('Enter a prompt of 1–4000 characters')
+        if cancel_gate is not None:
+            cancel_gate.checkpoint()
         store = ExperienceStore(self.home)
         try:
             chosen = checked_active_tag(store) if model is None else None
@@ -81,13 +85,18 @@ class DesktopService:
             # Commit both messages together; a failed response never writes a
             # partial conversation. All parameters are bound SQL values.
             from .store import utc_now
-            with store.db:
-                store.db.execute('''INSERT INTO messages(session,mode,role,content,created_at)
+            from contextlib import nullcontext
+            # Cancellation and the entire SQLite turn commit share one lock;
+            # no partial conversation turn can be left behind.
+            guard = cancel_gate.commit_guard() if cancel_gate is not None else nullcontext()
+            with guard:
+                with store.db:
+                    store.db.execute('''INSERT INTO messages(session,mode,role,content,created_at)
                                     VALUES (?,?,?,?,?)''',
-                                 (session, mode, 'user', prompt.strip(), utc_now()))
-                saved = store.db.execute('''INSERT INTO messages(session,mode,role,content,created_at)
+                                     (session, mode, 'user', prompt.strip(), utc_now()))
+                    saved = store.db.execute('''INSERT INTO messages(session,mode,role,content,created_at)
                                             VALUES (?,?,?,?,?)''',
-                                         (session, mode, 'assistant', reply, utc_now()))
+                                             (session, mode, 'assistant', reply, utc_now()))
             return {'reply': reply, 'reply_id': int(saved.lastrowid), 'model': local.model,
                     'session': session, 'mode': mode}
         finally:
@@ -277,8 +286,10 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
     prompt.pack(side='left', fill='x', expand=True, padx=(0, 8))
     send_button = ttk.Button(send_row, text='Send')
     send_button.pack(side='left')
+    cancel_button = ttk.Button(send_row, text='Cancel reply', state='disabled')
+    cancel_button.pack(side='left', padx=(6, 0))
     response_queue: queue.Queue = queue.Queue()
-    active = {'pending': False}
+    active = {'pending': False, 'gate': None, 'sent_prompt': None}
 
     def set_status(message: str) -> None:
         status.set(message)
@@ -313,28 +324,49 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
         except DesktopError as exc:
             messagebox.showerror('Cannot send', str(exc))
             return
-        active['pending'] = True
+        gate = ReplyCancelGate()
+        active.update(pending=True, gate=gate, sent_prompt=user_text)
         send_button.config(state='disabled')
+        cancel_button.config(state='normal')
         set_status('Generating locally…')
         def do_inference() -> None:
             try:
-                outcome = service.send(chosen_session, chosen_mode, user_text)
+                outcome = service.send(chosen_session, chosen_mode, user_text, cancel_gate=gate)
                 response_queue.put(('ok', outcome))
+            except ReplyCancelled:
+                response_queue.put(('cancelled', None))
             except Exception as exc:
                 response_queue.put(('error', str(exc)))
         threading.Thread(target=do_inference, name='athenz-local-inference', daemon=True).start()
+
+    def cancel_reply() -> None:
+        gate = active['gate']
+        if active['pending'] and gate is not None:
+            requested = gate.request_cancel()
+            cancel_button.config(state='disabled')
+            if requested:
+                set_status('Reply discard requested; waiting for the local model call to finish')
+            else:
+                set_status('Reply already committed; cancellation was too late')
+
+    cancel_button.config(command=cancel_reply)
 
     def drain() -> None:
         try:
             while True:
                 state, value = response_queue.get_nowait()
-                active['pending'] = False
+                sent_prompt = active['sent_prompt']
+                active.update(pending=False, gate=None, sent_prompt=None)
                 send_button.config(state='normal')
-                if state == 'error':
+                cancel_button.config(state='disabled')
+                if state == 'cancelled':
+                    set_status('Reply discarded; no new conversation messages stored')
+                elif state == 'error':
                     set_status('Local inference failed')
                     messagebox.showerror('AthenZ', value)
                 else:
-                    prompt.delete(0, 'end')
+                    if prompt.get() == sent_prompt:
+                        prompt.delete(0, 'end')
                     if (value['session'], value['mode']) == (session.get(), mode.get()):
                         refresh_history()
                     set_status(f"Reply #{value['reply_id']} from {value['model']}; feedback requires review")
