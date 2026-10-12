@@ -20,6 +20,7 @@ athenz-doctor = "athenz.preflight:main"
 athenz-backup = "athenz.backup:main"
 athenz-profile = "athenz.profile_bundle:main"
 athenz-scheduler = "athenz.schedule_cli:main"
+athenz-verify-portable = "athenz.portable_integrity:main"
 
 [tool.setuptools.packages.find]
 include = ["athenz*"]

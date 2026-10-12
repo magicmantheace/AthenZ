@@ -229,3 +229,8 @@ See [private profile bundle notes](docs/PROFILE_BUNDLES.md).
 ### Keyboard navigation and portable GUI smoke (v0.6)
 
 Ctrl+1/2/3/4 switch to Chat, Review memory, Coding tasks and Setup; Ctrl+L focuses the chat input. These shortcuts do not authorize reviews or coding. The packaged Windows workflow additionally launches the native four-tab window using an ephemeral private profile via `AthenZ.exe --gui-self-test`, besides the original headless `--self-test`. The real user's profile and Ollama remain untouched by this check. See [desktop documentation](docs/DESKTOP.md) and [Windows portable notes](docs/WINDOWS_PORTABLE.md).
+
+
+### Unsigned Windows ZIP integrity
+
+The portable Windows CI build now also checks the ZIP structure and uploads a SHA-256 text file. `athenz-verify-portable ZIP_PATH --sha256 EXPECTED_DIGEST` checks the checksum, CRCs, root executable, unsafe names, collisions, symlinks and suspicious expansion **without extracting** it. This detects corruption and some archive hazards, not malicious code or impersonation: the checksum is **not a publisher signature**. See [Windows portable instructions](docs/WINDOWS_PORTABLE.md).
