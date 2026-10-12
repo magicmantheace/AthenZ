@@ -90,7 +90,7 @@ def evaluate_decisions(store: IdentityStore, model, *, split: str = 'test',
         # rationale. The scenario in the USER question is intentional; only
         # the system reference profile is checked. This detects literal
         # contamination, not semantic paraphrases or training-weight leakage.
-        reference_profile = messages[1]['content'].casefold()
+        reference_profile = messages[2]['content'].casefold()
         rationale = item[4].strip()
         if (scenario.strip().casefold() in reference_profile
                 or (len(rationale) >= 16 and rationale.casefold() in reference_profile)):
