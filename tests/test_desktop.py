@@ -67,15 +67,17 @@ class DesktopServiceTests(unittest.TestCase):
         self.assertEqual(listed[0]['id'],self.pending)
         with self.assertRaises(DesktopError):
             self.s.review('messages',self.pending,'approved')
-        self.assertTrue(self.s.review('identity',self.pending,'approved'))
+        self.assertTrue(self.s.review('identity',self.pending,'approved',
+            review_sha256=self.s.review_detail('identity',self.pending)['review_sha256']))
         self.assertEqual(self.s.pending(),[])
         with self.assertRaisesRegex(DesktopError,'changed since review'):
-            self.s.review('identity',self.pending,'approved')
+            self.s.review('identity',self.pending,'approved',review_sha256='0'*64)
 
     def test_full_review_requires_pending_and_stays_local(self):
         detail=self.s.review_detail('identity',self.pending)
         self.assertEqual(detail['text'],'Synthetic unapproved secret')
-        self.s.review('identity',self.pending,'rejected')
+        self.s.review('identity',self.pending,'rejected',
+            review_sha256=detail['review_sha256'])
         with self.assertRaisesRegex(DesktopError,'no longer pending'):
             self.s.review_detail('identity',self.pending)
 
@@ -111,9 +113,46 @@ class DesktopServiceTests(unittest.TestCase):
         store.add_feedback(response,'up')
         candidate=store.list_items('train_pairs','pending')[0]['id']
         store.close()
-        self.assertTrue(self.s.review('episodes',episode,'approved'))
-        self.assertTrue(self.s.review('train_pairs',candidate,'rejected'))
+        self.assertTrue(self.s.review('episodes',episode,'approved',
+            review_sha256=self.s.review_detail('episodes',episode)['review_sha256']))
+        self.assertTrue(self.s.review('train_pairs',candidate,'rejected',
+            review_sha256=self.s.review_detail('train_pairs',candidate)['review_sha256']))
         self.assertFalse(any(x['table']=='episodes' for x in self.s.pending()))
+
+    def test_review_requires_full_record_digest_and_rejects_stale_content(self):
+        viewed = self.s.review_detail('identity', self.pending)
+        with self.assertRaisesRegex(DesktopError, 'full record'):
+            self.s.review('identity', self.pending, 'approved')
+        store = ExperienceStore(self.home)
+        try:
+            with store.db:
+                store.db.execute("UPDATE identity SET text='Synthetic changed fact' WHERE id=?",
+                                 (self.pending,))
+        finally:
+            store.close()
+        with self.assertRaisesRegex(DesktopError, 'changed after review'):
+            self.s.review('identity', self.pending, 'approved',
+                          review_sha256=viewed['review_sha256'])
+        self.assertTrue(self.s.review('identity', self.pending, 'approved',
+            review_sha256=self.s.review_detail('identity',self.pending)['review_sha256']))
+
+    def test_review_digest_pins_provenance_and_is_not_reused(self):
+        viewed = self.s.review_detail('identity', self.pending)
+        store = ExperienceStore(self.home)
+        try:
+            with store.db:
+                store.db.execute("UPDATE identity SET source_ref='new provenance' WHERE id=?",
+                                 (self.pending,))
+        finally:
+            store.close()
+        with self.assertRaisesRegex(DesktopError, 'changed after review'):
+            self.s.review('identity', self.pending, 'rejected',
+                          review_sha256=viewed['review_sha256'])
+        self.s.review('identity', self.pending, 'rejected',
+                      review_sha256=self.s.review_detail('identity', self.pending)['review_sha256'])
+        with self.assertRaisesRegex(DesktopError, 'changed since review'):
+            self.s.review('identity', self.pending, 'approved',
+                          review_sha256=viewed['review_sha256'])
 
     def test_import_is_headless_and_cli_parser_does_not_spawn_window(self):
         from athenz.desktop import main

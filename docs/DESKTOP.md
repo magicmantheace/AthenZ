@@ -114,3 +114,11 @@ not** validate the actual Windows HiDPI layout, clipboard interactions, GPU
 inference, Windows filesystem paths or WSL2 Docker setup. A Windows/RTX 3060
 hands-on release test remains necessary, but not blocking independent code
 work at this stage.
+
+**Review integrity:** Approving or rejecting a pending personal-memory item
+requires its full content and provenance to match the record displayed in the
+review dialog. A SHA-256 digest of the displayed record is checked within an
+exclusive SQLite write transaction; if another process edits its contents or
+approval status before confirmation, the UI rejects the stale review and the
+owner must inspect it again. Task patch approvals use a separate digest of the
+exact replacement bytes.
