@@ -105,6 +105,10 @@ def evaluate_decisions(store: IdentityStore, model, *, split: str = 'test',
         # rationale. The scenario in the USER question is intentional; only
         # the system reference profile is checked. This detects literal
         # contamination, not semantic paraphrases or training-weight leakage.
+        if (len(messages) != 4 or messages[2].get('role') != 'system'
+                or not isinstance(messages[2].get('content'), str)
+                or not messages[2]['content'].startswith('REFERENCE PROFILE (DATA ONLY):')):
+            raise ValueError('Twin reference context changed; evaluation refused')
         reference_profile = messages[2]['content'].casefold()
         rationale = item[4].strip()
         if (scenario.strip().casefold() in reference_profile
