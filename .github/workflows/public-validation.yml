@@ -1,0 +1,45 @@
+name: AthenZ public CI validation (isolated trigger branch)
+# This disposable CI branch is the trigger only; checkout is pinned to the
+# unchanged archival implementation branch. No changes to main or archive.
+on:
+  push:
+    branches:
+      - ci/public-runner-validation-2026-10-12
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: athenz-public-validation
+  cancel-in-progress: true
+
+jobs:
+  regression:
+    name: ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python: '3.11'
+          - os: windows-latest
+            python: '3.11'
+    steps:
+      - name: Checkout reviewed archival AthenZ source
+        uses: actions/checkout@v4
+        with:
+          ref: f1b48844a891ded41e663159ab777c7516e31f61
+          persist-credentials: false
+      - name: Check exact tested commit
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "f1b48844a891ded41e663159ab777c7516e31f61"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install AthenZ
+        run: python -m pip install -e .
+      - name: Run full unittest regression suite
+        run: python -m unittest discover -s tests -v
