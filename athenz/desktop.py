@@ -7,6 +7,7 @@ No daemon, scheduler, model training, Docker execution or Git publishing.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import queue
@@ -23,6 +24,12 @@ PENDING_TABLES = ('identity', 'episodes', 'decisions', 'train_pairs', 'writing_s
 
 class DesktopError(ValueError):
     """A desktop workflow tried to exceed owner-controlled permissions."""
+
+
+def _review_digest(row: dict) -> str:
+    """Pin owner approval to all displayed record content and provenance."""
+    return hashlib.sha256(json.dumps(row, sort_keys=True, separators=(',', ':'),
+                                    ensure_ascii=False).encode('utf-8')).hexdigest()
 
 
 def _validate_session(session: str, mode: str) -> None:
@@ -114,7 +121,9 @@ class DesktopService:
             row = store.db.execute('SELECT * FROM '+table+' WHERE id=?', (item_id,)).fetchone()
             if row is None or row['status'] != 'pending':
                 raise DesktopError('Review record is no longer pending')
-            return dict(row)
+            result = dict(row)
+            result['review_sha256'] = _review_digest(result)
+            return result
         finally:
             store.close()
 
@@ -137,33 +146,35 @@ class DesktopService:
         finally:
             store.close()
 
-    def review(self, table: str, item_id: int, state: str) -> bool:
-        """Explicit UI approval/rejection only, never automatic promotion."""
+    def review(self, table: str, item_id: int, state: str, *,
+               review_sha256: str | None = None) -> bool:
+        """Approve ONLY the full record whose bytes the owner just inspected.
+
+        BEGIN IMMEDIATE protects the recheck-and-review transaction against a
+        concurrent UI or CLI writer changing the underlying record mid-review.
+        """
         if table not in PENDING_TABLES or not isinstance(item_id, int) or item_id <= 0:
             raise DesktopError('Choose a pending reviewed item')
         if state not in ('approved', 'rejected'):
             raise DesktopError('Choose an explicit approval or rejection')
+        if not isinstance(review_sha256, str) or not re.fullmatch('[0-9a-f]{64}', review_sha256):
+            raise DesktopError('Inspect the full record and provide its exact review digest')
         store = ExperienceStore(self.home)
         try:
-            if table == 'identity':
-                row = store.db.execute('SELECT status FROM identity WHERE id=?', (item_id,)).fetchone()
+            with store.db:
+                store.db.execute('BEGIN IMMEDIATE')
+                row = store.db.execute('SELECT * FROM '+table+' WHERE id=?', (item_id,)).fetchone()
                 if row is None or row['status'] != 'pending':
                     raise DesktopError('Item changed since review list loaded')
-                return store.status(item_id, state)
-            if table == 'episodes':
-                row = store.db.execute('SELECT status FROM episodes WHERE id=?', (item_id,)).fetchone()
-                if row is None or row['status'] != 'pending':
-                    raise DesktopError('Item changed since review list loaded')
-                return store.review_episode(item_id, state)
-            if table == 'decisions':
-                row = store.db.execute('SELECT status FROM decisions WHERE id=?', (item_id,)).fetchone()
-                if row is None or row['status'] != 'pending':
-                    raise DesktopError('Item changed since review list loaded')
-                return store.decision_status(item_id, state)
-            row = store.db.execute('SELECT status FROM '+table+' WHERE id=?', (item_id,)).fetchone()
-            if row is None or row['status'] != 'pending':
-                raise DesktopError('Item changed since review list loaded')
-            return store.set_review(table, item_id, state)
+                if _review_digest(dict(row)) != review_sha256:
+                    raise DesktopError('Item content or provenance changed after review; inspect again')
+                if table == 'identity':
+                    return store.status(item_id, state)
+                if table == 'episodes':
+                    return store.review_episode(item_id, state)
+                if table == 'decisions':
+                    return store.decision_status(item_id, state)
+                return store.set_review(table, item_id, state)
         finally:
             store.close()
 
@@ -206,7 +217,7 @@ def launch(home: Path | None = None) -> None:
     chat_tab, review_tab, tasks_tab = (ttk.Frame(book, padding=12) for _ in range(3))
     book.add(chat_tab, text='Chat')
     book.add(review_tab, text='Review memory')
-    book.add(tasks_tab, text='Tasks (read-only)')
+    book.add(tasks_tab, text='Coding tasks')
 
     chat_controls = ttk.Frame(chat_tab)
     chat_controls.pack(fill='x')
@@ -372,7 +383,8 @@ def launch(home: Path | None = None) -> None:
                     f'{action.title()} the FULL reviewed record {table} #{number}?', parent=dialog):
                 return
             try:
-                service.review(str(table), int(number), state)
+                service.review(str(table), int(number), state,
+                               review_sha256=record['review_sha256'])
                 dialog.destroy()
                 reload_reviews()
             except Exception as exc:
@@ -385,29 +397,13 @@ def launch(home: Path | None = None) -> None:
     ttk.Button(review_toolbar, text='Reject selected', command=lambda: review_selected('rejected')).pack(side='right', padx=4)
     ttk.Button(review_toolbar, text='Approve selected', command=lambda: review_selected('approved')).pack(side='right', padx=4)
 
-    tasks_row = ttk.Frame(tasks_tab)
-    tasks_row.pack(fill='x', pady=(0, 8))
-    ttk.Label(tasks_row, text='Stored checkpoints · this screen cannot start or run tasks').pack(side='left')
-    task_tree = ttk.Treeview(tasks_tab, columns=('key','state','revision','task'), show='headings')
-    for col, width in [('key',160),('state',90),('revision',85),('task',620)]:
-        task_tree.heading(col, text=col.title())
-        task_tree.column(col, width=width, stretch=col=='task')
-    task_tree.pack(fill='both', expand=True)
-
-    def reload_tasks() -> None:
-        try:
-            task_tree.delete(*task_tree.get_children())
-            for item in service.tasks():
-                task_tree.insert('', 'end', values=(item['task_key'], item['status'],
-                                                    item['revision'], item['task'][:200]))
-        except Exception as exc:
-            messagebox.showerror('Task list unavailable', str(exc))
-    ttk.Button(tasks_row, text='Refresh', command=reload_tasks).pack(side='right')
+    from .desktop_tasks import DesktopTasks
+    from .task_panel import mount_task_panel
+    mount_task_panel(tasks_tab, window, DesktopTasks(home), set_status)
 
     ttk.Label(window, textvariable=status, anchor='w').pack(fill='x', padx=16, pady=(0, 10))
     refresh_history()
     reload_reviews()
-    reload_tasks()
     window.after(100, drain)
     window.mainloop()
 

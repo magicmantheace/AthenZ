@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "athenz-local"
-version = "0.5.0a1"
+version = "0.6.0a1"
 description = "Local-first digital twin with approval-gated memory and supervised coding"
 requires-python = ">=3.11"
 dependencies = []

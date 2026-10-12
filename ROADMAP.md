@@ -50,40 +50,34 @@ periodic model updates. It is not a literal copy of a human consciousness.
 - [ ] Semantic contradiction matching and explicit owner adjudication UI.
 - [ ] Scoped, isolated worktree coding runner and autonomous scheduler (v0.4).
 
-## v0.3 verification extension
-- [x] Explicit owner-reviewed contradiction links; unresolved disputes exclude
-      both affected episodes from prompts until an approved winner is chosen.
-- [x] Schema v5 adds hashed local artifact IDs linked to exact test runs,
-      without storing source evidence files in private memory.
-- [x] Cascade deletion and regression tests for artifacts and disputed episodes.
-- [ ] Independent run attestation / signed CI provenance. Local file hashing
-      alone does not prove that an external test actually ran.
-
-### v0.4 initial supervised-worktree slice (2026-10-11)
-- Implemented: explicitly authorized clean-repository worktree, checkpoint restore, reviewed multi-file proposals, host-safe AST parsing, optional digest-pinned container-only unittest command and explicit disposable worktree cleanup.
-- Remaining: true multi-step bounded coding loop, cancellation and retry budget, independent test provenance, Windows/WSL2 validation and owner-approved commit/push. Worktrees are not a security boundary by themselves.
-
-
 ## v0.5 private offline QLoRA groundwork (2026-10-11)
 - [x] Reviewed SFT dataset creation, deterministic fingerprints, held-out exact-match exclusion and opt-in export.
 - [x] Aggregate-only baseline/candidate evaluation with source-consent invalidation.
 - [x] Explicit and bounded local Qwen2-family NF4/LoRA training recipe and optional CUDA execution path, private source/model fingerprints and explicit checkpoint resumption.
 - [x] Adapter checksum registry and tamper-detecting private selection/rollback pointer, with a current held-out report and owner lineage acknowledgment.
 - [ ] **Hardware unverified:** run the QLoRA backend on the target RTX 3060 and verify CUDA/WSL2 dependency versions, available VRAM and saved adapter compatibility.
-- [ ] Independently prove that a candidate served by Ollama contains the evaluated adapter; conversion/loading and promotion are NOT implemented.
+- [x] Manual merged-GGUF Ollama import handoff with approved adapter/consent rechecks, immutable local source fingerprint, non-overwrite preflight, private intent journal and observed local tag digest; no auto-selection.
+- [ ] Independently prove that an imported candidate contains the evaluated adapter: PEFT merge/GGUF conversion and independently attested lineage are NOT implemented. The owner currently acknowledges the merge manually.
 - [ ] Create robust held-out regression benchmarks, an owner-approved installer/rollback integration, and signed training provenance.
 
 An adapter registry entry or review selection does NOT affect AthenZ inference, install model weights or authorize promotion. A model comparison alone is insufficient to establish an adapter's identity or quality.
 
-## v0.5 merged-GGUF Ollama handoff (experimental)
-- [x] Owner-reviewed private Modelfile for an externally merged full GGUF with source/adapter hashes, consent checks and an opt-in local Ollama `create` command.
-- [x] Dedicated candidate tag, existing-tag preflight, private import-intent checkpoint and observed installed-model digest without automatic model selection or remote publishing.
-- [x] Experimental owner-triggered CPU PEFT merge and SHA-pinned trusted local llama.cpp FP16 GGUF conversion, with consent revalidation, private recovery checkpoints, and an exact-output importer evidence link (PR #26).
-- [ ] Actual Qwen LoRA merge/GGUF conversion must still be tested with full model weights, adequate host RAM/disk, WSL2, and the target PC. Independent adapter lineage attestation and actual Ollama inference are outstanding; fingerprints prove bytes, not training ancestry.
+## v0.6 desktop foundation (experimental)
+- [x] Basic native Tkinter desktop shell: Agent/Twin local chat and session persistence, manual feedback, full-context review of pending identity/decision/episode/training items, read-only checkpoint status.
+- [x] Thread-separated Ollama work, no shared cross-thread SQLite handle, fail-closed model-route checks and no unreviewed auto-training.
+- [ ] Windows desktop visual/manual integration test, real Ollama inference, polished UX and secure installer.
+- [ ] Supervised background scheduler, task approval interactions, native notifications and lifecycle recovery.
 
-## v0.6 experimental desktop foundation (PR #27)
-- [x] Native Tkinter foreground interface with Agent/Twin local chat, separate persisted sessions, explicit reply ratings/corrections and owner-confirmed full-record review of pending memory/training candidates.
-- [x] Read-only checkpoint dashboard; nonblocking local inference, no cross-thread SQLite handles, revalidation of routed model and private consent, no implicit background training or Git writes.
-- [x] Ten headless synthetic desktop tests; package wheel built and CLI entrypoint checked on Linux.
-- [ ] Native Windows DPI/UI test, real local Ollama GPU inference, polished error recovery, task-control/approval flows and safe installer.
-- [ ] Supervised background scheduler and app lifecycle controls. Hardware-specific validation remains unverified.
+## v0.6 supervised task interface (incremental)
+- [x] Explicit trusted Git repo and owner-selected file-stage entry in the Tk UI.
+- [x] Full proposed diff preview, manual exact SHA-256 entry, and second apply confirmation.
+- [x] Bounded syntax-only stage validation, explicit advancement, checkpoint
+  recovery, missing-Docker fail-closed test command and private aggregate patch export.
+- [x] User-initiated threaded operations with SQLite handles isolated per thread.
+- [x] Synthetic headless review, rollback, integrity and privacy regression tests.
+- [ ] Native Windows/HiDPI keyboard, screen-reader and Ollama/WSL2 integration tests.
+- [ ] Build an off-by-default scheduler with explicit per-task authorization,
+  cancellation and OS-restart lifecycle, and a signed Windows installer.
+
+The UI does not run tasks in the background without a user action. User-run
+hardware tests do not currently block further independent engineering.
