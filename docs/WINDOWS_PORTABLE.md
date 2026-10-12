@@ -10,12 +10,12 @@ source of truth. Do not treat an unsigned CI artifact as a production release.
 
 The [Windows portable workflow](../.github/workflows/windows-portable.yml)
 uses a Windows GitHub Actions runner and Python 3.11 to build `AthenZ.exe`
-with PyInstaller `6.16.0` in **onedir** mode. It verifies the frozen process
-using `AthenZ.exe --self-test` before zipping and uploading the unsigned folder.
-The smoke test checks Tk/Tcl loadability and a new, disposable private SQLite
-profile (including the disabled proposal queue). It does **not** run a visible
-window, probe Ollama, change your normal private profile, check HiDPI, or test
-the GPU, networking, model training or Docker/WSL2.
+with PyInstaller `6.16.0` in **onedir** mode. It verifies the frozen process with `AthenZ.exe --self-test` and runs a
+short-lived **real native Tk window** using `AthenZ.exe --gui-self-test`
+before bundling the unsigned directory. Both use a disposable private SQLite
+profile (including the disabled proposal queue). Neither contacts Ollama,
+changes your normal private profile, checks actual HiDPI accessibility, or
+tests GPU inference, model training or Docker/WSL2.
 
 The workflow publishes a ZIP as a short-lived **GitHub Actions artifact only**
 (retained for 7 days). It does not create a Release, deploy software, execute

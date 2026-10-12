@@ -178,3 +178,18 @@ include adapter/model/dataset files. See [BACKUP.md](BACKUP.md).
 The desktop supports **Ctrl+1**, **Ctrl+2**, **Ctrl+3** and **Ctrl+4** to focus Chat, Review memory, Coding tasks and Setup respectively. **Ctrl+L** returns focus to the chat input. Tk notebook's **Ctrl+Tab** and **Ctrl+Shift+Tab** navigate tabs. The message input continues to use Enter to send when focused. These shortcuts **only change focus or tabs**, never approve data, arm the scheduler, run commands or submit coding patches. The review dialog still requires explicit confirmation.
 
 For a temporary, non-persistent GUI startup check, run `athenz-desktop --gui-self-test` (or the portable `AthenZ.exe --gui-self-test`). It opens the real four-tab window briefly using an automatically deleted profile, then exits. This checks Tk creation and event-loop startup, **not native accessibility, usable HiDPI scaling, model inference or your real private profile**. For an entirely windowless startup check use `--self-test`.
+
+## Text scaling and scrollable reviews (v0.6)
+
+Use **Ctrl+Plus** (or **Ctrl+Equals**) and **Ctrl+Minus** to increase/decrease
+desktop text size, or **Ctrl+0** to reset. The range is bounded from **80% to
+200%**, affects Tk's standard named UI fonts and review-table row heights, and
+resets when the desktop closes. This preference is session-only; it never
+changes the private profile, training data, scheduler permissions or Windows
+system settings. The chat transcript, pending memory list and Setup results
+have vertical scrollbars so long records remain navigable with a keyboard or
+mouse. Ctrl+1–4, Ctrl+L and explicit review confirmations remain separate.
+
+This improves keyboard usability but **does not certify screen-reader support,
+Windows HiDPI behavior, font rendering or accessibility conformance**. Native
+testing on the target Windows machine remains necessary before release.
