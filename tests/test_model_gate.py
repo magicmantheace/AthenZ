@@ -86,6 +86,17 @@ class EvaluationGateTests(unittest.TestCase):
         self.assertNotIn('synthetic held-out scenario', str(result))
         self.assertEqual(result['promotion'], 'not-authorized')
 
+    def test_save_report_rejects_invalid_accuracy_gain(self):
+        with mock.patch('athenz.model_gate.evaluate_decisions',
+                        side_effect=self.observations()):
+            original = compare_models(self.store, Model('base'),
+                                      Model('candidate'), self.sha)
+        for value in (float('nan'), float('inf'), -float('inf'), True, 1.5):
+            with self.subTest(value=str(value)):
+                altered = {**original, 'accuracy_gain': value}
+                with self.assertRaisesRegex(BenchmarkError, 'Invalid observed accuracy gain'):
+                    save_report(self.store, altered, confirmed=True)
+
     def test_worse_candidate_not_ready(self):
         with mock.patch('athenz.model_gate.evaluate_decisions', side_effect=self.observations(10, 8)):
             r = compare_models(self.store, Model('base'), Model('candidate'), self.sha)
