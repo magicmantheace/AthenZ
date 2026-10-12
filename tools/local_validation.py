@@ -15,6 +15,14 @@ import subprocess
 import sys
 from tempfile import TemporaryDirectory
 
+# Support both `python -m tools.local_validation` and the documented
+# `python tools/local_validation.py`. In script mode Python makes `tools/`
+# sys.path[0], which would otherwise hide the trusted parent package.
+if __package__ in (None, ''):
+    _source_root = str(Path(__file__).resolve().parents[1])
+    if _source_root not in sys.path:
+        sys.path.insert(0, _source_root)
+
 
 MODES = ('policy', 'full', 'wheel', 'all')
 MAX_TIMEOUT = 900

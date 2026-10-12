@@ -31,6 +31,23 @@ class LocalValidationTests(unittest.TestCase):
             (self.root / '.github' / 'workflows' / name).write_text(
                 'name: test\non:\n  workflow_dispatch:\njobs:\n  noop:\n    runs-on: ubuntu-latest\n')
 
+    def test_real_script_entrypoint_runs_policy_without_PYTHONPATH(self):
+        # Regression: running tools/local_validation.py directly used to fail
+        # `from tools.ci_budget import ...` before any local policy tests ran.
+        import os
+        import sys
+        root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as cwd:
+            env = os.environ.copy()
+            env.pop('PYTHONPATH', None)
+            completed = subprocess.run(
+                [sys.executable, str(root / 'tools' / 'local_validation.py'),
+                 '--root', str(root), '--mode', 'policy', '--timeout', '30'],
+                cwd=cwd, env=env, capture_output=True, text=True, timeout=35)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn('"github_actions_invoked": false', completed.stdout)
+        self.assertIn('"passed": true', completed.stdout)
+
     def test_policy_runs_explicit_local_unittest_only(self):
         with patch('tools.local_validation.subprocess.run', return_value=subprocess.CompletedProcess([], 0)) as run:
             result = validate(self.root)
