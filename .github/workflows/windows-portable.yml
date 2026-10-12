@@ -42,6 +42,18 @@ jobs:
           if (-not (Test-Path 'dist/AthenZ/_internal/tcl')) {
             Write-Host 'Tcl resources not in standard path; import-based runtime smoke already passed.'
           }
+      - name: Native desktop startup smoke with disposable profile
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path 'dist/AthenZ/AthenZ.exe').Path
+          $process = Start-Process -FilePath $exe -ArgumentList '--gui-self-test' -PassThru
+          if (-not $process.WaitForExit(20000)) {
+            Stop-Process -Id $process.Id -Force
+            throw 'Native desktop GUI smoke timed out'
+          }
+          if ($process.ExitCode -ne 0) {
+            throw "Native desktop GUI smoke failed with exit code $($process.ExitCode)"
+          }
       - name: Bundle unsigned portable folder
         shell: pwsh
         run: |
