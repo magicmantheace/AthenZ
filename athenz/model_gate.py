@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from math import isfinite
 from pathlib import Path
 
 from .evaluation import evaluate_decisions, _fingerprint, _heldout_rows, _reference_fingerprint
@@ -110,6 +111,9 @@ def save_report(store: ExperienceStore, comparison: dict, *, confirmed: bool = F
     verify_dataset(store, sha)
     if comparison.get('promotion') != 'not-authorized' or comparison.get('attestation') != 'local-model-observation-only':
         raise BenchmarkError('Only non-deploying observed benchmarks can be stored')
+    gain = comparison.get('accuracy_gain')
+    if type(gain) not in (int, float) or not isfinite(gain) or not -1 <= gain <= 1:
+        raise BenchmarkError('Invalid observed accuracy gain')
     # The comparison is an earlier observation. Consent or model evidence may
     # change between evaluation and its owner-confirmed disk persistence.
     split, count = comparison.get('split'), comparison.get('cases')
