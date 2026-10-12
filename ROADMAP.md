@@ -135,3 +135,11 @@ hardware tests do not currently block further independent engineering.
 - [x] Owner-opt-in local NVIDIA memory probe through `athenz-doctor --probe-gpu --confirm`, sanitized counts/VRAM only, no device identifiers or raw diagnostic logs.
 - [x] Synthetic success/absence/failure/timeout/privacy regression tests; never run without confirmation.
 - [ ] Actual RTX 3060 WSL2 CUDA, Ollama, VRAM budget and QLoRA training still unverified on target PC; report must never claim hardware certification.
+
+## v0.6 offline first-run guidance
+
+- [x] Public-only initial Setup help and standalone offline guidance CLI.
+- [x] The guide discloses private storage, unencrypted backup limits, opt-in
+  GPU/Ollama probes and off-by-default memory/coding permissions.
+- [ ] Actual Windows HiDPI/accessibility, model inference, CUDA/WSL2 and
+  signed installer/update migration still require independent validation.
