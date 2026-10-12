@@ -129,3 +129,9 @@ hardware tests do not currently block further independent engineering.
 - [x] Bounded safe ZIP extraction, copied immutable input validation, per-file integrity manifest, staged tree verification and tamper detection.
 - [x] Synthetic rollback/collision/traversal/symlink tests; Windows CI stages/verifies the exact packaged ZIP.
 - [ ] No publisher authentication, signed installer, in-place update, automatic rollback, GPU/WSL2/HiDPI hardware validation.
+
+
+### 2026-10-11 v0.6 — Explicit GPU readiness inventory
+- [x] Owner-opt-in local NVIDIA memory probe through `athenz-doctor --probe-gpu --confirm`, sanitized counts/VRAM only, no device identifiers or raw diagnostic logs.
+- [x] Synthetic success/absence/failure/timeout/privacy regression tests; never run without confirmation.
+- [ ] Actual RTX 3060 WSL2 CUDA, Ollama, VRAM budget and QLoRA training still unverified on target PC; report must never claim hardware certification.

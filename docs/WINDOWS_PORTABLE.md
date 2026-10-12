@@ -73,3 +73,8 @@ athenz-verify-portable AthenZ-windows-unsigned-portable.zip --sha256 FULL_EXPECT
 ```
 
 A checksum stored *alongside* an unsigned ZIP cannot authenticate who built it. Comparing it against itself does not establish publisher trust, signing, reproducibility or protection against a malicious workflow. Download only from a trusted GitHub commit/workflow and inspect code before execution. Never treat this feature as a Windows installer, antivirus scan or signed release.
+
+
+### Optional owner-invoked GPU memory check
+
+On a trusted Python installation, `athenz-doctor --probe-gpu --confirm` asks local `nvidia-smi` for VRAM totals and reports only sanitized memory sizes and device count. This is off by default, not part of native Windows startup, not a CUDA/WSL2 validation, and does not train or download models. See [HARDWARE_PROBE.md](HARDWARE_PROBE.md).

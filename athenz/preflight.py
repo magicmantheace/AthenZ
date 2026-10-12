@@ -44,7 +44,8 @@ def desktop_self_test() -> None:
             store.close()
 
 
-def installation_report(*, probe_ollama: bool = False) -> dict:
+def installation_report(*, probe_ollama: bool = False, probe_gpu: bool = False,
+                        confirmed: bool = False) -> dict:
     """Limited readiness hints, no stored secrets and no remote requests."""
     checks = [_check('python', sys.version_info >= (3, 11), 'Python 3.11+ is required')]
     try:
@@ -58,6 +59,14 @@ def installation_report(*, probe_ollama: bool = False) -> dict:
                          'Git required only for coding tasks'))
     checks.append(_check('docker', shutil.which('docker') is not None,
                          'Docker optional; actual sandbox operation unverified'))
+    if probe_gpu:
+        from .hardware import gpu_report
+        result = gpu_report(confirmed=confirmed)
+        note = ('Observed ' + str(result['gpu_count']) + ' local NVIDIA GPU(s), '
+                + ', '.join(str(mib) + ' MiB' for mib in result['memory_mib'])
+                + '; CUDA/training NOT validated') if result['gpu_detected'] else (
+                'Local NVIDIA memory probe unavailable; CUDA/training NOT validated')
+        checks.append(_check('nvidia-vram', result['gpu_detected'], note))
     if probe_ollama:
         try:
             from .chat import OllamaClient, safe_local_open
@@ -81,8 +90,11 @@ def installation_report(*, probe_ollama: bool = False) -> dict:
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(description='Privacy-preserving AthenZ local installation checks')
     p.add_argument('--probe-ollama', action='store_true', help='Explicitly query only local /api/version')
+    p.add_argument('--probe-gpu', action='store_true', help='Ask local nvidia-smi for memory totals only')
+    p.add_argument('--confirm', action='store_true', help='Required for optional local GPU probe')
     args = p.parse_args(argv)
-    print(json.dumps(installation_report(probe_ollama=args.probe_ollama), indent=2))
+    print(json.dumps(installation_report(probe_ollama=args.probe_ollama,
+                                         probe_gpu=args.probe_gpu, confirmed=args.confirm), indent=2))
 
 
 if __name__ == '__main__':
