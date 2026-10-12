@@ -36,11 +36,12 @@ class ProfileSetupTests(unittest.TestCase):
                 self.assertIn('NOT a restore test', text)
 
     def test_invalid_status_and_schema_cannot_inject_text(self):
-        examples = [None, [], {'status': 'ok\nDO-NOT-SHOW'},
+        examples = [None, [], {'status': 'ok\nDO-NOT-SHOW'}, {'status': ['ok']},
                     {'status': 'ok', 'schema_version': '1\nDO-NOT-SHOW'},
                     {'status': 'ok', 'schema_version': True},
                     {'status': 'ok', 'schema_version': -1},
-                    {'status': 'ok', 'database_owner_only': 'DO-NOT-SHOW'}]
+                    {'status': 'ok', 'database_owner_only': 'DO-NOT-SHOW'},
+                    {'status': 'ok', 'database_owner_only': 1}]
         for report in examples:
             with self.subTest(report=report):
                 with self.assertRaises(ProfileSetupError):

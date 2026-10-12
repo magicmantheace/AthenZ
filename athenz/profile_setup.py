@@ -32,13 +32,13 @@ def format_for_setup(report: dict) -> str:
         'unavailable': 'SQLite health could not be checked safely.',
         'integrity-failed': 'SQLite quick-check detected an integrity problem.',
     }
-    if status not in labels:
+    if type(status) is not str or status not in labels:
         raise ProfileSetupError('Unrecognized private profile health status')
     schema = report.get('schema_version')
     if schema is not None and (type(schema) is not int or schema < 0 or schema > 1_000_000):
         raise ProfileSetupError('Invalid private profile schema value')
     permission = report.get('database_owner_only')
-    if permission not in (True, False, None):
+    if permission is not None and type(permission) is not bool:
         raise ProfileSetupError('Invalid private profile access report')
     lines = ['PRIVATE PROFILE HEALTH (owner-requested only)', '', labels[status]]
     if schema is not None:
