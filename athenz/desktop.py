@@ -449,8 +449,14 @@ def launch(home: Path | None = None) -> None:
                     'AthenZ home? It contains personal records, is NOT encrypted, '
                     'and does NOT include models or training artifacts. No upload or restore.'):
                 return
+        if backup_action == 'bundle-create':
+            if not messagebox.askyesno('Create unencrypted private profile bundle',
+                    'Include the private SQLite database, datasets, evaluation/review artifacts, '
+                    'adapter runs and model conversions in a local PLAINTEXT ZIP? The result '
+                    'is NOT encrypted and can be large (up to 16 GiB). No upload or activation.'):
+                return
         setup_busy['running'] = True
-        for button in (setup_basic, setup_ollama, setup_backup, setup_verify):
+        for button in (setup_basic, setup_ollama, setup_backup, setup_verify, setup_bundle, setup_bundle_verify):
             button.config(state='disabled')
         set_status('Working locally… no automatic model or coding operations')
         def worker() -> None:
@@ -464,6 +470,15 @@ def launch(home: Path | None = None) -> None:
                     if not ids:
                         raise DesktopError('No local SQLite backups found')
                     setup_results.put(('backup-verified', verify_backup(home, ids[0])))
+                elif backup_action == 'bundle-create':
+                    from .profile_bundle import create_bundle
+                    setup_results.put(('bundle-created', create_bundle(home, confirmed=True)))
+                elif backup_action == 'bundle-verify':
+                    from .profile_bundle import list_bundles, verify_bundle
+                    ids = list_bundles(home)
+                    if not ids:
+                        raise DesktopError('No local profile bundles found')
+                    setup_results.put(('bundle-verified', verify_bundle(home, ids[0])))
                 else:
                     setup_results.put(('ok', installation_report(probe_ollama=ollama)))
             except Exception:
@@ -483,6 +498,14 @@ def launch(home: Path | None = None) -> None:
     setup_verify = ttk.Button(setup_controls, text='Verify latest backup',
                               command=lambda: refresh_setup(backup_action='verify'))
     setup_verify.pack(side='left')
+    bundle_controls = ttk.Frame(setup_tab)
+    bundle_controls.pack(fill='x', pady=(6, 0))
+    setup_bundle = ttk.Button(bundle_controls, text='Bundle selected private files…',
+                              command=lambda: refresh_setup(backup_action='bundle-create'))
+    setup_bundle.pack(side='left', padx=(0, 8))
+    setup_bundle_verify = ttk.Button(bundle_controls, text='Verify latest bundle',
+                                     command=lambda: refresh_setup(backup_action='bundle-verify'))
+    setup_bundle_verify.pack(side='left')
     ttk.Label(setup_tab, text='Ollama is contacted only when you press its probe button.').pack(
         anchor='w', pady=(8, 0))
 
@@ -491,7 +514,7 @@ def launch(home: Path | None = None) -> None:
             while True:
                 state, report = setup_results.get_nowait()
                 setup_busy['running'] = False
-                for button in (setup_basic, setup_ollama, setup_backup, setup_verify):
+                for button in (setup_basic, setup_ollama, setup_backup, setup_verify, setup_bundle, setup_bundle_verify):
                     button.config(state='normal')
                 if state == 'ok':
                     show_setup(report)
@@ -500,6 +523,10 @@ def launch(home: Path | None = None) -> None:
                     set_status('Private SQLite-only plaintext backup created; verify before relying on it')
                 elif state == 'backup-verified':
                     set_status('Latest private SQLite backup verified against checksum and integrity')
+                elif state == 'bundle-created':
+                    set_status('Plaintext private profile bundle created; verify before relying on it')
+                elif state == 'bundle-verified':
+                    set_status('Latest private bundle verified; recovery requires separate CLI confirmation')
                 else:
                     set_status(report)
         except queue.Empty:
