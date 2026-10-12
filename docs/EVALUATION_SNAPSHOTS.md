@@ -41,3 +41,12 @@ comparisons carry these aggregate metrics without persisting private prompts,
 case predictions or gold choices. These intervals assume independent
 observations and do not establish statistical significance for correlated
 owner decisions, independently certify a model, or authorize promotion.
+
+## Adapter review score validation
+
+Private comparison reports must have a finite numeric accuracy gain within
+the possible range of -1 to +1 before saving. Adapter review requires a
+strictly positive finite gain and excludes booleans, NaN, infinity and values
+above 1 even when an older on-disk report has a matching SHA-256 checksum.
+This guards malformed score metadata, but SHA-256 still proves byte identity
+only and does not independently attest benchmark execution or adapter lineage.
