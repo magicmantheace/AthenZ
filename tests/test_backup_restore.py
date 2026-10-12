@@ -1,5 +1,6 @@
 """Synthetic offline recovery tests: strict no-clobber and authority disarming."""
 import json
+from contextlib import closing
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -35,12 +36,12 @@ class OfflineRestoreTests(unittest.TestCase):
         outcome = restore_to_new_profile(self.home, self.backup['id'], self.dest, confirmed=True)
         self.assertFalse(outcome['external_files_restored'])
         self.assertTrue((self.dest / 'recovery.json').is_file())
-        with sqlite3.connect(self.dest / 'identity.sqlite3') as db:
+        with closing(sqlite3.connect(self.dest / 'identity.sqlite3')) as db:
             self.assertEqual(db.execute('SELECT text FROM identity').fetchone()[0], 'Synthetic approved preference')
             self.assertEqual(db.execute("SELECT count(*) FROM checkpoints WHERE task_key='ollama_runtime'").fetchone()[0], 0)
             self.assertEqual(db.execute("SELECT status FROM checkpoints WHERE task_key='job'").fetchone()[0], 'paused')
             self.assertEqual(db.execute('SELECT state,lease FROM proposal_schedule').fetchone(), ('paused', None))
-        with sqlite3.connect(self.home / 'identity.sqlite3') as db:
+        with closing(sqlite3.connect(self.home / 'identity.sqlite3')) as db:
             self.assertEqual(db.execute("SELECT count(*) FROM checkpoints WHERE task_key='ollama_runtime'").fetchone()[0], 1)
         self.assertTrue((self.home / 'backups' / f"profile-{self.backup['id']}.sqlite3").is_file())
 
