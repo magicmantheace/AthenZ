@@ -25,7 +25,7 @@ if __package__ in (None, ''):
         sys.path.insert(0, _source_root)
 
 
-MODES = ('policy', 'focused', 'full', 'wheel', 'all')
+MODES = ('policy', 'focused', 'available', 'full', 'wheel', 'all')
 _TEST_MODULE = re.compile(r'tests\.test_[a-z0-9_]{1,80}\Z')
 MAX_TIMEOUT = 900
 
@@ -89,23 +89,29 @@ def validate(root: Path, *, mode: str = 'policy', timeout: int = 180,
         raise LocalValidationError('Focused --test modules only apply to focused mode')
     selected = _select_focused_tests(root, tests) if mode == 'focused' else ()
     from tools.ci_budget import audit_workflows
-    from tools.source_inventory import check_complete
+    from tools.source_inventory import check_complete, inspect_sources
     # A run never proceeds if CI may automatically trigger in the checkout.
     audited = audit_workflows(root)
     # The archival checkout must be complete before declaring its wheel or
     # entire test suite good. Ordinary edited development files are allowed.
     # Policy-only checks remain usable while reconstructing a checkout.
-    inventory = check_complete(root) if mode in ('full', 'wheel', 'all') else None
+    inventory = (check_complete(root) if mode in ('full', 'wheel', 'all') else
+                 inspect_sources(root) if mode == 'available' else None)
     steps = []
     if mode in ('policy', 'all'):
         steps.append(('policy-unit-tests', [sys.executable, '-m', 'unittest', 'tests.test_ci_budget', '-q']))
     if mode == 'focused':
         steps.append(('focused-unit-tests', [sys.executable, '-m', 'unittest', *selected, '-q']))
-    if mode in ('full', 'all'):
-        steps.append(('full-unit-suite', [sys.executable, '-m', 'unittest', 'discover', '-s', 'tests', '-q']))
+    if mode in ('full', 'all', 'available'):
+        label = 'available-unit-suite' if mode == 'available' else 'full-unit-suite'
+        steps.append((label, [sys.executable, '-m', 'unittest', 'discover', '-s', 'tests', '-q']))
     if mode in ('wheel', 'all'):
         steps.append(('wheel-no-index', None))
     results = []
+    # Provisional testing is NOT a release gate. Prefer a disposable Xvfb
+    # display so GUI tests run even if DISPLAY points to a defunct server.
+    virtual_display = (mode == 'available' and os.name == 'posix' and
+                       shutil.which('xvfb-run') is not None)
     with TemporaryDirectory(prefix='athenz-local-validate-') as tmp:
         private = Path(tmp) / 'private'
         private.mkdir()
@@ -122,6 +128,8 @@ def validate(root: Path, *, mode: str = 'policy', timeout: int = 180,
                 cwd = staged
                 command = [sys.executable, '-m', 'pip', 'wheel', '--no-index',
                            '--no-deps', '--no-build-isolation', '--wheel-dir', str(Path(tmp) / 'wheels'), '.']
+            if virtual_display and name == 'available-unit-suite':
+                command = ['xvfb-run', '-a', *command]
             try:
                 finished = subprocess.run(command, cwd=cwd, env=env, shell=False,
                                           capture_output=True, text=True, timeout=timeout,
@@ -138,7 +146,13 @@ def validate(root: Path, *, mode: str = 'policy', timeout: int = 180,
             'passed': bool(results) and all(c['passed'] for c in results),
             'workflows_audited': len(audited), 'github_actions_invoked': False,
             'hardware_validated': False, 'network_sandboxed': False,
-            'source_inventory_complete': inventory is not None,
+            'source_inventory_complete': inventory is not None and inventory['complete'],
+            'source_files_missing': len(inventory['missing']) if mode == 'available' else None,
+            'virtual_display_used': bool(virtual_display),
+            'local_full_suite_completed': (mode in ('full', 'all') and inventory is not None
+                                           and inventory['complete'] and bool(results)
+                                           and all(c['passed'] for c in results)),
+            'release_gate_passed': False,
             'source_content_verified': False}
 
 

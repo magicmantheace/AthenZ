@@ -66,6 +66,8 @@ class LocalValidationTests(unittest.TestCase):
             result = validate(self.root, mode='all')
         self.assertTrue(result['passed'])
         self.assertTrue(result['source_inventory_complete'])
+        self.assertTrue(result['local_full_suite_completed'])
+        self.assertFalse(result['release_gate_passed'])
         self.assertFalse(result['source_content_verified'])
         self.assertEqual([c['check'] for c in result['checks']],
                          ['policy-unit-tests', 'full-unit-suite', 'wheel-no-index'])
@@ -131,6 +133,34 @@ class LocalValidationTests(unittest.TestCase):
             result = validate(self.root, mode='full')
         self.assertFalse(result['passed'])
         self.assertEqual(result['checks'][0]['status'], 'unavailable-or-timeout')
+
+    def test_available_mode_runs_partial_checkout_without_full_claim(self):
+        with patch('tools.source_inventory.inspect_sources', return_value={
+                'complete': False, 'missing': ['athenz/other.py', 'tests/test_other.py']}), \
+             patch('tools.local_validation.subprocess.run',
+                   return_value=subprocess.CompletedProcess([], 0)) as run, \
+             patch('tools.local_validation.shutil.which', return_value=None):
+            result = validate(self.root, mode='available')
+        self.assertTrue(result['passed'])
+        self.assertFalse(result['release_gate_passed'])
+        self.assertFalse(result['source_inventory_complete'])
+        self.assertEqual(result['source_files_missing'], 2)
+        self.assertEqual(result['checks'][0]['check'], 'available-unit-suite')
+        self.assertEqual(run.call_args.args[0][1:],
+                         ['-m', 'unittest', 'discover', '-s', 'tests', '-q'])
+
+    def test_available_mode_uses_xvfb_to_exercise_headless_gui(self):
+        with patch('tools.source_inventory.inspect_sources', return_value={
+                'complete': False, 'missing': []}), \
+             patch('tools.local_validation.os.name', 'posix'), \
+             patch('tools.local_validation.os.environ', {'PATH': '/usr/bin'}), \
+             patch('tools.local_validation.shutil.which', return_value='/usr/bin/xvfb-run'), \
+             patch('tools.local_validation.subprocess.run',
+                   return_value=subprocess.CompletedProcess([], 0)) as run:
+            result = validate(self.root, mode='available')
+        self.assertTrue(result['virtual_display_used'])
+        self.assertEqual(run.call_args.args[0][:2], ['xvfb-run', '-a'])
+        self.assertFalse(result['release_gate_passed'])
 
     def test_rejects_auto_trigger_and_never_launches_process(self):
         (self.root / '.github' / 'workflows' / 'tests.yml').write_text('on:\n  push:\n')
