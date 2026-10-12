@@ -24,3 +24,17 @@ memory files for a read-only connection, so the operation can report
 `unavailable`. Only a separately confirmed, isolated recovery drill can test
 restoration. Do not rely on this as publisher, Windows compatibility, or
 hardware certification.
+
+## Desktop Setup check
+
+The **Check private SQLite health…** button in Setup is off by default and
+asks for separate permission on every invocation. After approval, the same
+read-only quick-check runs on a UI worker thread and displays only a fixed
+status explanation, numerical SQLite schema version, and sanitized POSIX
+file-permission observation. No private records, exception details, filesystem
+paths or device identifiers appear in the Setup transcript.
+
+This observation does **not** repair databases, migrate a profile, prove a
+backup can be restored, read datasets, authorize scheduled tasks, contact
+Ollama or grant access to personal memory. An unavailable/busy live WAL
+database is reported conservatively; make and verify a separate backup.

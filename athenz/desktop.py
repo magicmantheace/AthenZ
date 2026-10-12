@@ -479,8 +479,14 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
         setup_text.insert('1.0', '\n'.join(lines))
         setup_text.config(state='disabled')
 
-    def refresh_setup(*, ollama: bool = False, gpu: bool = False, backup_action: str | None = None) -> None:
+    def refresh_setup(*, ollama: bool = False, gpu: bool = False, profile: bool = False, backup_action: str | None = None) -> None:
         if setup_busy['running']:
+            return
+        if profile and not messagebox.askyesno(
+                'Allow private SQLite health inspection?',
+                'Read local SQLite schema and quick-check metadata only? This does not '
+                'read personal rows, send data, restore a backup or approve actions.',
+                parent=window):
             return
         if gpu and not messagebox.askyesno(
                 'Allow local NVIDIA VRAM check?',
@@ -502,12 +508,16 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
                     'is NOT encrypted and can be large (up to 16 GiB). No upload or activation.'):
                 return
         setup_busy['running'] = True
-        for button in (setup_help, setup_basic, setup_ollama, setup_gpu, setup_backup, setup_verify, setup_bundle, setup_bundle_verify):
+        for button in (setup_help, setup_basic, setup_ollama, setup_gpu, setup_profile, setup_backup, setup_verify, setup_bundle, setup_bundle_verify):
             button.config(state='disabled')
         set_status('Working locally… no automatic model or coding operations')
         def worker() -> None:
             try:
-                if backup_action == 'create':
+                if profile:
+                    from .profile_setup import inspect_for_setup, format_for_setup
+                    report = inspect_for_setup(home, confirmed=True)
+                    setup_results.put(('profile-health', format_for_setup(report)))
+                elif backup_action == 'create':
                     from .backup import create_backup
                     setup_results.put(('backup-created', create_backup(home, confirmed=True)))
                 elif backup_action == 'verify':
@@ -545,6 +555,9 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
     setup_gpu.pack(side='left', padx=(8, 0))
     backup_controls = ttk.Frame(setup_tab)
     backup_controls.pack(fill='x', pady=(6, 0))
+    setup_profile = ttk.Button(backup_controls, text='Check private SQLite health…',
+                               command=lambda: refresh_setup(profile=True))
+    setup_profile.pack(side='left', padx=(0, 8))
     setup_backup = ttk.Button(backup_controls, text='Back up private SQLite…',
                               command=lambda: refresh_setup(backup_action='create'))
     setup_backup.pack(side='left', padx=(8, 4))
@@ -569,7 +582,7 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
             while True:
                 state, report = setup_results.get_nowait()
                 setup_busy['running'] = False
-                for button in (setup_help, setup_basic, setup_ollama, setup_gpu, setup_backup, setup_verify, setup_bundle, setup_bundle_verify):
+                for button in (setup_help, setup_basic, setup_ollama, setup_gpu, setup_profile, setup_backup, setup_verify, setup_bundle, setup_bundle_verify):
                     button.config(state='normal')
                 if state == 'ok':
                     show_setup(report)
@@ -578,6 +591,12 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
                     set_status('Private SQLite-only plaintext backup created; verify before relying on it')
                 elif state == 'backup-verified':
                     set_status('Latest private SQLite backup verified against checksum and integrity')
+                elif state == 'profile-health':
+                    setup_text.config(state='normal')
+                    setup_text.delete('1.0', 'end')
+                    setup_text.insert('1.0', report)
+                    setup_text.config(state='disabled')
+                    set_status('Owner-requested read-only private SQLite check complete')
                 elif state == 'bundle-created':
                     set_status('Plaintext private profile bundle created; verify before relying on it')
                 elif state == 'bundle-verified':
