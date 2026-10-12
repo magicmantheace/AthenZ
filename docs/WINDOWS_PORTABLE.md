@@ -61,3 +61,15 @@ application smoke succeeds.
 ### Native-window CI startup check
 
 The Windows portable workflow now runs both `AthenZ.exe --self-test` (headless Tcl/SQLite check) and `AthenZ.exe --gui-self-test` (opens the real four-tab Tk interface against a temporary profile and exits). The GUI run has a 20-second watchdog. This is a CI-level smoke test and does not constitute a human-visible Windows 11 usability, keyboard screen-reader, HiDPI, GPU, or model-training acceptance test. Neither smoke test is permitted to send private prompts, activate models, or start work.
+
+## Offline unsigned ZIP verification
+
+The Windows CI workflow now writes an accompanying `AthenZ-windows-unsigned-portable.sha256` file and runs the stdlib-only archive verifier against the ZIP **before uploading**. The verifier checks a supplied 64-character SHA-256, the ZIP CRCs, that `AthenZ/AthenZ.exe` exists, and that the entries are bounded, unencrypted, non-symlink files with Windows-safe names (no case collisions, path traversal or extreme decompression ratios). It **never extracts or executes** the ZIP.
+
+From a Python installation, verify an independently obtained expected checksum before unpacking:
+
+```sh
+athenz-verify-portable AthenZ-windows-unsigned-portable.zip --sha256 FULL_EXPECTED_SHA256
+```
+
+A checksum stored *alongside* an unsigned ZIP cannot authenticate who built it. Comparing it against itself does not establish publisher trust, signing, reproducibility or protection against a malicious workflow. Download only from a trusted GitHub commit/workflow and inspect code before execution. Never treat this feature as a Windows installer, antivirus scan or signed release.
