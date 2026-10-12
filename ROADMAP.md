@@ -101,10 +101,12 @@ hardware tests do not currently block further independent engineering.
 - [ ] Native Windows 11 GUI/HiDPI/accessibility and RTX 3060 Ollama/WSL2 Docker
   hardware acceptance; Windows installer, signing and rollback remain outstanding.
 
-### v0.6 local SQLite-only backups (experimental)
+### Offline SQLite recovery (v0.6 increment)
 
-- [x] Owner-confirmed, local online SQLite snapshots with SHA-256, private
-  metadata, integrity revalidation and explicit deletion; no auto-restore.
-- [x] Desktop Setup backup/verify buttons and `athenz-backup` CLI.
-- [ ] Whole-profile backup inventory, encryption, cross-device safe restore,
-  Windows filesystem stress tests and disaster recovery remain unimplemented.
+- [x] Owner-confirmed recovery of verified SQLite snapshots into a **new only**
+  AthenZ profile path; never overwrite or modify the running profile.
+- [x] Disable previously authorized scheduler leases/arms and runtime model
+  routing in the recovered copy, preserving memory and approval records.
+- [ ] Complete versioned whole-profile archive/restore of explicitly selected
+  private datasets, adapter files, review artifacts and model provenance.
+- [ ] End-to-end Windows backup/recovery testing and owner-reviewed release UX.
