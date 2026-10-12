@@ -13,7 +13,7 @@ import os
 import re
 from pathlib import Path
 
-from .coding import allowed_file, change_status, digest, diff_for, propose, read_exact
+from .coding import allowed_file, change_status, digest, diff_for, propose
 from .controller import proposal_digest
 from .worker import Worker, WorktreeError, _git
 from .verification import isolated_unittest, snapshot_files
@@ -62,7 +62,7 @@ class SequenceController:
         actual_changed = set()
         for rel, sha in expected.items():
             path = allowed_file(workspace, rel)
-            if digest(read_exact(path)) != sha:
+            if digest(path.read_text(encoding='utf-8')) != sha:
                 raise SequenceError(f'Workspace content differs from reviewed state: {rel}')
             if sha != seq['baseline'][rel]:
                 actual_changed.add(rel)
@@ -86,7 +86,7 @@ class SequenceController:
         workspace = Path(item['state']['workspace'])
         try:
             scope = sorted({p for stage in stages for p in stage})
-            baseline = {p: digest(read_exact(allowed_file(workspace, p))) for p in scope}
+            baseline = {p: digest(allowed_file(workspace, p).read_text('utf-8')) for p in scope}
             seq = {'phase': 'ready', 'stages': stages, 'index': 0, 'current': None,
                    'baseline': baseline, 'expected': dict(baseline),
                    'approved': [], 'failures': 0, 'max_failures': max_failures,
@@ -105,7 +105,7 @@ class SequenceController:
                 'changes': json.loads(proposal['changes_json']),
                 'sha256': proposal_digest(proposal['changes_json'])}
 
-    def prepare(self, key: str, model) -> dict:
+    def prepare(self, key: str, model, *, before_persist=None) -> dict:
         item, seq = self._load(key)
         if seq['phase'] != 'ready' or seq['index'] >= len(seq['stages']):
             raise SequenceError('Current stage is not ready for a proposal')
@@ -120,7 +120,8 @@ class SequenceController:
             # model cannot change file scope by returning extra paths.
             prompt = (f"{item['task']} (stage {seq['index'] + 1}/{len(seq['stages'])}). "
                       f"Prior syntax error: {seq['last_error'][:500]}")
-            pid = propose(self.store, model, item['state']['workspace'], prompt, files)
+            pid = propose(self.store, model, item['state']['workspace'], prompt, files,
+                          before_persist=before_persist)
             seq = dict(seq)
             seq['current'] = pid
             self._save(key, item, seq)
@@ -201,7 +202,7 @@ class SequenceController:
         lines = []
         for rel in sorted(seq['baseline']):
             try:
-                ast.parse(read_exact(allowed_file(workspace, rel)), filename=rel)
+                ast.parse(allowed_file(workspace, rel).read_text('utf-8'), filename=rel)
                 lines.append(f'{rel}: parsed')
             except SyntaxError as exc:
                 lines.append(f'{rel}: line {exc.lineno}: invalid syntax')
@@ -378,5 +379,4 @@ class SequenceController:
         return {'key': key, 'phase': seq['phase'], 'stage': seq['index'] + 1,
                 'total_stages': len(seq['stages']), 'approved_steps': len(seq['approved']),
                 'failures': seq['failures'], 'max_failures': seq['max_failures'],
-                'current_proposal_id': seq['current'], 'last_error': seq['last_error'],
-                'published': seq.get('published')}
+                'current_proposal_id': seq['current'], 'last_error': seq['last_error']}

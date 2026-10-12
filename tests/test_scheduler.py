@@ -98,24 +98,6 @@ class SchedulerTests(unittest.TestCase):
         self.assertEqual(two['result']['stage'], 2)
         self.assertEqual(self.scheduler.get('demo')['state'], 'review')
 
-    def test_arm_is_bound_to_exact_stage_even_if_owner_advances_manually(self):
-        self.add(); self.scheduler.arm('demo', confirmed=True)
-        assert self.scheduler.get('demo')['armed_stage'] == 0
-        proposal = self.ui.prepare('demo', model=Model())
-        self.ui.apply('demo', proposal['sha256'], confirmed=True)
-        self.assertTrue(self.ui.syntax('demo')['passed'])
-        self.ui.advance('demo', confirmed=True)
-        fake = Model()
-        event = self.scheduler.run_once(confirmed=True, model_factory=lambda _: fake)
-        self.assertEqual(event['status'], 'paused')
-        self.assertEqual(fake.calls, 0)
-        self.scheduler.arm('demo', confirmed=True)
-        self.assertEqual(self.scheduler.get('demo')['armed_stage'], 1)
-        fresh = self.scheduler.run_once(confirmed=True, model_factory=lambda _: fake)
-        self.assertEqual(fresh['status'], 'review')
-        self.assertEqual(fresh['result']['stage'], 2)
-        self.assertEqual(fake.calls, 1)
-
     def test_pause_blocks_tick_and_is_persistent(self):
         self.add(); self.scheduler.arm('demo', confirmed=True)
         self.scheduler.pause('demo')
@@ -141,12 +123,65 @@ class SchedulerTests(unittest.TestCase):
             with self.assertRaises(SchedulerError):
                 self.scheduler.arm('demo', confirmed=True)
             return Model()
-        self.scheduler.run_once(confirmed=True, model_factory=factory)
+        outcome = self.scheduler.run_once(confirmed=True, model_factory=factory)
+        self.assertEqual(outcome['status'], 'paused')
         self.assertEqual(self.scheduler.get('demo')['state'], 'paused')
         self.assertIsNone(self.scheduler.get('demo')['lease'])
-        self.assertEqual(self.ui.detail('demo')['phase'], 'awaiting_review')
-        with self.assertRaisesRegex(SchedulerError, 'ready'):
-            self.scheduler.arm('demo', confirmed=True)
+        # Once a pause wins before inference completes, the generated reply
+        # must never become an owner-reviewable proposal or new checkpoint.
+        self.assertEqual(self.ui.detail('demo')['phase'], 'ready')
+        with self.scheduler._open() as store:
+            self.assertEqual(store.db.execute('SELECT count(*) FROM proposals').fetchone()[0], 0)
+        self.assertEqual(self.scheduler.run_once(confirmed=True)['status'], 'idle')
+
+    def test_pausing_from_inside_model_generation_discards_response(self):
+        self.add(); self.scheduler.arm('demo', confirmed=True)
+        scheduler = self.scheduler
+        class SlowModel(Model):
+            def generate(self, messages, **kwargs):
+                scheduler.pause('demo')
+                return super().generate(messages, **kwargs)
+        result = scheduler.run_once(confirmed=True, model_factory=lambda _: SlowModel())
+        self.assertEqual(result['status'], 'paused')
+        self.assertEqual(scheduler.get('demo')['state'], 'paused')
+        self.assertIsNone(scheduler.get('demo')['lease'])
+        self.assertEqual(self.ui.detail('demo')['phase'], 'ready')
+        with scheduler._open() as store:
+            self.assertEqual(store.db.execute('SELECT count(*) FROM proposals').fetchone()[0], 0)
+
+    def test_revoked_lease_discards_generation_without_write(self):
+        self.add(); self.scheduler.arm('demo', confirmed=True)
+        scheduler = self.scheduler
+        class ReplacedLeaseModel(Model):
+            def generate(self, messages, **kwargs):
+                with scheduler._open() as store:
+                    with store.db:
+                        store.db.execute('BEGIN IMMEDIATE')
+                        store.db.execute("UPDATE proposal_schedule SET lease=? WHERE task_key='demo'", ('other-process',))
+                return super().generate(messages, **kwargs)
+        result = scheduler.run_once(confirmed=True, model_factory=lambda _: ReplacedLeaseModel())
+        self.assertEqual(result['status'], 'paused')
+        with scheduler._open() as store:
+            self.assertEqual(store.db.execute('SELECT count(*) FROM proposals').fetchone()[0], 0)
+            self.assertEqual(store.db.execute("SELECT lease FROM proposal_schedule WHERE task_key='demo'").fetchone()[0], 'other-process')
+
+    def test_scope_change_during_generation_discards_proposal(self):
+        self.add(); self.scheduler.arm('demo', confirmed=True)
+        scheduler = self.scheduler
+        class ScopeChangingModel(Model):
+            def generate(self, messages, **kwargs):
+                with scheduler._open() as store:
+                    item = store.get_checkpoint('demo')
+                    changed = dict(item['state'])
+                    changed['sequence'] = dict(changed['sequence'])
+                    changed['sequence']['stages'] = [['util.py']]
+                    store.checkpoint('demo', item['task'], changed,
+                        status='paused', expected_revision=item['revision'])
+                return super().generate(messages, **kwargs)
+        result = scheduler.run_once(confirmed=True, model_factory=lambda _: ScopeChangingModel())
+        self.assertEqual(result['status'], 'paused')
+        with scheduler._open() as store:
+            self.assertEqual(store.db.execute('SELECT count(*) FROM proposals').fetchone()[0], 0)
 
     def test_model_failure_does_not_loop_or_run_host_commands(self):
         self.add(); self.scheduler.arm('demo', confirmed=True)

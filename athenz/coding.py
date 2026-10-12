@@ -56,7 +56,8 @@ def allowed_file(repo: Path, rel: str) -> Path:
     return candidate
 
 
-def propose(store: LearningStore, model, repo_path: str, task: str, files: list[str]) -> int:
+def propose(store: LearningStore, model, repo_path: str, task: str, files: list[str],
+            *, before_persist=None) -> int:
     repo = Path(repo_path).expanduser().resolve()
     if not repo.is_dir() or not task.strip() or not 1 <= len(files) <= 4 or len(set(files)) != len(files):
         raise ValueError('Select a repository, task and 1-4 distinct existing files')
@@ -92,7 +93,15 @@ def propose(store: LearningStore, model, repo_path: str, task: str, files: list[
                             'base_sha256': digest(source[rel]), 'after_sha256': digest(content)})
     if not changes:
         raise ValueError('No changes proposed')
-    return store.new_proposal(str(repo), task, changes, str(response.get('summary', '')))
+    if before_persist is None:
+        return store.new_proposal(str(repo), task, changes, str(response.get('summary', '')))
+    # The scheduler owns an explicit lease. Compare it under the SAME SQLite
+    # writer lock used to persist the proposal: a pause winning that lock
+    # must abort saving model output. Never hold this lock over inference.
+    with store.db:
+        store.db.execute('BEGIN IMMEDIATE')
+        before_persist()
+        return store.new_proposal(str(repo), task, changes, str(response.get('summary', '')))
 
 
 def diff_for(store: LearningStore, proposal_id: int) -> str:

@@ -32,8 +32,7 @@ already running model request which may finish before it is terminated).
 The **desktop Coding tasks tab** exposes Queue (paused), Arm next stage, Pause,
 Run queued once, Recover stopped job, and Remove queue. Merely opening the
 window never starts scheduling or inference. The queue stores owner-selected
-model tag, authorized task/repository/worktree/stage fingerprint,
-**exact armed stage index**, and lease in
+model tag, authorized task/repository/worktree/stage fingerprint and lease in
 private `ATHENZ_HOME/identity.sqlite3` metadata. This is **not independently
 attested authorization**; access to the private SQLite database remains a
 trusted-local-user boundary.
@@ -46,7 +45,10 @@ trusted-local-user boundary.
 - A successful request becomes **review**, and the owner must examine the
   full patch and approve its exact SHA-256 using normal sequence controls.
 - If the owner pauses while inference is in flight, the request may still
-  finish, but it does not automatically re-arm; inspect the resulting stage.
+  finish at the Ollama server, but a lease check under the SQLite proposal-write
+  lock discards its output if the pause committed first. No proposal or
+  checkpoint is created. The owner must explicitly re-arm to request another
+  proposal. Pausing cannot forcibly interrupt an active HTTP request.
 - If the process terminates before recording completion, the persistent
   `running` lease prevents a second scheduler from replaying the call.
   **First ensure the old worker is no longer running.** Then explicitly use
@@ -61,9 +63,9 @@ trusted-local-user boundary.
 ## Important limitations
 
 This is a *bounded polling supervisor*, not a cloud automation service or an
-unattended software-engineering agent. It provides no cancellation of an
-in-flight Ollama inference; a deliberate pause controls subsequent work, not
-the already-requested response. The `recover` command trusts the owner's
+unattended software-engineering agent. It cannot forcibly cancel an
+in-flight Ollama request; a deliberate pause revokes its permission to save a
+proposal if the pause completes before proposal persistence. The `recover` command trusts the owner's
 confirmation that a previous worker has fully stopped; it is not a cross-host
 lease-fencing mechanism. The task controller remains restricted to an already
 trusted local Git checkout, and worktrees are **not a security sandbox**.

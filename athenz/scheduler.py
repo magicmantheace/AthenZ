@@ -55,7 +55,6 @@ class ProposalScheduler:
                 task_key TEXT PRIMARY KEY,
                 scope_sha256 TEXT NOT NULL,
                 model_name TEXT NOT NULL,
-                armed_stage INTEGER NOT NULL,
                 state TEXT NOT NULL CHECK(state IN ('paused','armed','running','review')),
                 lease TEXT,
                 last_result TEXT NOT NULL DEFAULT '',
@@ -114,8 +113,8 @@ class ProposalScheduler:
                 if store.db.execute('SELECT 1 FROM proposal_schedule WHERE task_key=?', (key,)).fetchone():
                     raise SchedulerError('Job already exists; pause, inspect or remove before changing authority')
                 store.db.execute('''INSERT INTO proposal_schedule
-                    (task_key,scope_sha256,model_name,armed_stage,state,lease,created_at,updated_at)
-                    VALUES (?,?,?,?,'paused',NULL,?,?)''', (key, expected, model, seq['index'], utc_now(), utc_now()))
+                    (task_key,scope_sha256,model_name,state,lease,created_at,updated_at)
+                    VALUES (?,?,?,'paused',NULL,?,?)''', (key, expected, model, utc_now(), utc_now()))
         return self.get(key)
 
     def arm(self, key: str, *, confirmed: bool = False) -> dict:
@@ -134,8 +133,8 @@ class ProposalScheduler:
                     raise SchedulerError('Job is missing, already armed or has an unreconciled in-flight lease')
                 if _scope(item, seq) != row['scope_sha256']:
                     raise SchedulerError('Owner-authorized repository, task or stage scope changed')
-                store.db.execute("UPDATE proposal_schedule SET state='armed',armed_stage=?,last_result='',updated_at=? WHERE task_key=?",
-                                 (seq['index'], utc_now(), key))
+                store.db.execute("UPDATE proposal_schedule SET state='armed',last_result='',updated_at=? WHERE task_key=?",
+                                 (utc_now(), key))
         return self.get(key)
 
     def pause(self, key: str) -> dict:
@@ -209,12 +208,28 @@ class ProposalScheduler:
             # processes can pause while local inference is in flight.
             try:
                 ctl, item, seq = self._load(store, key)
-                if (seq['phase'] != 'ready' or seq['index'] != row['armed_stage']
-                        or _scope(item, seq) != row['scope_sha256']):
+                if seq['phase'] != 'ready' or _scope(item, seq) != row['scope_sha256']:
                     raise SchedulerError('Stage or originally authorized task scope changed')
                 ctl._integrity(item, seq)
                 model = model_factory(row['model_name']) if model_factory else OllamaClient(model=row['model_name'])
-                result = ctl.prepare(key, model)
+                def fence() -> None:
+                    # Executed under the proposal's SQLite IMMEDIATE writer
+                    # transaction, never while network inference is pending.
+                    # A concurrent pause that commits first invalidates the
+                    # lease, and its response is discarded without persistence.
+                    current = store.db.execute(
+                        'SELECT state,lease,scope_sha256 FROM proposal_schedule WHERE task_key=?',
+                        (key,)).fetchone()
+                    if (current is None or current['state'] != 'running'
+                            or current['lease'] != lease
+                            or current['scope_sha256'] != row['scope_sha256']):
+                        raise SchedulerError('Proposal authorization was paused or revoked')
+                    verified_ctl, verified_item, verified_seq = self._load(store, key)
+                    if (verified_seq['phase'] != 'ready' or
+                            _scope(verified_item, verified_seq) != row['scope_sha256']):
+                        raise SchedulerError('Authorized stage changed while preparing a proposal')
+                    verified_ctl._integrity(verified_item, verified_seq)
+                result = ctl.prepare(key, model, before_persist=fence)
                 outcome, note = 'review', 'proposal awaits owner SHA-256 review'
             except Exception as exc:
                 # An error after inference but before checkpoint could leave a
