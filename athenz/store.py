@@ -67,7 +67,7 @@ class IdentityStore:
     def _migrate(self) -> None:
         # Never blindly ALTER a live database or silently rewrite private records.
         version = self.db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 4:
+        if version > 5:
             raise RuntimeError(f"Database schema v{version} is newer than this application")
         if version == 0:
             with self.db:
@@ -105,10 +105,11 @@ class IdentityStore:
                 PRAGMA user_version = 1;
                 """)
 
-        from .migrations import migrate_v2, migrate_v3, migrate_v4
+        from .migrations import migrate_v2, migrate_v3, migrate_v4, migrate_v5
         migrate_v2(self.db)
         migrate_v3(self.db)
         migrate_v4(self.db)
+        migrate_v5(self.db)
 
     def _event(self, operation: str, subject_type: str, subject_id: int | None) -> None:
         # Deliberately exclude content from event logs so deleting content truly removes it.

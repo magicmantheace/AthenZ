@@ -62,7 +62,7 @@ class AdaptersTests(unittest.TestCase):
 
     def test_existing_nonfinite_review_reports_are_never_eligible(self):
         valid_sha = self.report()
-        directory = self.store.home / 'evaluations'
+        directory = self.store.home / 'datasets' / 'evaluations'
         valid = json.loads((directory / ('eval-' + valid_sha + '.json')).read_text())
         for value in (float('nan'), float('inf'), True):
             with self.subTest(value=str(value)):

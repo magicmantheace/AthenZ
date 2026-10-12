@@ -135,7 +135,14 @@ def create_bundle(home: Path | None = None, *, confirmed: bool = False) -> dict:
     """Snapshot SQLite and explicitly allowed artifacts to a private ZIP (plaintext)."""
     if not confirmed:
         raise BackupError('Explicit --confirm required: bundle contains UNENCRYPTED private information')
-    store = ExperienceStore(home)
+    try:
+        store = ExperienceStore(home)
+    except ValueError as exc:
+        # Preserve the bundle API's BackupError contract when the shared
+        # private-profile guard refuses a Git checkout.
+        if 'Git checkout' in str(exc):
+            raise BackupError('Private bundles cannot be saved under a Git checkout') from exc
+        raise
     try:
         profile = store.home.expanduser().resolve(strict=True)
         root = _directory(profile)
