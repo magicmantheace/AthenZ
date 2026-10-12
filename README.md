@@ -230,3 +230,13 @@ SQLite-only backup in a disposable private profile, check cleared scheduling
 leases and model routing, and remove the temporary copy. Nothing activates
 or overwrites the live profile. Scratch contents are plaintext and not
 securely erased; details: [docs/BACKUP.md](docs/BACKUP.md).
+
+## Reviewed episode disagreements (v0.3/v0.6 experimental)
+
+In **Review memory**, select a pending episode and choose **Review episode
+conflicts…** for a full private, fingerprinted comparison to currently approved
+records sharing topic tags. The owner can reject the candidate, retain both, or
+supersede one approved predecessor, with explicit SHA-256 re-entry and
+transactional freshness validation. The `athenz-conflicts` CLI offers the same
+workflow. Matching tags do not establish semantic contradiction; no model can
+resolve the conflict automatically. See [docs/CONFLICT_REVIEW.md](docs/CONFLICT_REVIEW.md).

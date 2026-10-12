@@ -110,3 +110,9 @@ hardware tests do not currently block further independent engineering.
 - [ ] Complete versioned whole-profile archive/restore of explicitly selected
   private datasets, adapter files, review artifacts and model provenance.
 - [ ] End-to-end Windows backup/recovery testing and owner-reviewed release UX.
+
+## 2026-10-12 — Digest-bound episode adjudication (archival development)
+
+- [x] Deterministic topical candidate overlap preview includes full pending and approved records/provenance, with exact SHA-256 over reviewed evidence.
+- [x] Explicit owner-confirmed keep-both, reject, or single-predecessor supersession is performed atomically and refuses stale reviews; desktop and CLI surfaces have no auto-decision path.
+- [ ] Semantic contradiction detection, advanced retrieval evaluation and Windows assistive-technology acceptance remain unfinished. Tag overlap is NOT a truth judgment.

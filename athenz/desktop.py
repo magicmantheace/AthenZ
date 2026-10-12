@@ -440,6 +440,10 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
     ttk.Button(review_toolbar, text='Refresh', command=reload_reviews).pack(side='right', padx=4)
     ttk.Button(review_toolbar, text='Reject selected', command=lambda: review_selected('rejected')).pack(side='right', padx=4)
     ttk.Button(review_toolbar, text='Approve selected', command=lambda: review_selected('approved')).pack(side='right', padx=4)
+    conflict_toolbar = ttk.Frame(review_tab)
+    conflict_toolbar.pack(fill='x', pady=(0, 6))
+    from .conflict_panel import mount_conflict_review_button
+    mount_conflict_review_button(conflict_toolbar, window, review_tree, home, reload_reviews)
 
     from .desktop_tasks import DesktopTasks
     from .task_panel import mount_task_panel

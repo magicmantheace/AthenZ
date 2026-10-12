@@ -26,6 +26,7 @@ athenz-stage-portable = "athenz.portable_stage:main"
 athenz-release-readiness = "athenz.release_readiness:main"
 athenz-profile-health = "athenz.profile_health:main"
 athenz-rehearse-backup = "athenz.recovery_drill:main"
+athenz-conflicts = "athenz.conflict_review:main"
 
 [tool.setuptools.packages.find]
 include = ["athenz*"]
