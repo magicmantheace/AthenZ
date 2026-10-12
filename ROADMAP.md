@@ -100,3 +100,11 @@ hardware tests do not currently block further independent engineering.
 - [ ] Confirm actual frozen Windows CI artifact builds and offline smoke passes.
 - [ ] Native Windows 11 GUI/HiDPI/accessibility and RTX 3060 Ollama/WSL2 Docker
   hardware acceptance; Windows installer, signing and rollback remain outstanding.
+
+### v0.6 local SQLite-only backups (experimental)
+
+- [x] Owner-confirmed, local online SQLite snapshots with SHA-256, private
+  metadata, integrity revalidation and explicit deletion; no auto-restore.
+- [x] Desktop Setup backup/verify buttons and `athenz-backup` CLI.
+- [ ] Whole-profile backup inventory, encryption, cross-device safe restore,
+  Windows filesystem stress tests and disaster recovery remain unimplemented.
