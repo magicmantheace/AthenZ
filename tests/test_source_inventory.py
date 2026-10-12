@@ -23,12 +23,27 @@ class InventoryTests(unittest.TestCase):
 
     def test_archive_inventory_includes_core_runtime_and_regression_suites(self):
         self.assertEqual(len(REQUIRED), len(set(REQUIRED)))
-        self.assertGreaterEqual(len(REQUIRED), 80)
+        self.assertGreaterEqual(len(REQUIRED), 109)
+        # These files were present in the actual archive but missing from
+        # the older preflight manifest. A missing one must now block full/wheel.
+        for path in ('athenz/chat_cancel.py', 'athenz/recovery_drill.py',
+                     'athenz/inference_readiness.py', 'tests/test_chat_cancel.py',
+                     'tests/test_private_home_guards.py',
+                     'tests/test_source_inventory.py', 'tools/source_inventory.py'):
+            self.assertIn(path, REQUIRED)
         for p in ('athenz/evaluation.py', 'athenz/profile_bundle.py',
                   'athenz/desktop_zoom.py', 'athenz/portable_integrity.py',
                   'tests/test_scheduler.py', 'tools/ci_budget.py'):
             self.assertIn(p, REQUIRED)
         self.assertEqual(len(BASELINE), 40)
+
+    def test_missing_new_archival_source_blocks_completeness(self):
+        self.populate(p for p in REQUIRED if p != 'athenz/recovery_drill.py')
+        report = inspect_sources(self.root)
+        self.assertFalse(report['complete'])
+        self.assertIn('athenz/recovery_drill.py', report['missing'])
+        with self.assertRaises(InventoryError):
+            check_complete(self.root)
 
     def test_incomplete_checkout_is_reported_before_subprocess(self):
         self.populate(['athenz/__init__.py', 'tools/ci_budget.py'])

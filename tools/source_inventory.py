@@ -1,7 +1,7 @@
 """Offline completeness preflight for the AthenZ source baseline.
 
 This is an intentionally path-only inventory taken from the reviewed archival
-source tree at f42aaf82273a5cc2b7604aee576729160c3a0ca1. A complete path
+source tree at 550eee10f3a0f9d530cb9424ba6b7ed18e5516c4. A complete path
 set is needed before a local *full suite* or wheel can be called meaningful.
 It does not verify file contents, trust, or freshness. New development files
 are allowed; an edited tracked file is not incorrectly called a missing file.
@@ -12,7 +12,7 @@ import argparse
 import json
 from pathlib import Path
 
-BASELINE = 'f42aaf82273a5cc2b7604aee576729160c3a0ca1'
+BASELINE = '550eee10f3a0f9d530cb9424ba6b7ed18e5516c4'
 # Source/test inventory at the above non-triggering GitHub archive checkpoint.
 # No private files, datasets, models, SQLite databases or external downloads.
 REQUIRED = tuple('''
@@ -49,6 +49,25 @@ tests/test_sandbox_threats.py tests/test_scheduler.py
 tests/test_sequencer.py tests/test_training.py tests/test_verification.py
 tests/test_worker.py
 tools/__init__.py tools/ci_budget.py tools/local_validation.py
+athenz/chat_cancel.py
+athenz/conflict_panel.py
+athenz/conflict_review.py
+athenz/inference_readiness.py
+athenz/profile_health.py
+athenz/profile_setup.py
+athenz/recovery_drill.py
+tests/test_chat_cancel.py
+tests/test_chat_safety.py
+tests/test_conflict_panel.py
+tests/test_conflict_review.py
+tests/test_desktop_shutdown.py
+tests/test_inference_readiness.py
+tests/test_private_home_guards.py
+tests/test_profile_health.py
+tests/test_profile_setup.py
+tests/test_recovery_drill.py
+tests/test_source_inventory.py
+tools/source_inventory.py
 '''.split())
 
 

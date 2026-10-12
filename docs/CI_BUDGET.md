@@ -98,7 +98,9 @@ starting a test or build. The `policy` mode remains usable on an incomplete
 checkout for checking the manual-only workflow rules.
 
 The inventory is a **path-only completeness** check anchored to archival
-commit `f42aaf82273a5cc2b7604aee576729160c3a0ca1`; it permits edited and
+commit `550eee10f3a0f9d530cb9424ba6b7ed18e5516c4`; it covers all 109 Python/package/test paths present
+in that checkout (including later-added recovery, cancellation and privacy
+regression modules) and permits edited and
 new development files. It does **not** verify file bytes, trust, GitHub freshness,
 model weights, full behavior, or real PC hardware. Regenerate and review its
 expected path list if the project's source tree changes substantially. The
