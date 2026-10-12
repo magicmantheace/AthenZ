@@ -25,3 +25,19 @@ excluded from that question. Unapproved episodes remain excluded from prompts.
 This guard does not detect semantic paraphrases, memorization in model weights,
 or independently certify benchmark separation; those require stronger offline
 provenance and evaluation controls.
+
+## v0.7 scoring integrity and uncertainty
+
+The JSON-format system message is inserted before the approved reference
+profile. Historical experimental builds inspected the wrong message when
+checking for literal held-out leakage. The corrected evaluator checks the
+reference profile itself and fails closed if its expected structure changes.
+Any experimental scores produced before this fix require fresh evaluation.
+
+The evaluator now returns a descriptive 95% Wilson binomial accuracy interval,
+an invalid-prediction count, and the prior accuracy/chance fields. Invalid
+letters count as incorrect and are represented as null predictions. Model
+comparisons carry these aggregate metrics without persisting private prompts,
+case predictions or gold choices. These intervals assume independent
+observations and do not establish statistical significance for correlated
+owner decisions, independently certify a model, or authorize promotion.
