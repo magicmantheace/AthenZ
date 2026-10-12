@@ -54,3 +54,63 @@ button. The separate command-line coding worker remains available.
 
 You do **not** need to install or test this immediately to unblock development.
 We will flag hardware-specific testing when it becomes necessary.
+
+## Supervised coding tasks (v0.6 follow-up)
+
+The **Coding tasks** tab now exposes an explicitly owner-operated UI over the
+existing `SequenceController`. There is no autonomous scheduler, Git push, or
+model-controlled tool use. Open **New scoped task**, select a **trusted, clean**
+local Git repository, write the task description, and enumerate existing Python
+files as comma-separated stage scopes, using semicolons to separate stages:
+
+```text
+calc.py,tests/test_calc.py; util.py
+```
+
+A confirmation dialog shows the exact repository and file scopes before a
+**detached, disposable Git worktree** is created. Only those files may be
+sent to the local model for review-only code proposals. Worktree creation may
+run trusted local Git checkout filters; a worktree is **not** an OS sandbox.
+The owner must initiate each of the following actions:
+
+1. **Prepare proposed patch** calls local Ollama in a worker thread. It does
+   not apply any changes, even if the model asks it to.
+2. **Review / approve patch** shows the complete unified diff and its exact
+   SHA-256 fingerprint. The user must **manually enter the entire fingerprint**
+   and confirm again before any file in the worktree is changed. A stale or
+   modified proposal is refused. No automatic approval from chat responses.
+3. **Syntax check** parses Python without executing it. A failure revokes only
+   the current patch, preserving earlier approved stages and the configured
+   limited retry budget. This is **not** a behavioral test.
+4. **Advance stage** explicitly accepts the syntax-checked stage. Repeat
+   steps 1–4 for the other owner-chosen stages.
+5. **Container test** is optional after the complete sequence; the user must
+   provide an **already installed and trusted, SHA-256-pinned Docker image**
+   and confirm running its fixed unittest command. There is no host fallback.
+6. **Export private patch** saves one immutable, reviewable combined patch
+   under `ATHENZ_HOME/reviews`. This does not push, merge or commit anything.
+
+The tab also supports **Details**, **Recover checkpoint** and **Cancel /
+discard**. A dirty worktree cannot be cancelled without explicit discard
+permission. Closing AthenZ does not automatically continue any coding task:
+records persist, and operations can be resumed only through an explicit owner
+action. Tasks originating from other AthenZ features remain listed, but cannot
+be promoted into sequential coding tasks by the desktop.
+
+Git and Docker operations run on user-invoked worker threads so the Tk window
+remains responsive. Each operation opens and closes its own private SQLite
+connection. Private diffs, error messages and file paths are displayed only in
+the local application. The desktop does not grant the local model permission to
+run shell commands, train itself, create Git commits, push to remotes, install
+an adapter, or submit a PR.
+
+### Tests and limitations
+
+Headless synthetic integration tests cover approval-hash binding, multiple
+stages, rollback, source-checkout isolation, cancelled work, resumable
+checkpoints, missing Docker, and non-sequence checkpoint refusal. The native
+Tk panel can be smoke-tested using an Xvfb display on Linux. These checks **do
+not** validate the actual Windows HiDPI layout, clipboard interactions, GPU
+inference, Windows filesystem paths or WSL2 Docker setup. A Windows/RTX 3060
+hands-on release test remains necessary, but not blocking independent code
+work at this stage.

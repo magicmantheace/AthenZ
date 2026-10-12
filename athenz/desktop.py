@@ -206,7 +206,7 @@ def launch(home: Path | None = None) -> None:
     chat_tab, review_tab, tasks_tab = (ttk.Frame(book, padding=12) for _ in range(3))
     book.add(chat_tab, text='Chat')
     book.add(review_tab, text='Review memory')
-    book.add(tasks_tab, text='Tasks (read-only)')
+    book.add(tasks_tab, text='Coding tasks')
 
     chat_controls = ttk.Frame(chat_tab)
     chat_controls.pack(fill='x')
@@ -385,29 +385,13 @@ def launch(home: Path | None = None) -> None:
     ttk.Button(review_toolbar, text='Reject selected', command=lambda: review_selected('rejected')).pack(side='right', padx=4)
     ttk.Button(review_toolbar, text='Approve selected', command=lambda: review_selected('approved')).pack(side='right', padx=4)
 
-    tasks_row = ttk.Frame(tasks_tab)
-    tasks_row.pack(fill='x', pady=(0, 8))
-    ttk.Label(tasks_row, text='Stored checkpoints · this screen cannot start or run tasks').pack(side='left')
-    task_tree = ttk.Treeview(tasks_tab, columns=('key','state','revision','task'), show='headings')
-    for col, width in [('key',160),('state',90),('revision',85),('task',620)]:
-        task_tree.heading(col, text=col.title())
-        task_tree.column(col, width=width, stretch=col=='task')
-    task_tree.pack(fill='both', expand=True)
-
-    def reload_tasks() -> None:
-        try:
-            task_tree.delete(*task_tree.get_children())
-            for item in service.tasks():
-                task_tree.insert('', 'end', values=(item['task_key'], item['status'],
-                                                    item['revision'], item['task'][:200]))
-        except Exception as exc:
-            messagebox.showerror('Task list unavailable', str(exc))
-    ttk.Button(tasks_row, text='Refresh', command=reload_tasks).pack(side='right')
+    from .desktop_tasks import DesktopTasks
+    from .task_panel import mount_task_panel
+    mount_task_panel(tasks_tab, window, DesktopTasks(home), set_status)
 
     ttk.Label(window, textvariable=status, anchor='w').pack(fill='x', padx=16, pady=(0, 10))
     refresh_history()
     reload_reviews()
-    reload_tasks()
     window.after(100, drain)
     window.mainloop()
 

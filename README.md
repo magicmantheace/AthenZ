@@ -165,13 +165,18 @@ See [docs/CONVERSION.md](docs/CONVERSION.md) for prerequisites, resource
 warnings, and the commands. **Real CPU/RAM/GGUF compatibility has not yet
 been validated on the target PC.**
 
-## Basic native desktop shell (experimental v0.6)
+## v0.6 desktop coding-task supervision (experimental)
 
-The first desktop interface is available as `athenz-desktop` (or
-`python -m athenz.desktop`). It provides **local chat** in Agent/Twin modes,
-private conversation histories, manual reply feedback, full-record review of
-pending memories/training candidates and **read-only** coding-task status.
-It does not auto-run coding tasks, install models or train weights. Tkinter is
-loaded only when starting the GUI, so headless CLI and CI remain supported.
-The graphical UI and Ollama inference are **not yet tested on the user's PC**;
-see [docs/DESKTOP.md](docs/DESKTOP.md) for prerequisites and limitations.
+Launch `athenz-desktop` to access the **Coding tasks** tab. You can now start
+an explicitly scoped, detached Git worktree from the GUI, request a proposal
+from local Ollama, inspect the **full** proposed diff and **manually approve its
+exact SHA-256**, run syntax validation, advance through up to five stages,
+recover interrupted checkpoints, optionally run container-only tests, and
+export one combined private patch. Every action requires owner interaction;
+model-generated text cannot authorize file edits, shell commands, Git push or
+model deployment. The original repository remains unchanged by the supervised
+sequence workflow. See [docs/DESKTOP.md](docs/DESKTOP.md).
+
+The UI is not a desktop release yet: real Windows rendering, RTX 3060 Ollama
+inference, and WSL2 Docker still require hardware validation. No unattended
+scheduler or self-training daemon is active.
