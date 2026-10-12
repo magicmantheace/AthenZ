@@ -58,9 +58,18 @@ jobs:
         shell: pwsh
         run: |
           Compress-Archive -Path 'dist/AthenZ' -DestinationPath 'AthenZ-windows-unsigned-portable.zip' -CompressionLevel Optimal
+      - name: Verify archive integrity and publish unsigned checksum
+        shell: pwsh
+        run: |
+          $zip = 'AthenZ-windows-unsigned-portable.zip'
+          $digest = (Get-FileHash -Path $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          python -m athenz.portable_integrity $zip --sha256 $digest
+          Set-Content -Path 'AthenZ-windows-unsigned-portable.sha256' -Value "$digest  $zip" -Encoding ascii
       - uses: actions/upload-artifact@v4
         with:
           name: AthenZ-windows-unsigned-portable-${{ github.sha }}
-          path: AthenZ-windows-unsigned-portable.zip
+          path: |
+            AthenZ-windows-unsigned-portable.zip
+            AthenZ-windows-unsigned-portable.sha256
           retention-days: 7
           if-no-files-found: error
