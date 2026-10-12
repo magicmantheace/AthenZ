@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import sqlite3
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, ProxyHandler, HTTPRedirectHandler, build_opener
@@ -15,6 +16,12 @@ from .store import IdentityStore
 
 class LocalModelError(RuntimeError):
     pass
+
+
+# Bound all untrusted loopback HTTP responses before parsing or retaining them.
+# This is a generous limit for ordinary text JSON, not a token-generation cap.
+MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+MAX_REPLY_CHARS = 128 * 1024
 
 
 class _NoRedirect(HTTPRedirectHandler):
@@ -32,10 +39,16 @@ class OllamaClient:
     def __init__(self, endpoint: str | None = None, model: str | None = None):
         self.endpoint = (endpoint or os.environ.get("ATHENZ_OLLAMA_URL", "http://127.0.0.1:11434")).rstrip("/")
         self.model = model or os.environ.get("ATHENZ_MODEL", "qwen3.5:2b")
-        parts = urlsplit(self.endpoint)
-        if (parts.scheme != "http" or parts.hostname not in {"127.0.0.1", "::1", "localhost"}
-                or parts.username is not None or parts.password is not None or parts.path
-                or parts.query or parts.fragment or parts.port is None):
+        try:
+            parts = urlsplit(self.endpoint)
+            valid = (parts.scheme == "http" and
+                     parts.hostname in {"127.0.0.1", "::1", "localhost"} and
+                     parts.username is None and parts.password is None and
+                     not parts.path and not parts.query and not parts.fragment and
+                     parts.port is not None and 1 <= parts.port <= 65535)
+        except ValueError as exc:
+            raise LocalModelError("Invalid local Ollama endpoint") from exc
+        if not valid:
             raise LocalModelError("Only an explicit HTTP loopback Ollama host:port is allowed")
         if not self.model.strip():
             raise LocalModelError("Model name is required")
@@ -52,13 +65,20 @@ class OllamaClient:
                       headers={"Content-Type": "application/json"}, method="POST")
         try:
             with safe_local_open(req, timeout=timeout) as response:
-                data = json.load(response)
+                raw = response.read(MAX_RESPONSE_BYTES + 1)
+            if len(raw) > MAX_RESPONSE_BYTES:
+                raise ValueError("oversized local JSON response")
+            data = json.loads(raw)
             content = data["message"]["content"]
-            if not isinstance(content, str):
-                raise ValueError("non-text model reply")
+            if (not isinstance(content, str) or not content.strip() or
+                    len(content) > MAX_REPLY_CHARS):
+                raise ValueError("invalid local text reply")
             return content
-        except (HTTPError, URLError, OSError, TimeoutError, KeyError, TypeError, ValueError) as exc:
-            raise LocalModelError(f"Local Ollama request failed: {exc}") from exc
+        except (HTTPError, URLError, OSError, TimeoutError, KeyError, TypeError,
+                ValueError, UnicodeError, json.JSONDecodeError) as exc:
+            # Neither HTTP error bodies nor exception messages are safe to
+            # expose: a loopback service may reflect private prompt content.
+            raise LocalModelError("Local Ollama inference failed or returned an invalid reply") from None
 
 
 def answer(store: IdentityStore, model: OllamaClient, prompt: str,
@@ -98,18 +118,34 @@ def main(argv: list[str] | None = None) -> None:
             if not q:
                 continue
             try:
-                if args.model is None and selected is not None:
-                    checked = checked_active_tag(store)
-                    if checked != selected:
-                        raise RoutingError('Active model routing changed; restart the session')
+                if args.model is None and checked_active_tag(store) != selected:
+                    raise RoutingError('Active model routing changed; restart the session')
                 reply = answer(store, model, q, args.mode, history)
+                # A tag, approval or runtime preference can change while a
+                # slow local generation is in flight. Never save its reply
+                # after revocation or re-routing, including None -> candidate.
+                if args.model is None and checked_active_tag(store) != selected:
+                    raise RoutingError('Active model routing changed during inference; reply discarded')
             except (LocalModelError, RoutingError) as error:
                 print(f"Error: {error}")
                 continue
+            # Save an entire turn in ONE transaction. A failed assistant
+            # insert must not leave a user message without a corresponding
+            # reply (the desktop already uses this atomic-write contract).
+            from .store import utc_now
+            try:
+                with store.db:
+                    store.db.execute('''INSERT INTO messages(session,mode,role,content,created_at)
+                        VALUES (?,?,?,?,?)''', (args.session, args.mode, 'user', q, utc_now()))
+                    saved = store.db.execute('''INSERT INTO messages(session,mode,role,content,created_at)
+                        VALUES (?,?,?,?,?)''', (args.session, args.mode, 'assistant', reply, utc_now()))
+            except sqlite3.DatabaseError:
+                # Roll back the complete turn and never expose raw SQL errors
+                # or confidential rows to the terminal or log.
+                print('Error: Could not save complete conversation turn')
+                continue
+            reply_id = int(saved.lastrowid)
             print(f"\nAthenZ> {reply}\n")
-            # Only persist complete turns after successful inference.
-            store.add_message(args.session, args.mode, "user", q)
-            reply_id = store.add_message(args.session, args.mode, "assistant", reply)
             print(f"(reply ID {reply_id} — use 'athenz feedback {reply_id} up|down' to rate)")
             history = store.conversation(args.session, args.mode, limit=10)
     finally:

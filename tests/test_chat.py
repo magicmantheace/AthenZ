@@ -12,7 +12,7 @@ class FakeReply:
         return self
     def __exit__(self, *_):
         return False
-    def read(self):
+    def read(self, count=-1):
         return json.dumps({'message': {'content': 'A model response'}}).encode('utf-8')
 
 
