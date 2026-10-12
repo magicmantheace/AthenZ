@@ -28,11 +28,11 @@ def guide() -> dict:
         'title': 'Getting started with AthenZ',
         'steps': [{'title': title, 'detail': detail, 'requires_owner_action': True}
                   for title, detail in STEPS],
-        'consent_granted': False,
-        'background_enabled': False,
-        'model_installed': False,
-        'hardware_validated': False,
-        'private_data_collected': False,
+        'grants_consent': False,
+        'starts_background_work': False,
+        'installs_models': False,
+        'initiates_hardware_probe': False,
+        'collects_private_data': False,
     }
 
 
