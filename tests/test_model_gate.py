@@ -70,6 +70,22 @@ class EvaluationGateTests(unittest.TestCase):
         self.assertEqual(hashlib.sha256(Path(saved['path']).read_bytes()).hexdigest(), saved['sha256'])
         self.assertEqual(save_report(self.store, report, confirmed=True), saved)
 
+    def test_comparison_carries_aggregate_uncertainty_only(self):
+        reports = self.observations()
+        reports[0]['accuracy_interval_95'] = [0.15, 0.72]
+        reports[1]['accuracy_interval_95'] = [0.46, 0.94]
+        reports[0]['invalid_predictions'] = 2
+        reports[1]['invalid_predictions'] = 0
+        with mock.patch('athenz.model_gate.evaluate_decisions', side_effect=reports):
+            result = compare_models(self.store, Model('base'), Model('candidate'),
+                                    self.sha)
+        self.assertEqual(result['baseline_accuracy_interval_95'], [0.15, 0.72])
+        self.assertEqual(result['candidate_accuracy_interval_95'], [0.46, 0.94])
+        self.assertEqual(result['baseline_invalid_predictions'], 2)
+        self.assertEqual(result['candidate_invalid_predictions'], 0)
+        self.assertNotIn('synthetic held-out scenario', str(result))
+        self.assertEqual(result['promotion'], 'not-authorized')
+
     def test_worse_candidate_not_ready(self):
         with mock.patch('athenz.model_gate.evaluate_decisions', side_effect=self.observations(10, 8)):
             r = compare_models(self.store, Model('base'), Model('candidate'), self.sha)
