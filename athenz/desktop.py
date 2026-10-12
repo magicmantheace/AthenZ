@@ -445,6 +445,8 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
     from .task_panel import mount_task_panel
     mount_task_panel(tasks_tab, window, DesktopTasks(home), set_status)
 
+    # Static getting-started guidance; no model or hardware probing at startup.
+    from .onboarding import guide_text
     # Local readiness screen; no external probes run automatically at startup.
     setup_view = ttk.Frame(setup_tab)
     setup_view.pack(fill='both', expand=True, pady=(10, 8))
@@ -458,6 +460,13 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
     setup_controls.pack(fill='x')
     setup_results: queue.Queue = queue.Queue()
     setup_busy = {'running': False}
+
+    def show_guide() -> None:
+        setup_text.config(state='normal')
+        setup_text.delete('1.0', 'end')
+        setup_text.insert('1.0', guide_text())
+        setup_text.config(state='disabled')
+        set_status('Getting started · No permissions granted and no probes run')
 
     def show_setup(report: dict) -> None:
         lines = ['LOCAL AthenZ READINESS (not GPU certification)', '']
@@ -493,7 +502,7 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
                     'is NOT encrypted and can be large (up to 16 GiB). No upload or activation.'):
                 return
         setup_busy['running'] = True
-        for button in (setup_basic, setup_ollama, setup_gpu, setup_backup, setup_verify, setup_bundle, setup_bundle_verify):
+        for button in (setup_help, setup_basic, setup_ollama, setup_gpu, setup_backup, setup_verify, setup_bundle, setup_bundle_verify):
             button.config(state='disabled')
         set_status('Working locally… no automatic model or coding operations')
         def worker() -> None:
@@ -523,6 +532,8 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
                 setup_results.put(('error', 'Local setup/backup operation failed; inspect private files'))
         threading.Thread(target=worker, name='athenz-local-setup', daemon=True).start()
 
+    setup_help = ttk.Button(setup_controls, text='Getting started', command=show_guide)
+    setup_help.pack(side='left', padx=(0, 8))
     setup_basic = ttk.Button(setup_controls, text='Check prerequisites',
                              command=lambda: refresh_setup())
     setup_basic.pack(side='left', padx=(0, 8))
@@ -551,12 +562,14 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
     ttk.Label(setup_tab, text='Ollama and GPU probes are manual and off by default; a GPU query requires confirmation.').pack(
         anchor='w', pady=(8, 0))
 
+    show_guide()  # Display text only; do not run readiness checks.
+
     def drain_setup() -> None:
         try:
             while True:
                 state, report = setup_results.get_nowait()
                 setup_busy['running'] = False
-                for button in (setup_basic, setup_ollama, setup_gpu, setup_backup, setup_verify, setup_bundle, setup_bundle_verify):
+                for button in (setup_help, setup_basic, setup_ollama, setup_gpu, setup_backup, setup_verify, setup_bundle, setup_bundle_verify):
                     button.config(state='normal')
                 if state == 'ok':
                     show_setup(report)
