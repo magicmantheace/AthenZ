@@ -226,6 +226,13 @@ restore. External Ollama installations and Git worktrees are excluded.
 See [private profile bundle notes](docs/PROFILE_BUNDLES.md).
 
 
+### Keyboard display zoom and scrollable panels (v0.6)
+
+Use Ctrl+Plus/Ctrl+Equals to enlarge desktop text, Ctrl+Minus to reduce it,
+and Ctrl+0 to reset. Zoom is bounded to 80–200% and resets on application
+exit. Chat, memory review and Setup now have scrollbars for long results. This
+does not change permissions or validate Windows HiDPI/screen-reader behavior.
+
 ### Keyboard navigation and portable GUI smoke (v0.6)
 
 Ctrl+1/2/3/4 switch to Chat, Review memory, Coding tasks and Setup; Ctrl+L focuses the chat input. These shortcuts do not authorize reviews or coding. The packaged Windows workflow additionally launches the native four-tab window using an ephemeral private profile via `AthenZ.exe --gui-self-test`, besides the original headless `--self-test`. The real user's profile and Ollama remain untouched by this check. See [desktop documentation](docs/DESKTOP.md) and [Windows portable notes](docs/WINDOWS_PORTABLE.md).
