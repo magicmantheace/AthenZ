@@ -208,7 +208,7 @@ def bootstrap_private_home(home: Path | None = None) -> None:
     ProposalScheduler(home)  # Creates a paused-only queue table, no work.
 
 
-def launch(home: Path | None = None) -> None:
+def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) -> None:
     """Start a foreground Tk interface; it makes no operations on its own."""
     try:
         import tkinter as tk
@@ -222,6 +222,9 @@ def launch(home: Path | None = None) -> None:
         window = tk.Tk()
     except tk.TclError as exc:
         raise DesktopError('No graphical display is available') from exc
+    if smoke_duration_ms is not None and not 100 <= smoke_duration_ms <= 5000:
+        window.destroy()
+        raise DesktopError('GUI smoke duration must be 100–5000 milliseconds')
     window.title('AthenZ — Local AI')
     window.minsize(820, 540)
     window.geometry('1040x690')
@@ -533,11 +536,20 @@ def launch(home: Path | None = None) -> None:
             pass
         window.after(150, drain_setup)
 
+    from .desktop_shortcuts import install_navigation
+    install_navigation(window, book, (chat_tab, review_tab, tasks_tab, setup_tab),
+                       (prompt, review_tree, tasks_tab, setup_basic))
     ttk.Label(window, textvariable=status, anchor='w').pack(fill='x', padx=16, pady=(0, 10))
     refresh_history()
     reload_reviews()
     window.after(100, drain)
     window.after(150, drain_setup)
+    window.after_idle(prompt.focus_set)
+    if smoke_duration_ms is not None:
+        if len(book.tabs()) != 4:
+            window.destroy()
+            raise DesktopError('GUI smoke did not create the expected tabs')
+        window.after(smoke_duration_ms, window.destroy)
     window.mainloop()
 
 
@@ -545,12 +557,19 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description='Local AthenZ desktop shell (no daemon)')
     parser.add_argument('--home', type=Path, default=None,
                         help='Private local AthenZ directory, outside Git')
+    parser.add_argument('--gui-self-test', action='store_true',
+                        help='Open real Tk desktop briefly using a disposable private profile')
     parser.add_argument('--self-test', action='store_true',
                         help='Offline throwaway-profile packaged-runtime smoke; do not open a window')
     args = parser.parse_args(argv)
     if args.self_test:
         from .preflight import desktop_self_test
         desktop_self_test()
+        return
+    if args.gui_self_test:
+        from tempfile import TemporaryDirectory
+        with TemporaryDirectory(prefix='athenz-gui-smoke-') as scratch:
+            launch(Path(scratch) / 'private', smoke_duration_ms=650)
         return
     launch(args.home)
 
