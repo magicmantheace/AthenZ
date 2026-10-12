@@ -279,6 +279,64 @@ class SchedulerTests(unittest.TestCase):
         self.assertEqual(fresh['status'], 'review')
         self.assertEqual(self.ui.detail('demo')['phase'], 'awaiting_review')
 
+    def test_manual_proposal_wins_over_inflight_scheduled_request(self):
+        self.add(); self.scheduler.arm('demo', confirmed=True)
+        entered, release, results = threading.Event(), threading.Event(), []
+        class HeldModel(Model):
+            def generate(self, messages, **kwargs):
+                entered.set()
+                if not release.wait(10):
+                    raise RuntimeError('synthetic inference timeout')
+                return super().generate(messages, **kwargs)
+        worker = threading.Thread(target=lambda: results.append(
+            ProposalScheduler(self.home).run_once(
+                confirmed=True, model_factory=lambda _: HeldModel())))
+        worker.start()
+        try:
+            self.assertTrue(entered.wait(5))
+            manual = self.ui.prepare('demo', model=Model())
+        finally:
+            release.set()
+            worker.join(timeout=10)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(results[0]['status'], 'paused')
+        self.assertEqual(self.scheduler.get('demo')['state'], 'paused')
+        self.assertEqual(self.ui.review('demo')['sha256'], manual['sha256'])
+        with self.scheduler._open() as store:
+            self.assertEqual(store.db.execute(
+                'SELECT count(*) FROM proposals').fetchone()[0], 1)
+
+    def test_scheduled_proposal_wins_over_inflight_manual_request(self):
+        self.add(); self.scheduler.arm('demo', confirmed=True)
+        entered, release, results = threading.Event(), threading.Event(), []
+        class HeldModel(Model):
+            def generate(self, messages, **kwargs):
+                entered.set()
+                if not release.wait(10):
+                    raise RuntimeError('synthetic inference timeout')
+                return super().generate(messages, **kwargs)
+        def foreground():
+            try:
+                results.append(('ok', self.ui.prepare('demo', model=HeldModel())))
+            except Exception as exc:
+                results.append(('error', type(exc).__name__))
+        worker = threading.Thread(target=foreground)
+        worker.start()
+        try:
+            self.assertTrue(entered.wait(5))
+            scheduled = self.scheduler.run_once(
+                confirmed=True, model_factory=lambda _: Model())
+        finally:
+            release.set()
+            worker.join(timeout=10)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(scheduled['status'], 'review')
+        self.assertEqual(results, [('error', 'SequenceError')])
+        self.assertEqual(self.ui.review('demo')['sha256'], scheduled['result']['sha256'])
+        with self.scheduler._open() as store:
+            self.assertEqual(store.db.execute(
+                'SELECT count(*) FROM proposals').fetchone()[0], 1)
+
     def test_pause_after_proposal_commit_reports_paused_queue(self):
         self.add(); self.scheduler.arm('demo', confirmed=True)
         from athenz.sequencer import SequenceController
