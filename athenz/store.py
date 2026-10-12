@@ -230,7 +230,7 @@ class IdentityStore:
         return counts
 
     def list_items(self, table: str, status: str | None = None, limit: int = 200) -> list[dict]:
-        if table not in {"identity", "decisions", "writing_samples", "events", "identity_revisions", "messages", "feedback", "train_pairs", "proposals", "test_runs", "experiences", "episodes", "checkpoints"}:
+        if table not in {"identity", "decisions", "writing_samples", "events", "identity_revisions", "messages", "feedback", "train_pairs", "proposals", "test_runs", "experiences", "episodes", "checkpoints", "episode_disputes", "evidence_artifacts"}:
             raise ValueError("Unsupported table")
         if status is not None and table not in {"identity", "decisions", "writing_samples", "train_pairs", "experiences", "episodes"}:
             raise ValueError("This table does not contain status")
