@@ -9,9 +9,23 @@ from __future__ import annotations
 import hashlib
 import json
 import random
+from math import sqrt
 
 from .store import IdentityStore
 from .prompting import build_messages
+
+
+def _wilson_interval(correct: int, total: int) -> list[float] | None:
+    """95% binomial interval for descriptive reporting only."""
+    if not total:
+        return None
+    z = 1.959963984540054
+    p = correct / total
+    d = 1.0 + z * z / total
+    center = (p + z * z / (2 * total)) / d
+    radius = z * sqrt(p * (1 - p) / total +
+                      z * z / (4 * total * total)) / d
+    return [max(0.0, center - radius), min(1.0, center + radius)]
 
 
 def _fingerprint(rows) -> str:
@@ -55,6 +69,7 @@ def evaluate_decisions(store: IdentityStore, model, *, split: str = 'test',
     reference_sha = _reference_fingerprint(store)
     report = {'split': split, 'seed': seed, 'model': getattr(model, 'model', 'unknown'),
               'total': len(cases), 'correct': 0, 'accuracy': None,
+              'accuracy_interval_95': None, 'invalid_predictions': 0,
               'chance_expected': None, 'heldout_sha256': heldout_sha,
               'reference_sha256': reference_sha, 'cases': []}
     chance = 0.0
@@ -117,6 +132,9 @@ def evaluate_decisions(store: IdentityStore, model, *, split: str = 'test',
         if not isinstance(prediction, str):
             prediction = ''
         prediction = prediction.strip().upper()
+        if prediction not in letters[:len(shuffled)]:
+            report['invalid_predictions'] += 1
+            prediction = ''
         gold = letters[shuffled.index(choice)]
         correct = prediction == gold
         report['correct'] += int(correct)
@@ -128,5 +146,6 @@ def evaluate_decisions(store: IdentityStore, model, *, split: str = 'test',
         raise ValueError('Approved evaluation evidence changed during inference')
     if report['total']:
         report['accuracy'] = report['correct'] / report['total']
+        report['accuracy_interval_95'] = _wilson_interval(report['correct'], report['total'])
         report['chance_expected'] = chance / report['total']
     return report
