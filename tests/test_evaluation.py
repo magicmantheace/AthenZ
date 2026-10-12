@@ -5,7 +5,7 @@ from pathlib import Path
 
 from athenz.evaluation import evaluate_decisions
 from athenz.cli import main
-from athenz.learning import LearningStore
+from athenz.experience import ExperienceStore
 from athenz.prompting import build_messages
 
 
@@ -23,7 +23,7 @@ class DecisionEvaluationTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.store = LearningStore(Path(self.temp.name) / 'private')
+        self.store = ExperienceStore(Path(self.temp.name) / 'private')
         self.addCleanup(self.store.close)
 
     def test_heldout_gold_and_rationale_never_enter_prompt(self):
@@ -123,6 +123,42 @@ class DecisionEvaluationTests(unittest.TestCase):
                 return super().generate(messages, **kwargs)
         with self.assertRaisesRegex(ValueError, 'reference evidence changed'):
             evaluate_decisions(self.store, AlteringModel())
+
+    def test_approved_episode_cannot_expose_heldout_scenario(self):
+        scenario = 'Should the pilot ship a patch without verification?'
+        self.store.add_decision(scenario, 'Wait', 'Unreleased gold rationale',
+            source='synthetic', approved=True, options=['Ship', 'Wait'], split='test')
+        episode = self.store.observe('Patch verification habit',
+            scenario + ' The preferred answer is Wait.', tags=['verification'],
+            source='synthetic')
+        self.store.review_episode(episode, 'approved')
+        model = Stub()
+        with self.assertRaisesRegex(ValueError, 'contaminated'):
+            evaluate_decisions(self.store, model)
+        self.assertEqual(model.calls, [])
+
+    def test_heldout_rationale_collision_blocks_scoring(self):
+        private_rationale = 'UNIQUE PRIVATE RATIONALE SHOULD NOT APPEAR'
+        self.store.add_decision('Can we proceed with an unreviewed change?',
+            'Wait', private_rationale, source='synthetic', approved=True,
+            options=['Proceed', 'Wait'], split='test')
+        self.store.propose('style', 'Owner explanation: ' + private_rationale,
+                           source='synthetic', approved=True)
+        model = Stub()
+        with self.assertRaisesRegex(ValueError, 'contaminated'):
+            evaluate_decisions(self.store, model)
+        self.assertEqual(model.calls, [])
+
+    def test_unapproved_episode_is_not_prompt_contamination(self):
+        scenario = 'Should a candidate be promoted without evidence?'
+        self.store.add_decision(scenario, 'No', 'Keep review gate', source='synthetic',
+            approved=True, options=['Yes', 'No'], split='test')
+        self.store.observe('Unreviewed source', scenario + ' No', tags=['promotion'],
+                           source='synthetic')
+        model = Stub()
+        result = evaluate_decisions(self.store, model)
+        self.assertEqual(result['total'], 1)
+        self.assertEqual(len(model.calls), 1)
 
     def test_safe_prediction_parsing_for_non_object_json(self):
         self.store.add_decision('Test invalid JSON output', 'A', 'Private gold',

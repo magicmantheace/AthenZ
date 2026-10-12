@@ -14,3 +14,14 @@ A SQLite transaction is **not** held across potentially slow model requests. Con
 **Compatibility:** Held-out SHA fingerprints now include case provenance as well as gold choices/options. Older experimental evaluation reports using choice-only fingerprints are intentionally stale for adapter review and should be regenerated after an owner-controlled benchmark; no older model is automatically activated or removed.
 
 **Post-evaluation review gate:** Saving a comparison and later selecting an adapter both recheck current approved references and held-out case provenance. Historical experimental reports missing these stronger fingerprints cannot authorize new adapter selection; regenerate a reviewed comparison.
+
+## Literal held-out context contamination guard (v0.7 groundwork)
+
+Before inference, decision evaluation now fails closed if an approved reference
+profile supplied to Twin Mode includes the held-out scenario verbatim or a
+sufficiently distinctive held-out rationale. The held-out scenario is still
+provided as the **user question**, while its gold choice and rationale remain
+excluded from that question. Unapproved episodes remain excluded from prompts.
+This guard does not detect semantic paraphrases, memorization in model weights,
+or independently certify benchmark separation; those require stronger offline
+provenance and evaluation controls.
