@@ -66,7 +66,7 @@ An adapter registry entry or review selection does NOT affect AthenZ inference, 
 - [x] Basic native Tkinter desktop shell: Agent/Twin local chat and session persistence, manual feedback, full-context review of pending identity/decision/episode/training items, read-only checkpoint status.
 - [x] Thread-separated Ollama work, no shared cross-thread SQLite handle, fail-closed model-route checks and no unreviewed auto-training.
 - [ ] Windows desktop visual/manual integration test, real Ollama inference, polished UX and secure installer.
-- [ ] Supervised background scheduler, task approval interactions, native notifications and lifecycle recovery.
+- [~] Supervised scheduler: bounded opt-in foreground proposal queue implemented; native notifications, stronger cancellation/fencing and lifecycle recovery remain.
 
 ## v0.6 supervised task interface (incremental)
 - [x] Explicit trusted Git repo and owner-selected file-stage entry in the Tk UI.
@@ -81,3 +81,12 @@ An adapter registry entry or review selection does NOT affect AthenZ inference, 
 
 The UI does not run tasks in the background without a user action. User-run
 hardware tests do not currently block further independent engineering.
+
+### v0.6 supervised scheduler (implementation increment)
+
+- [x] Private disabled-by-default coding proposal queue scoped to a pre-existing, owner-selected Git worktree and immutable stage plan.
+- [x] One-shot owner-armed model proposal; manual review/apply/advance remains mandatory for every stage.
+- [x] Transactional single-job lease, explicit pause, owner-directed interrupted-run reconciliation and no automatic replay.
+- [x] Bounded foreground polling CLI and desktop queue/pause/arm/tick controls; never an OS startup service.
+- [ ] Validate live model inference, desktop accessibility, Windows/WSL2 Docker and RTX 3060 integration on target machine.
+- [ ] Installer, trust boundary hardening for concurrent recovery and optional future authorized unattended policy (separate approval design required).

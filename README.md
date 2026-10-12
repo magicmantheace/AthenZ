@@ -180,3 +180,13 @@ sequence workflow. See [docs/DESKTOP.md](docs/DESKTOP.md).
 The UI is not a desktop release yet: real Windows rendering, RTX 3060 Ollama
 inference, and WSL2 Docker still require hardware validation. No unattended
 scheduler or self-training daemon is active.
+
+## Opt-in supervised proposal queue (v0.6)
+
+The desktop Coding tasks panel and `athenz-scheduler` can queue **one local
+Ollama code proposal per owner-armed stage**, with private restart-safe leases,
+manual pause/resume and manual crash reconciliation. It starts disabled; even
+when enabled, it cannot apply patches, execute tests, train models, commit or
+push to Git. Each proposal must still pass independent owner SHA-256 review.
+See [docs/SCHEDULER.md](docs/SCHEDULER.md). Physical Windows and RTX 3060
+integration testing is still outstanding.
