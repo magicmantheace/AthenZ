@@ -1,5 +1,6 @@
 """Backups of synthetic private records only; no cloud services or restore."""
 import json
+from contextlib import closing
 from pathlib import Path
 import tempfile
 import unittest
@@ -30,7 +31,7 @@ class BackupTests(unittest.TestCase):
         snapshot = self.home / 'backups' / f"profile-{created['id']}.sqlite3"
         # Test a separate SQLite reader can recover the reviewed record.
         import sqlite3
-        with sqlite3.connect(snapshot) as db:
+        with closing(sqlite3.connect(snapshot)) as db:
             self.assertEqual(db.execute('SELECT text FROM identity').fetchone()[0], 'Synthetic local data')
 
     def test_backup_consistent_when_live_connection_uses_wal(self):
@@ -40,7 +41,7 @@ class BackupTests(unittest.TestCase):
             latest = create_backup(self.home, confirmed=True)
             self.assertTrue(verify_backup(self.home, latest['id'])['valid'])
             import sqlite3
-            with sqlite3.connect(self.home/'backups'/f"profile-{latest['id']}.sqlite3") as db:
+            with closing(sqlite3.connect(self.home/'backups'/f"profile-{latest['id']}.sqlite3")) as db:
                 self.assertEqual(db.execute('SELECT count(*) FROM identity').fetchone()[0], 2)
         finally:
             store.close()
@@ -85,6 +86,7 @@ class BackupTests(unittest.TestCase):
         b = create_backup(self.home, confirmed=True)
         with self.assertRaisesRegex(BackupError, 'confirm'):
             delete_backup(self.home, b['id'])
+        self.assertTrue(verify_backup(self.home, b['id'])['valid'])
         self.assertTrue(delete_backup(self.home, b['id'], confirmed=True))
         self.assertFalse(delete_backup(self.home, b['id'], confirmed=True))
         self.assertEqual(list_backups(self.home), [])
