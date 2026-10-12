@@ -73,8 +73,18 @@ class ReleaseReadinessTests(unittest.TestCase):
             status_report(symlink)
         self.assertFalse((repo / 'private').exists())
 
+    def test_refuses_existing_shared_private_directory_on_posix(self):
+        import os
+        if os.name == 'nt':
+            self.skipTest('POSIX directory permission checks')
+        self.home.mkdir(mode=0o700)
+        self.home.chmod(0o755)
+        with self.assertRaisesRegex(ReadinessError, 'group or other'):
+            record(self.home, CHECKS[0][0], 'passed', confirmed=True)
+        self.assertFalse((self.home / 'release-acceptance.sqlite3').exists())
+
     def test_refuses_symlinked_database(self):
-        self.home.mkdir()
+        self.home.mkdir(mode=0o700)
         out = self.home.parent / 'other.db'
         out.write_bytes(b'secret')
         (self.home / 'release-acceptance.sqlite3').symlink_to(out)

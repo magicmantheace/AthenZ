@@ -40,6 +40,10 @@ def _private_home(home: Path | None) -> Path:
     resolved = home.resolve()
     if any((folder / '.git').exists() for folder in (resolved, *resolved.parents)):
         raise ReadinessError('Never store acceptance state inside a Git checkout')
+    # A database created within a shared POSIX directory can be read before
+    # its file-mode hardening completes. Refuse unsafe pre-existing homes.
+    if os.name != 'nt' and resolved.is_dir() and (resolved.stat().st_mode & 0o077):
+        raise ReadinessError('Private home must not be accessible to group or other users')
     db = resolved / 'release-acceptance.sqlite3'
     if db.is_symlink() or (db.exists() and not db.is_file()):
         raise ReadinessError('Unsafe private acceptance database')
