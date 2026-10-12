@@ -18,6 +18,7 @@ athenz-training = "athenz.train_cli:main"
 athenz-desktop = "athenz.desktop:main"
 athenz-doctor = "athenz.preflight:main"
 athenz-backup = "athenz.backup:main"
+athenz-profile = "athenz.profile_bundle:main"
 athenz-scheduler = "athenz.schedule_cli:main"
 
 [tool.setuptools.packages.find]

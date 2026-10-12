@@ -110,3 +110,15 @@ hardware tests do not currently block further independent engineering.
 - [ ] Complete versioned whole-profile archive/restore of explicitly selected
   private datasets, adapter files, review artifacts and model provenance.
 - [ ] End-to-end Windows backup/recovery testing and owner-reviewed release UX.
+
+### Selected private profile relocation (experimental v0.6)
+
+- [x] Plaintext, bounded, manifest-hashed ZIP of a consistent SQLite snapshot
+  and explicitly allowed private datasets, reviews, adapters/runs and converted
+  artifacts; disallows symlinks/case collisions/oversized files.
+- [x] Verify archive and per-file SHA-256, recover into a **new only** folder
+  with scheduler leases and active model routing disabled; never overwrite
+  current profile. Owner-authorized CLI; create/verify Desktop Setup buttons.
+- [ ] Optional independently encrypted/exportable backup, reproducible whole-
+  profile consistency under concurrent training, secure model relocation and
+  end-to-end Windows 11 disaster recovery test.

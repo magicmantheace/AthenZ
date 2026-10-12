@@ -1,0 +1,61 @@
+# Selected private profile bundles (experimental v0.6)
+
+This workflow packages a **consistent SQLite snapshot** and a bounded selection
+of private AthenZ artifact files into a local, **unencrypted ZIP**. It is
+opt-in and intended for owner-controlled recovery and relocation; no files are
+uploaded, pushed to Git or automatically activated. This is not an online
+synchronization service, an encrypted vault, or an atomic snapshot of every
+mutable directory. Never share the ZIP or its manifest without reviewing it.
+
+## Include / exclude
+
+Included are `identity.sqlite3` (consistent SQLite online-backup copy) and
+ordinary files under the **explicit allowlist** `datasets/`, `evaluations/`,
+`reviews/`, `runs/`, `conversions/`, and `ollama-imports/`. These may contain
+personal prompts, complete messages, model weights, or other sensitive data.
+
+Not included: Git `worktrees/`, container `snapshots/`, previous `backups/`,
+`bundles/`, arbitrary home contents, base-model files stored elsewhere,
+installed Ollama model images, external repositories, and operating-system
+settings. The restored SQLite records may contain historical absolute paths
+that no longer exist; training/model work must be revalidated by the owner.
+
+Symlinks, hard-linked files, invalid Windows names and case collisions are
+refused. Limits: up to 5,000 files, 2 GiB each, 16 GiB total, and no ZIP
+compression. The operation **fails closed** if the selected private artifacts
+are too large or mutate while being read. If any authorized files change after
+the SQLite snapshot, a new bundle may not reflect an atomic single moment;
+pause training and editing before creating a bundle.
+
+## Explicit workflow
+
+```sh
+athenz-profile create --confirm
+athenz-profile list
+athenz-profile verify <32-hex-bundle-id>
+athenz-profile restore-new <32-hex-bundle-id> \
+  --destination /path/to/brand-new-profile --confirm
+```
+
+`athenz-desktop` also offers **Bundle selected private files…** and **Verify
+latest bundle** in the Setup tab. The desktop does **not** offer one-click
+restoration into a running profile; restore is deliberately an offline CLI
+operation with explicit destination and confirmation.
+
+The restored destination must not exist, must be outside the original AthenZ
+profile and Git checkouts, and must have an existing safe parent. ZIP entries
+are allowlisted and fingerprint-verified again during extraction. Recovery
+saves a `recovery.json` provenance record and **disarms scheduler jobs, clears
+all leases and removes active Ollama routing** in the restored database.
+Nothing is automatically deployed, scheduled or started. The source profile
+is never replaced or deleted. You must intentionally select the new profile
+later (for example `ATHENZ_HOME=/path/to/new-profile`) after inspecting its
+contents and reconciling any missing external files.
+
+Integrity checks (SHA-256 per file, ZIP digest and SQLite integrity) detect
+accidental changes, but **are not cryptographic signatures** against a local
+attacker who can edit the entire bundle and sidecar. Windows filesystem
+permissions are only best-effort. Windows desktop/HiDPI, actual GPU training,
+Ollama weight conversion, and end-to-end target-PC disaster recovery remain
+unverified. Keep an independently encrypted backup in a secure location if
+you need protection from a stolen drive; AthenZ does not manage that encryption.

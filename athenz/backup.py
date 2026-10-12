@@ -181,6 +181,47 @@ def delete_backup(home: Path | None, identifier: str, *, confirmed: bool = False
 
 
 
+def disarm_recovered_database(db_path: Path) -> None:
+    """Require valid schema and drop stale execution authority in recovered DB."""
+    with closing(sqlite3.connect(db_path, timeout=5)) as db:
+        if db.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
+            raise BackupError('Recovered SQLite database failed integrity check')
+        schema = int(db.execute('PRAGMA user_version').fetchone()[0])
+        if not 1 <= schema <= 5:
+            raise BackupError('Recovery database schema is unsupported')
+        with db:
+            # Checkpoint metadata is evidence, NOT permission to execute.
+            # Remove stale runtime preference and disarm all proposal jobs;
+            # their external Git worktrees are deliberately not copied.
+            db.execute("DELETE FROM checkpoints WHERE task_key='ollama_runtime'")
+            db.execute("UPDATE checkpoints SET status='paused' WHERE status='running'")
+            if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='proposal_schedule'").fetchone():
+                db.execute("""UPDATE proposal_schedule SET state='paused', lease=NULL,
+                    last_result='Recovered offline: owner reauthorization required'""")
+        if db.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
+            raise BackupError('Recovered SQLite changes failed integrity check')
+
+
+def validated_new_destination(source_home: Path, destination: Path) -> Path:
+    """Require an absent, standalone profile root; never overwrite any checkout."""
+    dest = Path(destination).expanduser().absolute()
+    if dest.exists() or dest.is_symlink():
+        raise BackupError('Recovery destination must not exist; never overwrite a profile')
+    if not dest.parent.is_dir() or dest.parent.is_symlink():
+        raise BackupError('Destination parent must be an existing, non-symlink directory')
+    parent = dest.parent.resolve(strict=True)
+    if dest.parent != parent:
+        raise BackupError('Recovery destination has a symlinked path component')
+    if dest == source_home or source_home in dest.parents or dest in source_home.parents:
+        raise BackupError('Recover outside the existing AthenZ private profile')
+    if any((path / '.git').exists() or (path / '.git').is_symlink()
+           for path in (parent, *parent.parents)):
+        raise BackupError('Private recovery cannot be placed in a Git checkout')
+    if not dest.name or dest.name in {'.', '..'}:
+        raise BackupError('Choose a new recovery folder name')
+    return dest
+
+
 def restore_to_new_profile(home: Path | None, identifier: str, destination: Path, *,
                            confirmed: bool = False) -> dict:
     """Recover a verified SQLite snapshot into a NEW offline profile, never over live data.
@@ -199,21 +240,7 @@ def restore_to_new_profile(home: Path | None, identifier: str, destination: Path
         snapshot, _ = _paths(_private_backup_root(store), identifier)
     finally:
         store.close()
-    dest = Path(destination).expanduser().absolute()
-    if dest.exists() or dest.is_symlink():
-        raise BackupError('Recovery destination must not exist; never overwrite a profile')
-    if not dest.parent.is_dir() or dest.parent.is_symlink():
-        raise BackupError('Destination parent must be an existing, non-symlink directory')
-    parent = dest.parent.resolve(strict=True)
-    if dest.parent != parent:
-        raise BackupError('Recovery destination has a symlinked path component')
-    if dest == source_home or source_home in dest.parents or dest in source_home.parents:
-        raise BackupError('Recover outside the existing AthenZ private profile')
-    if any((path / '.git').exists() or (path / '.git').is_symlink()
-           for path in (parent, *parent.parents)):
-        raise BackupError('Private recovery cannot be placed in a Git checkout')
-    if not dest.name or dest.name in {'.', '..'}:
-        raise BackupError('Choose a new recovery folder name')
+    dest = validated_new_destination(source_home, destination)
     os.mkdir(dest, mode=0o700)  # atomic: existing destination causes failure
     db_path = dest / 'identity.sqlite3'
     provenance = dest / 'recovery.json'
@@ -231,23 +258,7 @@ def restore_to_new_profile(home: Path | None, identifier: str, destination: Path
         copied_sha, copied_size = _checksum(db_path)
         if copied_sha != verified['sha256'] or copied_size != verified['size']:
             raise BackupError('Recovery source changed during copy')
-        with closing(sqlite3.connect(db_path, timeout=5)) as db:
-            if db.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
-                raise BackupError('Recovered SQLite database failed integrity check')
-            schema = int(db.execute('PRAGMA user_version').fetchone()[0])
-            if not 1 <= schema <= 5:
-                raise BackupError('Recovery database schema is unsupported')
-            with db:
-                # Checkpoint metadata is evidence, NOT permission to execute.
-                # Remove stale runtime preference and disarm all proposal jobs;
-                # their external Git worktrees are deliberately not copied.
-                db.execute("DELETE FROM checkpoints WHERE task_key='ollama_runtime'")
-                db.execute("UPDATE checkpoints SET status='paused' WHERE status='running'")
-                if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='proposal_schedule'").fetchone():
-                    db.execute("""UPDATE proposal_schedule SET state='paused', lease=NULL,
-                        last_result='Recovered offline: owner reauthorization required'""")
-            if db.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
-                raise BackupError('Recovered SQLite changes failed integrity check')
+        disarm_recovered_database(db_path)
         restored_sha, _ = _checksum(db_path)
         record = {'schema': 1, 'source_backup_id': identifier,
                   'source_sha256': verified['sha256'],

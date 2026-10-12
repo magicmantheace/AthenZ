@@ -213,3 +213,14 @@ scheduled proposals pause, in-flight leases are cleared and active Ollama
 routing resets to unselected. Only SQLite data is recovered; model files and
 other private artifacts require separate owner-controlled recovery. See
 [the recovery notes](docs/BACKUP.md). No automatic overwrite or activation.
+
+## Selected private profile bundles (v0.6)
+
+`athenz-profile create --confirm` builds a local, **unencrypted** ZIP of a
+consistent SQLite snapshot plus selected private datasets, reviews, model-run
+artifacts and conversions. `athenz-profile verify <id>` checks its contents;
+`athenz-profile restore-new <id> --destination <new-absent-dir> --confirm`
+recovers only into a **new** profile, with scheduler and model-routing authority
+disarmed. The Setup tab supports explicit creation/verification, not automatic
+restore. External Ollama installations and Git worktrees are excluded.
+See [private profile bundle notes](docs/PROFILE_BUNDLES.md).
