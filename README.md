@@ -240,3 +240,7 @@ supersede one approved predecessor, with explicit SHA-256 re-entry and
 transactional freshness validation. The `athenz-conflicts` CLI offers the same
 workflow. Matching tags do not establish semantic contradiction; no model can
 resolve the conflict automatically. See [docs/CONFLICT_REVIEW.md](docs/CONFLICT_REVIEW.md).
+
+## Owner-confirmed local inference readiness (experimental)
+
+`athenz-inference-check --model qwen3.5:2b --confirm` issues one short, public, synthetic prompt to a previously installed Ollama model over loopback-only HTTP. It checks that text can actually be generated, without reading your profile or storing the response. The request is bounded, does not pull models, and can be given a 1–60-second timeout. No GPU, CUDA, WSL2, model quality, training, or deployment is certified. See [docs/INFERENCE_READINESS.md](docs/INFERENCE_READINESS.md).
