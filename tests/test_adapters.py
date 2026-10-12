@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from athenz.adapters import (AdapterError, inspect_adapter, register_adapter,
+from athenz.adapters import (AdapterError, _read_review, inspect_adapter, register_adapter,
                             verified_registry_entry, selection, select_for_review,
                             rollback_selection)
 from athenz.experience import ExperienceStore
@@ -59,6 +59,20 @@ class AdaptersTests(unittest.TestCase):
              'heldout_fingerprint':_heldout_fingerprint(self.store,'calibration',12),
              'reference_fingerprint':_reference_fingerprint(self.store)}
         return save_report(self.store,obj,confirmed=True)['sha256']
+
+    def test_existing_nonfinite_review_reports_are_never_eligible(self):
+        valid_sha = self.report()
+        directory = self.store.home / 'evaluations'
+        valid = json.loads((directory / ('eval-' + valid_sha + '.json')).read_text())
+        for value in (float('nan'), float('inf'), True):
+            with self.subTest(value=str(value)):
+                tampered = {**valid, 'accuracy_gain': value}
+                payload = (json.dumps(tampered, sort_keys=True,
+                                      separators=(',', ':')) + '\n').encode('utf-8')
+                sha = hashlib.sha256(payload).hexdigest()
+                (directory / ('eval-' + sha + '.json')).write_bytes(payload)
+                with self.assertRaisesRegex(AdapterError, 'not eligible'):
+                    _read_review(self.store, sha)
 
     def test_completed_run_registration_requires_explicit_confirmation(self):
         run=self.completed()
