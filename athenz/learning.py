@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from contextlib import nullcontext
 from .store import IdentityStore, STATES, utc_now
 
 
@@ -101,7 +102,8 @@ class LearningStore(IdentityStore):
     def new_proposal(self, repo: str, task: str, changes: list[dict], summary: str) -> int:
         if not changes or not task.strip():
             raise ValueError('Proposal must have task and changes')
-        with self.db:
+        # Do not prematurely commit the scheduler's lease-fenced transaction.
+        with (nullcontext() if self.db.in_transaction else self.db):
             cur = self.db.execute('''INSERT INTO proposals(repo,task,changes_json,summary,status,created_at)
                                     VALUES (?,?,?,?,'proposed',?)''',
                                   (repo, task, json.dumps(changes), summary[:1000], utc_now()))

@@ -50,6 +50,9 @@ trusted-local-user boundary.
   checkpoint is created. The owner must explicitly re-arm to request another
   proposal. A pause observed before sending the request also prevents the
   outbound model call. Pausing cannot forcibly interrupt an active HTTP request.
+- Proposal insertion and sequence transition to `awaiting_review` now share
+  one lease-fenced SQLite transaction. A failed checkpoint rolls back the
+  proposal instead of leaving an orphan reviewable record.
 - If the process terminates before recording completion, the persistent
   `running` lease prevents a second scheduler from replaying the call.
   **First ensure the old worker is no longer running.** Then explicitly use

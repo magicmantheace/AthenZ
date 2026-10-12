@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from contextlib import nullcontext
 import re
 from pathlib import Path
 
@@ -129,7 +130,8 @@ class ExperienceStore(LearningStore):
         state_json = json.dumps(state, ensure_ascii=False, allow_nan=False)
         if len(state_json.encode("utf-8")) > 16000:
             raise ValueError("Checkpoint state exceeds limit")
-        with self.db:
+        # Keep checkpoint and scheduled proposal in one caller transaction.
+        with (nullcontext() if self.db.in_transaction else self.db):
             old = self.db.execute("SELECT revision FROM checkpoints WHERE task_key=?", (key,)).fetchone()
             if old is None:
                 if expected_revision not in (None, 0):

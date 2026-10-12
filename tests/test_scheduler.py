@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 import subprocess
 import tempfile
@@ -197,6 +198,86 @@ class SchedulerTests(unittest.TestCase):
         self.assertEqual(result['status'], 'paused')
         with scheduler._open() as store:
             self.assertEqual(store.db.execute('SELECT count(*) FROM proposals').fetchone()[0], 0)
+
+    def test_failed_checkpoint_rolls_back_new_proposal(self):
+        self.add(); self.scheduler.arm('demo', confirmed=True)
+        # The proposal INSERT succeeds but the later checkpoint fails.
+        with mock.patch.object(ExperienceStore, 'checkpoint',
+                               side_effect=RuntimeError('synthetic write failure')):
+            result = self.scheduler.run_once(
+                confirmed=True, model_factory=lambda _: Model())
+        self.assertEqual(result['status'], 'paused')
+        self.assertEqual(self.ui.detail('demo')['phase'], 'ready')
+        with self.scheduler._open() as store:
+            self.assertEqual(store.db.execute(
+                'SELECT count(*) FROM proposals').fetchone()[0], 0)
+        self.scheduler.arm('demo', confirmed=True)
+        fresh = self.scheduler.run_once(confirmed=True, model_factory=lambda _: Model())
+        self.assertEqual(fresh['status'], 'review')
+        with self.scheduler._open() as store:
+            self.assertEqual(store.db.execute(
+                'SELECT count(*) FROM proposals').fetchone()[0], 1)
+
+    def test_cross_thread_pause_during_generation_discards_response(self):
+        self.add(); self.scheduler.arm('demo', confirmed=True)
+        entered, release = threading.Event(), threading.Event()
+        results = []
+        class BlockingModel(Model):
+            def generate(self, messages, **kwargs):
+                entered.set()
+                if not release.wait(10):
+                    raise RuntimeError('synthetic model timed out')
+                return super().generate(messages, **kwargs)
+        worker = threading.Thread(target=lambda: results.append(
+            ProposalScheduler(self.home).run_once(
+                confirmed=True, model_factory=lambda _: BlockingModel())))
+        worker.start()
+        try:
+            self.assertTrue(entered.wait(5), 'generation did not begin')
+            self.scheduler.pause('demo')
+        finally:
+            release.set()
+            worker.join(timeout=10)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(results[0]['status'], 'paused')
+        self.assertEqual(self.ui.detail('demo')['phase'], 'ready')
+        self.assertIsNone(self.scheduler.get('demo')['lease'])
+        with self.scheduler._open() as store:
+            self.assertEqual(store.db.execute(
+                'SELECT count(*) FROM proposals').fetchone()[0], 0)
+
+    def test_recovered_old_worker_cannot_overwrite_new_arm(self):
+        self.add(); self.scheduler.arm('demo', confirmed=True)
+        entered, release = threading.Event(), threading.Event()
+        results = []
+        class BlockingModel(Model):
+            def generate(self, messages, **kwargs):
+                entered.set()
+                if not release.wait(10):
+                    raise RuntimeError('synthetic model timed out')
+                return super().generate(messages, **kwargs)
+        old = threading.Thread(target=lambda: results.append(
+            ProposalScheduler(self.home).run_once(
+                confirmed=True, model_factory=lambda _: BlockingModel())))
+        old.start()
+        try:
+            self.assertTrue(entered.wait(5), 'generation did not begin')
+            # Simulate mistaken owner recovery while old inference is alive.
+            recovered = self.scheduler.recover('demo', confirmed=True)
+            self.assertEqual(recovered['state'], 'paused')
+            self.scheduler.arm('demo', confirmed=True)
+        finally:
+            release.set()
+            old.join(timeout=10)
+        self.assertFalse(old.is_alive())
+        self.assertEqual(results[0]['status'], 'paused')
+        self.assertEqual(self.scheduler.get('demo')['state'], 'armed')
+        with self.scheduler._open() as store:
+            self.assertEqual(store.db.execute(
+                'SELECT count(*) FROM proposals').fetchone()[0], 0)
+        fresh = self.scheduler.run_once(confirmed=True, model_factory=lambda _: Model())
+        self.assertEqual(fresh['status'], 'review')
+        self.assertEqual(self.ui.detail('demo')['phase'], 'awaiting_review')
 
     def test_model_failure_does_not_loop_or_run_host_commands(self):
         self.add(); self.scheduler.arm('demo', confirmed=True)

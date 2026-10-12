@@ -57,7 +57,7 @@ def allowed_file(repo: Path, rel: str) -> Path:
 
 
 def propose(store: LearningStore, model, repo_path: str, task: str, files: list[str],
-            *, before_persist=None) -> int:
+            *, before_persist=None, after_persist=None) -> int:
     repo = Path(repo_path).expanduser().resolve()
     if not repo.is_dir() or not task.strip() or not 1 <= len(files) <= 4 or len(set(files)) != len(files):
         raise ValueError('Select a repository, task and 1-4 distinct existing files')
@@ -94,14 +94,19 @@ def propose(store: LearningStore, model, repo_path: str, task: str, files: list[
     if not changes:
         raise ValueError('No changes proposed')
     if before_persist is None:
+        if after_persist is not None:
+            raise ValueError('Atomic completion callback requires a persistence fence')
         return store.new_proposal(str(repo), task, changes, str(response.get('summary', '')))
-    # The scheduler owns an explicit lease. Compare it under the SAME SQLite
-    # writer lock used to persist the proposal: a pause winning that lock
-    # must abort saving model output. Never hold this lock over inference.
+    # Lease check, proposal insert and review checkpoint share one SQLite writer
+    # transaction. A failed checkpoint must not leave an orphan proposal.
     with store.db:
         store.db.execute('BEGIN IMMEDIATE')
         before_persist()
-        return store.new_proposal(str(repo), task, changes, str(response.get('summary', '')))
+        proposal_id = store.new_proposal(str(repo), task, changes,
+                                         str(response.get('summary', '')))
+        if after_persist is not None:
+            after_persist(proposal_id)
+        return proposal_id
 
 
 def diff_for(store: LearningStore, proposal_id: int) -> str:
