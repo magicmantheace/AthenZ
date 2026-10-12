@@ -146,11 +146,17 @@ exercise this fresh-profile path; native Windows rendering remains unverified.
 
 The **Setup** tab provides optional local readiness checks. Nothing is probed
 at launch: **Check prerequisites** reports Python, Tcl/Tk, Git and Docker
-availability in sanitized form; **Probe Ollama (loopback only)** explicitly
-issues a `GET /api/version` request, using the existing proxy-disabled,
-redirect-refusing HTTP transport. No private memory or prompts are transmitted.
-Availability alone does not verify CUDA, actual Docker execution or model
-inference. Checks are descriptive and never grant execution permissions.
+availability in sanitized form. **Probe Ollama (loopback only)** explicitly
+issues a `GET /api/version` request using the proxy-disabled,
+redirect-refusing HTTP transport. **Probe NVIDIA VRAM…** requires a separate
+confirmation dialog before running the read-only `nvidia-smi` inventory. Only
+GPU count and approximate VRAM totals appear: no GPU serial numbers, UUIDs,
+model names, process output, or personal records. The three diagnostic buttons
+have separate permissions; allowing Ollama to be probed never authorizes a GPU
+query, and merely opening Setup never contacts either. Backup operations are
+on their own row for keyboard navigation and narrow screens. Availability
+does not verify CUDA, actual Docker execution, inference, or QLoRA feasibility.
+Checks are descriptive and never grant execution permissions.
 
 A Windows-only GitHub Actions job builds an **unsigned portable onedir ZIP**
 with PyInstaller and runs an offline packaged `--self-test` using a disposable

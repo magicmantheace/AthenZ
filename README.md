@@ -243,4 +243,9 @@ Use `athenz-stage-portable stage ZIP DESTINATION --sha256 VERIFIED_SHA256 --name
 
 ## Optional local NVIDIA VRAM readiness
 
+In the desktop **Setup** tab, **Probe NVIDIA VRAM…** opens an explicit
+confirmation dialog before the local hardware query. Neither startup nor the
+other readiness buttons triggers it. The existing CLI alternative is
+`athenz-doctor --probe-gpu --confirm` and remains fully opt-in.
+
 Use `athenz-doctor --probe-gpu --confirm` to request a read-only **local** NVIDIA VRAM inventory. The tool returns only sanitized GPU counts and MiB totals; no GPU UUID, serial number, model name, raw process output, personal data or external request is collected. It is **off by default** and is not proof that CUDA, WSL2, Ollama or QLoRA training works. See [docs/HARDWARE_PROBE.md](docs/HARDWARE_PROBE.md).

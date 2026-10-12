@@ -193,6 +193,19 @@ class DesktopService:
             store.close()
 
 
+def owner_requested_readiness(*, probe_ollama: bool = False, probe_gpu: bool = False,
+                              gpu_confirmed: bool = False) -> dict:
+    """Never run local GPU probing from the GUI without explicit owner consent.
+
+    Basic checks and the independent Ollama probe cannot opt into nvidia-smi.
+    """
+    if probe_gpu and not gpu_confirmed:
+        raise DesktopError('Explicit GPU probe confirmation is required')
+    from .preflight import installation_report
+    return installation_report(probe_ollama=probe_ollama, probe_gpu=probe_gpu,
+                               confirmed=probe_gpu and gpu_confirmed)
+
+
 def bootstrap_private_home(home: Path | None = None) -> None:
     """Migrate private state BEFORE chat/review/task UI workers can race.
 
@@ -423,7 +436,6 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
     mount_task_panel(tasks_tab, window, DesktopTasks(home), set_status)
 
     # Local readiness screen; no external probes run automatically at startup.
-    from .preflight import installation_report
     setup_text = tk.Text(setup_tab, wrap='word', state='disabled', height=14,
                          padx=10, pady=10)
     setup_text.pack(fill='both', expand=True, pady=(10, 8))
@@ -443,8 +455,15 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
         setup_text.insert('1.0', '\n'.join(lines))
         setup_text.config(state='disabled')
 
-    def refresh_setup(*, ollama: bool = False, backup_action: str | None = None) -> None:
+    def refresh_setup(*, ollama: bool = False, gpu: bool = False, backup_action: str | None = None) -> None:
         if setup_busy['running']:
+            return
+        if gpu and not messagebox.askyesno(
+                'Allow local NVIDIA VRAM check?',
+                'Run read-only nvidia-smi on THIS computer to observe approximate '
+                'GPU memory totals? No UUIDs, serial numbers, prompts, or model '
+                'files will be collected. This does not validate CUDA or training.',
+                parent=window):
             return
         if backup_action == 'create':
             if not messagebox.askyesno('Create private SQLite backup',
@@ -459,7 +478,7 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
                     'is NOT encrypted and can be large (up to 16 GiB). No upload or activation.'):
                 return
         setup_busy['running'] = True
-        for button in (setup_basic, setup_ollama, setup_backup, setup_verify, setup_bundle, setup_bundle_verify):
+        for button in (setup_basic, setup_ollama, setup_gpu, setup_backup, setup_verify, setup_bundle, setup_bundle_verify):
             button.config(state='disabled')
         set_status('Working locally… no automatic model or coding operations')
         def worker() -> None:
@@ -483,7 +502,7 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
                         raise DesktopError('No local profile bundles found')
                     setup_results.put(('bundle-verified', verify_bundle(home, ids[0])))
                 else:
-                    setup_results.put(('ok', installation_report(probe_ollama=ollama)))
+                    setup_results.put(('ok', owner_requested_readiness(probe_ollama=ollama, probe_gpu=gpu, gpu_confirmed=gpu)))
             except Exception:
                 # No exception traceback or sensitive filesystem paths in UI.
                 setup_results.put(('error', 'Local setup/backup operation failed; inspect private files'))
@@ -495,10 +514,15 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
     setup_ollama = ttk.Button(setup_controls, text='Probe Ollama (loopback only)',
                               command=lambda: refresh_setup(ollama=True))
     setup_ollama.pack(side='left')
-    setup_backup = ttk.Button(setup_controls, text='Back up private SQLite…',
+    setup_gpu = ttk.Button(setup_controls, text='Probe NVIDIA VRAM…',
+                           command=lambda: refresh_setup(gpu=True))
+    setup_gpu.pack(side='left', padx=(8, 0))
+    backup_controls = ttk.Frame(setup_tab)
+    backup_controls.pack(fill='x', pady=(6, 0))
+    setup_backup = ttk.Button(backup_controls, text='Back up private SQLite…',
                               command=lambda: refresh_setup(backup_action='create'))
     setup_backup.pack(side='left', padx=(8, 4))
-    setup_verify = ttk.Button(setup_controls, text='Verify latest backup',
+    setup_verify = ttk.Button(backup_controls, text='Verify latest backup',
                               command=lambda: refresh_setup(backup_action='verify'))
     setup_verify.pack(side='left')
     bundle_controls = ttk.Frame(setup_tab)
@@ -509,7 +533,7 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
     setup_bundle_verify = ttk.Button(bundle_controls, text='Verify latest bundle',
                                      command=lambda: refresh_setup(backup_action='bundle-verify'))
     setup_bundle_verify.pack(side='left')
-    ttk.Label(setup_tab, text='Ollama is contacted only when you press its probe button.').pack(
+    ttk.Label(setup_tab, text='Ollama and GPU probes are manual and off by default; a GPU query requires confirmation.').pack(
         anchor='w', pady=(8, 0))
 
     def drain_setup() -> None:
@@ -517,7 +541,7 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
             while True:
                 state, report = setup_results.get_nowait()
                 setup_busy['running'] = False
-                for button in (setup_basic, setup_ollama, setup_backup, setup_verify, setup_bundle, setup_bundle_verify):
+                for button in (setup_basic, setup_ollama, setup_gpu, setup_backup, setup_verify, setup_bundle, setup_bundle_verify):
                     button.config(state='normal')
                 if state == 'ok':
                     show_setup(report)
