@@ -35,22 +35,21 @@ aid. Approve/reject opens the **entire private source record** first, requires
 an explicit confirmation, and rechecks pending status before modifying it.
 There is no automatic memory approval or model training.
 
-**Tasks:** Read-only view of local checkpoint keys, statuses and revisions.
-It intentionally provides no shell, Git, Docker, or unattended task-start
-button. The separate command-line coding worker remains available.
+**Coding tasks:** Supervised worktree patches require exact-digest owner approval, bounded syntax checking and optional confirmed Docker tests. The paused-by-default proposal queue can prepare one explicitly armed stage, but cannot apply it, commit, push or deploy.
 
 ## Limits and acceptance testing
 
 - This is an early native desktop shell, not a polished installer or tray app.
-- Headless CI tests cover service/database/privacy behavior and CLI help only;
-  **they cannot prove Tkinter rendering, DPI behavior or Ollama performance**.
+- Headless CI covers service/database/privacy behavior. A packaged Windows GUI
+  smoke now opens and closes the real four-tab window on a disposable profile;
+  it still cannot prove HiDPI usability, screen-reader support or Ollama performance.
 - Tkinter must be included in the local Python distribution, and a graphical
   session is required. Linux headless CI does not launch a window.
 - Private memory currently uses SQLite permissions, not OS keychain-backed
   encryption; review data stays on this local screen.
-- More refined navigation, model-download/onboarding, streaming responses,
-  task approvals, pause/recovery controls, and Windows packaging are future
-  v0.6/v0.9 milestones.
+- Keyboard navigation, first-run guidance, supervised approvals, queue
+  pause/recovery and unsigned portable Windows builds exist. Streaming
+  responses, native accessibility acceptance and a signed installer remain future work.
 
 You do **not** need to install or test this immediately to unblock development.
 We will flag hardware-specific testing when it becomes necessary.
