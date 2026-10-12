@@ -57,3 +57,7 @@ inference, Docker under WSL2, supply-chain review, signing, installer/update
 rollback and verified private backup/restore still need dedicated work.
 These checks must not be marked complete solely because the Windows CI
 application smoke succeeds.
+
+### Native-window CI startup check
+
+The Windows portable workflow now runs both `AthenZ.exe --self-test` (headless Tcl/SQLite check) and `AthenZ.exe --gui-self-test` (opens the real four-tab Tk interface against a temporary profile and exits). The GUI run has a 20-second watchdog. This is a CI-level smoke test and does not constitute a human-visible Windows 11 usability, keyboard screen-reader, HiDPI, GPU, or model-training acceptance test. Neither smoke test is permitted to send private prompts, activate models, or start work.
