@@ -39,3 +39,36 @@ for copies on other media. A checksum detects accidental/local changes; it
 is not a cryptographic signature against a malicious local actor who can edit
 both files. This is **not encrypted cloud backup or a complete disaster
 recovery solution**.
+
+## Offline recovery into a new profile (v0.6)
+
+A reviewed backup can be **recovered into a new, absent directory**. This is
+not an in-place restore and cannot overwrite your existing profile:
+
+```sh
+athenz-backup verify <32-character-backup-id>
+athenz-backup restore-new <32-character-backup-id> \
+  --destination /path/to/new-empty-profile --confirm
+# Carefully inspect the recovered profile before explicitly switching ATHENZ_HOME.
+```
+
+The destination's parent must exist and be outside a Git checkout and the
+original AthenZ home. The destination itself **must not exist**. Recovery
+rechecks the snapshot checksum, copies it without overwriting any files and
+writes `recovery.json` showing original and post-recovery database checksums.
+The live profile, its backups and its SQLite WAL remain untouched.
+
+For safety, recovered scheduler jobs are **paused and disarmed**, existing
+in-flight leases are cleared, any active Ollama candidate-routing preference
+is removed and running checkpoints are paused. A restored checkpoint is
+historical information, not permission to resume its worktree. The external
+Git worktrees are not copied; do not attempt to resume old tasks without a
+new owner review. The original snapshot is left unchanged for audit.
+
+This currently restores **SQLite records only**: reviewed memory, feedback,
+conversation text, decisions, metadata and checkpoints. It does **not**
+restore private training JSONL, model adapters, datasets, GGUFs, referenced
+base weights, exported reviews, or local Ollama model installations. These
+external artifacts must be separately verified/reconstructed before model
+training or candidate activation. The recovered database contains sensitive
+plaintext, and a restored directory is **not automatically made active**.

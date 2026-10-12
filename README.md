@@ -204,10 +204,12 @@ Ollama**. Python CLI: `athenz-doctor [--probe-ollama]`.
 See [Windows portable notes](docs/WINDOWS_PORTABLE.md). Native Windows display,
 HiDPI, CUDA GPU and WSL2 Docker tests remain outstanding.
 
-## Manual local backups (v0.6)
+## Offline recovery to a separate profile
 
-The Desktop Setup tab and `athenz-backup` CLI can create, list and verify
-**plaintext SQLite-only** snapshots under your private AthenZ home using the
-SQLite backup API (no automatic upload, Git commit, model activation or
-restore). These are **not encrypted**, do not include model/dataset files and
-must be protected like the original private database. See [Backup limitations](docs/BACKUP.md).
+`athenz-backup restore-new <id> --destination /path/to/new-profile --confirm`
+recovers a checksum-verified SQLite snapshot into a **brand-new directory**;
+never into the current live profile. Operational permissions are disarmed:
+scheduled proposals pause, in-flight leases are cleared and active Ollama
+routing resets to unselected. Only SQLite data is recovered; model files and
+other private artifacts require separate owner-controlled recovery. See
+[the recovery notes](docs/BACKUP.md). No automatic overwrite or activation.
