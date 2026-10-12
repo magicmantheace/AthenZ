@@ -8,6 +8,7 @@ from unittest import mock
 
 from athenz.experience import ExperienceStore
 from athenz.model_gate import BenchmarkError, compare_models, save_report
+from athenz.evaluation import _fingerprint, _heldout_rows, _reference_fingerprint
 from athenz.training import build_dataset
 
 
@@ -40,8 +41,11 @@ class EvaluationGateTests(unittest.TestCase):
     def observations(self, first=5, second=9, offset=0):
         ids = [r['id'] for r in self.store.db.execute(
             "SELECT id FROM decisions WHERE split='calibration' ORDER BY id")]
+        heldout_sha = _fingerprint(_heldout_rows(self.store, 'calibration', 100))
+        reference_sha = _reference_fingerprint(self.store)
         def one(correct, tweak=0):
-            return {'total':len(ids), 'correct':correct, 'accuracy':correct/len(ids),
+            return {'heldout_sha256': heldout_sha, 'reference_sha256': reference_sha,
+                    'total':len(ids), 'correct':correct, 'accuracy':correct/len(ids),
                     'chance_expected':0.5, 'cases':[{'id':i + tweak,'expected':'A',
                     'predicted':'A','correct': True} for i in ids]}
         return [one(first), one(second, offset)]
@@ -117,6 +121,33 @@ class EvaluationGateTests(unittest.TestCase):
             return next_result
         with mock.patch('athenz.model_gate.evaluate_decisions', side_effect=fake):
             with self.assertRaisesRegex(Exception, 'stale'):
+                compare_models(self.store, Model('base'), Model('candidate'), self.sha)
+
+
+    def test_modified_approved_reference_during_model_comparison_is_rejected(self):
+        calls = iter(self.observations())
+        def fake(*args, **kwargs):
+            result = next(calls)
+            if result['correct'] == 5:
+                self.store.propose('style', 'A new approved writing preference',
+                                   source='synthetic', approved=True)
+            return result
+        with mock.patch('athenz.model_gate.evaluate_decisions', side_effect=fake):
+            with self.assertRaisesRegex(BenchmarkError, 'reference evidence changed'):
+                compare_models(self.store, Model('base'), Model('candidate'), self.sha)
+
+    def test_mismatched_reference_fingerprint_refused(self):
+        cases = self.observations()
+        cases[1]['reference_sha256'] = '0' * 64
+        with mock.patch('athenz.model_gate.evaluate_decisions', side_effect=cases):
+            with self.assertRaisesRegex(BenchmarkError, 'stale evidence snapshots'):
+                compare_models(self.store, Model('base'), Model('candidate'), self.sha)
+
+    def test_mismatched_heldout_provenance_refused(self):
+        cases = self.observations()
+        cases[1]['heldout_sha256'] = '0' * 64
+        with mock.patch('athenz.model_gate.evaluate_decisions', side_effect=cases):
+            with self.assertRaisesRegex(BenchmarkError, 'stale evidence snapshots'):
                 compare_models(self.store, Model('base'), Model('candidate'), self.sha)
 
 

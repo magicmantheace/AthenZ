@@ -90,5 +90,55 @@ class DecisionEvaluationTests(unittest.TestCase):
             evaluate_decisions(self.store, Stub(), split='train')
 
 
+    def test_revoked_heldout_decision_during_model_generation_fails(self):
+        did = self.store.add_decision('Do not ship a pending patch?', 'Wait', 'Private gold reason',
+            source='synthetic', approved=True, options=['Ship', 'Wait'], split='test')
+        class RevokingModel(Stub):
+            def generate(inner, messages, **kwargs):
+                self.store.decision_status(did, 'rejected')
+                return super().generate(messages, **kwargs)
+        with self.assertRaisesRegex(ValueError, 'Held-out decision changed'):
+            evaluate_decisions(self.store, RevokingModel())
+
+    def test_changed_gold_rationale_midflight_fails_without_leaking_it(self):
+        did = self.store.add_decision('Synthetic question', 'Wait', 'Original private reason',
+            source='synthetic', approved=True, options=['Ship', 'Wait'], split='test')
+        class UpdatingModel(Stub):
+            def generate(inner, messages, **kwargs):
+                self.store.db.execute("UPDATE decisions SET rationale=? WHERE id=?",
+                                      ('Revised sensitive rationale', did))
+                self.store.db.commit()
+                return super().generate(messages, **kwargs)
+        with self.assertRaisesRegex(ValueError, 'Held-out decision changed') as caught:
+            evaluate_decisions(self.store, UpdatingModel())
+        self.assertNotIn('Revised sensitive rationale', str(caught.exception))
+
+    def test_approved_prompt_reference_change_midflight_fails(self):
+        self.store.add_decision('A heldout question', 'A', 'Gold not transmitted',
+            source='synthetic', approved=True, options=['A', 'B'], split='test')
+        class AlteringModel(Stub):
+            def generate(inner, messages, **kwargs):
+                self.store.propose('style', 'Newly reviewed approved preference',
+                                   source='synthetic', approved=True)
+                return super().generate(messages, **kwargs)
+        with self.assertRaisesRegex(ValueError, 'reference evidence changed'):
+            evaluate_decisions(self.store, AlteringModel())
+
+    def test_safe_prediction_parsing_for_non_object_json(self):
+        self.store.add_decision('Test invalid JSON output', 'A', 'Private gold',
+            source='synthetic', approved=True, options=['A', 'B'], split='test')
+        stub = Stub()
+        stub.generate = lambda *args, **kwargs: '[]'
+        report = evaluate_decisions(self.store, stub)
+        self.assertEqual(report['correct'], 0)
+        self.assertIsNone(report['cases'][0]['predicted'])
+
+    def test_invalid_seed_and_limit_inputs_rejected(self):
+        for kwargs in ({'seed': True}, {'seed': -1}, {'seed': 2**32},
+                       {'limit': True}, {'limit': 0}):
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                evaluate_decisions(self.store, Stub(), **kwargs)
+
+
 if __name__ == '__main__':
     unittest.main()

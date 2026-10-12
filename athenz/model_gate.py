@@ -10,7 +10,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from .evaluation import evaluate_decisions
+from .evaluation import evaluate_decisions, _fingerprint, _heldout_rows, _reference_fingerprint
 from .experience import ExperienceStore
 from .training import DatasetError, _private_root, _write_new, verify_dataset
 
@@ -20,12 +20,12 @@ class BenchmarkError(ValueError):
 
 
 def _heldout_fingerprint(store: ExperienceStore, split: str, limit: int) -> str:
-    """Capture question, choices, rationale-free gold and options before inference."""
-    rows = [list(r) for r in store.db.execute(
-        "SELECT id,scenario,choice,options_json FROM decisions "
-        "WHERE status='approved' AND split=? ORDER BY id LIMIT ?", (split, limit))]
-    payload = json.dumps(rows, separators=(',', ':'), ensure_ascii=False).encode('utf-8')
-    return hashlib.sha256(payload).hexdigest()
+    """Bound held-out case content and provenance for approval-gate checks.
+
+    Earlier pre-alpha reports that used choice-only fingerprints intentionally
+    require fresh review after this format strengthens its evidence scope.
+    """
+    return _fingerprint(_heldout_rows(store, split, limit))
 
 
 def compare_models(store: ExperienceStore, baseline_model, candidate_model,
@@ -46,9 +46,12 @@ def compare_models(store: ExperienceStore, baseline_model, candidate_model,
         raise BenchmarkError('Baseline and candidate have identical installed model digests')
     verify_dataset(store, dataset_sha256)
     initial_cases_sha = _heldout_fingerprint(store, split, limit)
+    initial_reference_sha = _reference_fingerprint(store)
     first = evaluate_decisions(store, baseline_model, split=split, limit=limit, seed=seed)
     if model_digest(baseline) != initial_baseline_digest:
         raise BenchmarkError('Baseline model digest changed during evaluation')
+    if _reference_fingerprint(store) != initial_reference_sha:
+        raise BenchmarkError('Approved reference evidence changed while comparing models')
     second = evaluate_decisions(store, candidate_model, split=split, limit=limit, seed=seed)
     if (model_digest(baseline) != initial_baseline_digest or
             model_digest(candidate) != initial_candidate_digest):
@@ -65,11 +68,21 @@ def compare_models(store: ExperienceStore, baseline_model, candidate_model,
         ('approved', split, limit)).fetchall()]
     if ids_a != current_ids or _heldout_fingerprint(store, split, limit) != initial_cases_sha:
         raise BenchmarkError('Evaluation decisions changed while comparing models')
+    if _reference_fingerprint(store) != initial_reference_sha:
+        raise BenchmarkError('Approved reference evidence changed while comparing models')
+    # Reject mismatched evidence snapshots even when model scores look plausible.
+    # Both evaluation reports must be tied to this same private reference set.
+    if (first.get('heldout_sha256') != initial_cases_sha or
+            second.get('heldout_sha256') != initial_cases_sha or
+            first.get('reference_sha256') != initial_reference_sha or
+            second.get('reference_sha256') != initial_reference_sha):
+        raise BenchmarkError('Evaluations used unequal or stale evidence snapshots')
     # Do not embed scenarios, gold answers or model predictions in the report.
     result = {'schema': 1, 'dataset_sha256': dataset_sha256, 'split': split,
               'seed': seed, 'cases': len(ids_a),
               'case_ids_sha256': hashlib.sha256(json.dumps(ids_a).encode()).hexdigest(),
               'heldout_fingerprint': initial_cases_sha,
+              'reference_fingerprint': initial_reference_sha,
               'baseline': baseline, 'candidate': candidate,
               'baseline_digest': initial_baseline_digest,
               'candidate_digest': initial_candidate_digest,
