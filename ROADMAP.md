@@ -122,3 +122,10 @@ hardware tests do not currently block further independent engineering.
 - [ ] Optional independently encrypted/exportable backup, reproducible whole-
   profile consistency under concurrent training, secure model relocation and
   end-to-end Windows 11 disaster recovery test.
+
+
+### 2026-10-11 v0.6 — Offline staged portable upgrades (PR pending)
+- [x] Explicitly confirmed side-by-side, new-only staging of a SHA-256-verified Windows portable ZIP; no OS installation or automatic activation.
+- [x] Bounded safe ZIP extraction, copied immutable input validation, per-file integrity manifest, staged tree verification and tamper detection.
+- [x] Synthetic rollback/collision/traversal/symlink tests; Windows CI stages/verifies the exact packaged ZIP.
+- [ ] No publisher authentication, signed installer, in-place update, automatic rollback, GPU/WSL2/HiDPI hardware validation.
