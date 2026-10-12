@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from athenz.evaluation import evaluate_decisions, _wilson_interval
@@ -191,6 +192,18 @@ class DecisionEvaluationTests(unittest.TestCase):
         self.assertAlmostEqual(_wilson_interval(1, 1)[0], 0.206549314377)
         self.assertAlmostEqual(_wilson_interval(1, 2)[0], 0.094531205734)
         self.assertEqual(_wilson_interval(2, 2)[1], 1.0)
+
+    def test_unexpected_reference_prompt_structure_fails_closed(self):
+        self.store.add_decision('Synthetic held-out question', 'Wait', 'Gold',
+            source='synthetic', approved=True, options=['Ship', 'Wait'], split='test')
+        messages = [{'role': 'system', 'content': 'policy'},
+                    {'role': 'system', 'content': 'unexpected reference format'},
+                    {'role': 'user', 'content': 'question'}]
+        model = Stub()
+        with mock.patch('athenz.evaluation.build_messages', return_value=messages):
+            with self.assertRaisesRegex(ValueError, 'reference context changed'):
+                evaluate_decisions(self.store, model)
+        self.assertEqual(model.calls, [])
 
     def test_safe_prediction_parsing_for_non_object_json(self):
         self.store.add_decision('Test invalid JSON output', 'A', 'Private gold',
