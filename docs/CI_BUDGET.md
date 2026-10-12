@@ -87,3 +87,20 @@ The runner is not an attestation of Windows GUI/CUDA behavior, and it never
 checks GitHub billing. Keep feature pushes on non-triggering archive refs
 until the manual-only workflows are in force on `main` and the owner approves
 resuming cloud validation.
+
+## Source-completeness preflight before full regression or wheel builds
+
+Run `python -m tools.source_inventory --root .` to check that every Python
+source/test file from the pinned archival baseline is present as a real local
+file, without contacting GitHub. `tools/local_validation.py --mode full`,
+`--mode wheel`, and `--mode all` now refuse an incomplete source checkout **before**
+starting a test or build. The `policy` mode remains usable on an incomplete
+checkout for checking the manual-only workflow rules.
+
+The inventory is a **path-only completeness** check anchored to archival
+commit `f42aaf82273a5cc2b7604aee576729160c3a0ca1`; it permits edited and
+new development files. It does **not** verify file bytes, trust, GitHub freshness,
+model weights, full behavior, or real PC hardware. Regenerate and review its
+expected path list if the project's source tree changes substantially. The
+runner returns `source_inventory_complete` separately from
+`source_content_verified: false` to prevent an unsupported attestation claim.

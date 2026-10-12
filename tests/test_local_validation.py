@@ -22,6 +22,11 @@ class LocalValidationTests(unittest.TestCase):
         (self.root / 'pyproject.toml').write_text('[project]\nname="athenz-local"\nversion="0.1"\n')
         (self.root / 'athenz' / '__init__.py').write_text('')
         (self.root / 'tools' / 'ci_budget.py').write_text('')
+        # Existing tests exercise process commands with synthetic source trees.
+        # Source completeness itself is exercised in test_source_inventory.py.
+        completeness = patch('tools.source_inventory.check_complete', return_value={'complete': True})
+        completeness.start()
+        self.addCleanup(completeness.stop)
         for name in ('tests.yml', 'windows-portable.yml', 'docker-integration.yml'):
             (self.root / '.github' / 'workflows' / name).write_text(
                 'name: test\non:\n  workflow_dispatch:\njobs:\n  noop:\n    runs-on: ubuntu-latest\n')
@@ -32,6 +37,7 @@ class LocalValidationTests(unittest.TestCase):
         self.assertTrue(result['passed'])
         self.assertFalse(result['github_actions_invoked'])
         self.assertFalse(result['network_sandboxed'])
+        self.assertFalse(result['source_inventory_complete'])
         self.assertEqual(result['workflows_audited'], 3)
         self.assertEqual(run.call_args.args[0][1:], ['-m', 'unittest', 'tests.test_ci_budget', '-q'])
         self.assertFalse(run.call_args.kwargs['shell'])
@@ -42,6 +48,8 @@ class LocalValidationTests(unittest.TestCase):
         with patch('tools.local_validation.subprocess.run', return_value=subprocess.CompletedProcess([], 0)) as run:
             result = validate(self.root, mode='all')
         self.assertTrue(result['passed'])
+        self.assertTrue(result['source_inventory_complete'])
+        self.assertFalse(result['source_content_verified'])
         self.assertEqual([c['check'] for c in result['checks']],
                          ['policy-unit-tests', 'full-unit-suite', 'wheel-no-index'])
         self.assertEqual(run.call_count, 3)

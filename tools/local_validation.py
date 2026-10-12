@@ -58,8 +58,13 @@ def validate(root: Path, *, mode: str = 'policy', timeout: int = 180) -> dict:
         raise LocalValidationError('Timeout must be 1–900 seconds')
     root = _valid_root(root)
     from tools.ci_budget import audit_workflows
+    from tools.source_inventory import check_complete
     # A run never proceeds if CI may automatically trigger in the checkout.
     audited = audit_workflows(root)
+    # The archival checkout must be complete before declaring its wheel or
+    # entire test suite good. Ordinary edited development files are allowed.
+    # Policy-only checks remain usable while reconstructing a checkout.
+    inventory = check_complete(root) if mode in ('full', 'wheel', 'all') else None
     steps = []
     if mode in ('policy', 'all'):
         steps.append(('policy-unit-tests', [sys.executable, '-m', 'unittest', 'tests.test_ci_budget', '-q']))
@@ -99,7 +104,9 @@ def validate(root: Path, *, mode: str = 'policy', timeout: int = 180) -> dict:
     return {'schema': 1, 'mode': mode, 'checks': results,
             'passed': bool(results) and all(c['passed'] for c in results),
             'workflows_audited': len(audited), 'github_actions_invoked': False,
-            'hardware_validated': False, 'network_sandboxed': False}
+            'hardware_validated': False, 'network_sandboxed': False,
+            'source_inventory_complete': inventory is not None,
+            'source_content_verified': False}
 
 
 def main(argv: list[str] | None = None) -> None:

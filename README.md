@@ -2,10 +2,10 @@
 
 Private, local-first digital twin and coding assistant. **Twin Mode** simulates
 style and choices based on approved examples; **Agent Mode** provides independent
-assistance without claiming to be the owner. Neither chat mode modifies model weights. A separate owner-confirmed,
-experimental fine-tuning pipeline exists, but target GPU training has not been validated.
+assistance without claiming to be the owner. Neither mode modifies model weights
+without a separate future training and evaluation pipeline.
 
-**Status: experimental v0.6 alpha (not a release).** Human review is required for identity
+**Status: experimental v0.5 pre-release.** Human review is required for identity
 claims and file changes. Task checkpoints, scoped patch proposals, reviewed
 feedback, episodic memory and the review-gated foreground controller are
 implemented. There is no unattended daemon, automatic cloud publishing, automatic
@@ -50,8 +50,7 @@ the `athenz-worker test` opt-in Docker runner with a trusted, digest-pinned imag
 There is no host-side project test command or Git commit/push action.
 
 Your reviewed feedback and independently checked results may inform future
-prompt context. Model-weight updates are opt-in experiments, never initiated by chat feedback;
-training on the target RTX 3060 remains unverified.
+prompt context. Model-weight updates are a separate future milestone.
 
 See [ROADMAP.md](ROADMAP.md), [AGENTS.md](AGENTS.md),
 [docs/LEARNING.md](docs/LEARNING.md), [docs/WORKER.md](docs/WORKER.md), and
@@ -214,65 +213,3 @@ scheduled proposals pause, in-flight leases are cleared and active Ollama
 routing resets to unselected. Only SQLite data is recovered; model files and
 other private artifacts require separate owner-controlled recovery. See
 [the recovery notes](docs/BACKUP.md). No automatic overwrite or activation.
-
-## Selected private profile bundles (v0.6)
-
-`athenz-profile create --confirm` builds a local, **unencrypted** ZIP of a
-consistent SQLite snapshot plus selected private datasets, reviews, model-run
-artifacts and conversions. `athenz-profile verify <id>` checks its contents;
-`athenz-profile restore-new <id> --destination <new-absent-dir> --confirm`
-recovers only into a **new** profile, with scheduler and model-routing authority
-disarmed. The Setup tab supports explicit creation/verification, not automatic
-restore. External Ollama installations and Git worktrees are excluded.
-See [private profile bundle notes](docs/PROFILE_BUNDLES.md).
-
-
-### Keyboard display zoom and scrollable panels (v0.6)
-
-Use Ctrl+Plus/Ctrl+Equals to enlarge desktop text, Ctrl+Minus to reduce it,
-and Ctrl+0 to reset. Zoom is bounded to 80–200% and resets on application
-exit. Chat, memory review and Setup now have scrollbars for long results. This
-does not change permissions or validate Windows HiDPI/screen-reader behavior.
-
-### Keyboard navigation and portable GUI smoke (v0.6)
-
-Ctrl+1/2/3/4 switch to Chat, Review memory, Coding tasks and Setup; Ctrl+L focuses the chat input. These shortcuts do not authorize reviews or coding. The packaged Windows workflow additionally launches the native four-tab window using an ephemeral private profile via `AthenZ.exe --gui-self-test`, besides the original headless `--self-test`. The real user's profile and Ollama remain untouched by this check. See [desktop documentation](docs/DESKTOP.md) and [Windows portable notes](docs/WINDOWS_PORTABLE.md).
-
-
-### Unsigned Windows ZIP integrity
-
-The portable Windows CI build now also checks the ZIP structure and uploads a SHA-256 text file. `athenz-verify-portable ZIP_PATH --sha256 EXPECTED_DIGEST` checks the checksum, CRCs, root executable, unsafe names, collisions, symlinks and suspicious expansion **without extracting** it. This detects corruption and some archive hazards, not malicious code or impersonation: the checksum is **not a publisher signature**. See [Windows portable instructions](docs/WINDOWS_PORTABLE.md).
-
-
-## Side-by-side portable update staging (experimental)
-
-Use `athenz-stage-portable stage ZIP DESTINATION --sha256 VERIFIED_SHA256 --name AthenZ-version --confirm` to copy an independently verified unsigned Windows ZIP to a **new** adjacent version folder. `athenz-stage-portable verify VERSION_FOLDER` rechecks its file manifest without running it. This never installs software, switches the active version, updates an existing folder, changes `~/.athenz`, or contacts Ollama. The unsigned ZIP and its checksum do **not** establish publisher authenticity. See [docs/PORTABLE_STAGING.md](docs/PORTABLE_STAGING.md) for limitations and safe manual rollback precautions.
-
-
-## Optional local NVIDIA VRAM readiness
-
-In the desktop **Setup** tab, **Probe NVIDIA VRAM…** opens an explicit
-confirmation dialog before the local hardware query. Neither startup nor the
-other readiness buttons triggers it. The existing CLI alternative is
-`athenz-doctor --probe-gpu --confirm` and remains fully opt-in.
-
-Use `athenz-doctor --probe-gpu --confirm` to request a read-only **local** NVIDIA VRAM inventory. The tool returns only sanitized GPU counts and MiB totals; no GPU UUID, serial number, model name, raw process output, personal data or external request is collected. It is **off by default** and is not proof that CUDA, WSL2, Ollama or QLoRA training works. See [docs/HARDWARE_PROBE.md](docs/HARDWARE_PROBE.md).
-
-## First-run guidance (v0.6)
-
-The Setup tab displays a read-only **Getting started** guide and lets you
-reopen it without running probes. `athenz-onboarding` and
-`athenz-onboarding --json` provide the same public offline instructions
-without accessing the private profile. All actual checks and state-changing
-operations remain separate and explicitly owner-initiated.
-See [docs/ONBOARDING.md](docs/ONBOARDING.md).
-
-## Offline local validation and owner release checklist (archival work)
-
-`python -m tools.local_validation --mode policy|full|wheel|all` runs selected
-local checks without invoking GitHub Actions; see [CI budget](docs/CI_BUDGET.md).
-`athenz-release-readiness plan|status|record` documents and privately records
-**owner-reported** target-hardware observations; those records never certify
-release readiness or authorize a model deployment. See
-[release readiness](docs/RELEASE_READINESS.md). This archival branch has not
-been merged to `main`, and the current Actions quota remains protected.
