@@ -1,7 +1,7 @@
 """Synthetic health inspections; no real user profile or network access."""
 from __future__ import annotations
 
-from contextlib import redirect_stdout
+from contextlib import closing, redirect_stdout
 import io
 import json
 import os
@@ -24,7 +24,7 @@ class ProfileHealthTests(unittest.TestCase):
     def _make_database(self):
         self.home.mkdir(mode=0o700)
         db = self.home / 'identity.sqlite3'
-        with sqlite3.connect(db) as conn:
+        with closing(sqlite3.connect(db)) as conn, conn:
             conn.execute('PRAGMA user_version=5')
             conn.execute('CREATE TABLE secrets (private_text TEXT)')
             conn.execute("INSERT INTO secrets VALUES ('DO-NOT-REVEAL-ME')")
@@ -66,7 +66,10 @@ class ProfileHealthTests(unittest.TestCase):
         self._make_database()
         target = self.parent / 'external'
         target.write_text('private', encoding='utf-8')
-        (self.home / 'identity.sqlite3-wal').symlink_to(target)
+        try:
+            (self.home / 'identity.sqlite3-wal').symlink_to(target)
+        except (OSError, NotImplementedError):
+            self.skipTest('Symlink creation not permitted on this system')
         with self.assertRaisesRegex(ProfileHealthError, 'symlinked SQLite'):
             inspect_profile(self.home, confirmed=True)
         self.assertEqual(target.read_text(), 'private')
@@ -75,9 +78,13 @@ class ProfileHealthTests(unittest.TestCase):
         target = self.parent / 'external'
         target.mkdir()
         link = self.parent / 'alias'
-        link.symlink_to(target, target_is_directory=True)
-        with self.assertRaisesRegex(ProfileHealthError, 'symlinked private profile'):
-            inspect_profile(link / 'subdir', confirmed=True)
+        try:
+            link.symlink_to(target, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            pass  # Git-checkout refusal below still needs coverage on Windows.
+        else:
+            with self.assertRaisesRegex(ProfileHealthError, 'symlinked private profile'):
+                inspect_profile(link / 'subdir', confirmed=True)
         repo = self.parent / 'repo'
         repo.mkdir()
         (repo / '.git').mkdir()
@@ -110,7 +117,7 @@ class ProfileHealthTests(unittest.TestCase):
     def test_wal_live_reader_does_not_mutate_records(self):
         self._make_database()
         db = self.home / 'identity.sqlite3'
-        with sqlite3.connect(db) as writer:
+        with closing(sqlite3.connect(db)) as writer, writer:
             writer.execute('PRAGMA journal_mode=WAL')
             writer.execute("INSERT INTO secrets VALUES ('WAL-private-value')")
             result = inspect_profile(self.home, confirmed=True)

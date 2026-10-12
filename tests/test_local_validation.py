@@ -113,7 +113,10 @@ class LocalValidationTests(unittest.TestCase):
 
     def test_focused_mode_rejects_symlinked_test_module(self):
         filename = self.root / 'tests' / 'test_ci_budget.py'
-        filename.symlink_to(self.root / 'pyproject.toml')
+        try:
+            filename.symlink_to(self.root / 'pyproject.toml')
+        except (OSError, NotImplementedError):
+            self.skipTest('Symlinks unavailable on this Windows runner')
         with self.assertRaisesRegex(LocalValidationError, 'unsafe'):
             validate(self.root, mode='focused', tests=('tests.test_ci_budget',))
 
