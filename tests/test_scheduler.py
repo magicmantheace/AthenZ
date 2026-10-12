@@ -303,6 +303,49 @@ class SchedulerTests(unittest.TestCase):
         self.assertIsNone(recovered['lease'])
         self.assertEqual(self.ui.detail('demo')['phase'], 'ready')
 
+    def test_recover_without_lease_has_no_sequence_side_effects(self):
+        self.add()
+        # Recovery must refuse an idle job BEFORE SequenceController.recover,
+        # which might otherwise finish an unrelated rollback.
+        with mock.patch('athenz.scheduler.SequenceController.recover') as recovered:
+            with self.assertRaisesRegex(SchedulerError, 'No interrupted job'):
+                self.scheduler.recover('demo', confirmed=True)
+        recovered.assert_not_called()
+
+    def test_recovery_fences_lease_replaced_mid_reconciliation(self):
+        self.add(); self.scheduler.arm('demo', confirmed=True)
+        with self.scheduler._open() as store:
+            with store.db:
+                store.db.execute(
+                    "UPDATE proposal_schedule SET state='running',lease='old-worker' "
+                    "WHERE task_key='demo'")
+        def replace_lease(*_args):
+            with self.scheduler._open() as store:
+                with store.db:
+                    store.db.execute(
+                        "UPDATE proposal_schedule SET state='running',lease='new-worker' "
+                        "WHERE task_key='demo'")
+        with mock.patch('athenz.scheduler.SequenceController.recover',
+                        side_effect=replace_lease):
+            with self.assertRaisesRegex(SchedulerError, 'lease changed'):
+                self.scheduler.recover('demo', confirmed=True)
+        state = self.scheduler.get('demo')
+        self.assertEqual(state['state'], 'running')
+        self.assertEqual(state['lease'], 'new-worker')
+        self.assertEqual(self.ui.detail('demo')['phase'], 'ready')
+
+    def test_recovery_refuses_scope_change_before_sequence_side_effects(self):
+        self.add(); self.scheduler.arm('demo', confirmed=True)
+        with self.scheduler._open() as store:
+            with store.db:
+                store.db.execute(
+                    "UPDATE proposal_schedule SET state='running',lease='old-worker',"
+                    "scope_sha256=? WHERE task_key='demo'", ('0' * 64,))
+        with mock.patch('athenz.scheduler.SequenceController.recover') as recovered:
+            with self.assertRaisesRegex(SchedulerError, 'authority changed'):
+                self.scheduler.recover('demo', confirmed=True)
+        recovered.assert_not_called()
+
     def test_scope_tamper_prevents_inference(self):
         self.add(); self.scheduler.arm('demo', confirmed=True)
         with self.scheduler._open() as store:

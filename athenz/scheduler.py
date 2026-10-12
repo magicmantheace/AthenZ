@@ -173,14 +173,24 @@ class ProposalScheduler:
             raise SchedulerError('Confirm manual reconciliation of the interrupted job')
         self._key(key)
         with self._open() as store:
+            # Check authorization before sequence recovery can touch the
+            # worktree (including completing an interrupted rollback).
+            prior = store.db.execute(
+                'SELECT * FROM proposal_schedule WHERE task_key=?', (key,)).fetchone()
+            if not prior or prior['state'] not in ('running', 'paused') or not prior['lease']:
+                raise SchedulerError('No interrupted job needs manual reconciliation')
+            original_lease = prior['lease']
             ctl, item, seq = self._load(store, key)
+            if _scope(item, seq) != prior['scope_sha256']:
+                raise SchedulerError('Scheduled task authority changed')
             ctl.recover(key)  # checks workspace and completes pending rollback only
             ctl, item, seq = self._load(store, key)
             with store.db:
                 store.db.execute('BEGIN IMMEDIATE')
                 row = store.db.execute('SELECT * FROM proposal_schedule WHERE task_key=?', (key,)).fetchone()
-                if not row or row['state'] not in ('running', 'paused') or not row['lease']:
-                    raise SchedulerError('No interrupted job needs manual reconciliation')
+                if (not row or row['state'] not in ('running', 'paused')
+                        or row['lease'] != original_lease):
+                    raise SchedulerError('Interrupted lease changed during recovery; reload job')
                 if _scope(item, seq) != row['scope_sha256']:
                     raise SchedulerError('Scheduled task authority changed')
                 target = 'review' if seq['phase'] == 'awaiting_review' else 'paused'

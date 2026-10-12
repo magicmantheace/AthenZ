@@ -58,6 +58,9 @@ trusted-local-user boundary.
   **First ensure the old worker is no longer running.** Then explicitly use
   `athenz-scheduler recover TASK --confirm`. Recovery examines the sequence
   checkpoint; it does not contact the model or approve any code.
+  Recovery checks the existing lease and authorized scope before any sequence
+  repair, then refuses to clear the lease if another process replaced it while
+  recovery was underway. The owner still must stop the old worker first.
 - Any unexpected worktree edits or changes to the originally authorized task,
   repository, base commit, worktree or stage scopes block inference.
 - To remove a queue entry without deleting reviewed code or worktrees, pause
