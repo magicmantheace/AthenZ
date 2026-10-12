@@ -215,3 +215,9 @@ committed can be undone. The button remains disabled until a worker finishes.
 The feature never changes approved memory, scheduler permissions, code patches
 or model weights. Synthetic concurrency and atomic-turn tests are included;
 real Windows/Ollama integration testing is still outstanding.
+
+Closing the desktop while a reply is generating also requests discard before the
+model worker stores its response. Closing the window does not forcibly terminate
+Ollama, and a reply committed before the close cannot be retroactively revoked.
+A virtual-display integration test exercises this behavior with a synthetic
+in-flight model request and ensures no conversation was persisted.

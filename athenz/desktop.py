@@ -661,7 +661,19 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
         if 'Getting started with AthenZ' not in setup_text.get('1.0', 'end'):
             window.destroy()
             raise DesktopError('GUI smoke did not render offline setup guidance')
+        if cancel_button.cget('text') != 'Cancel reply' or str(cancel_button.cget('state')) != 'disabled':
+            window.destroy()
+            raise DesktopError('GUI smoke did not start with reply cancellation disabled')
         window.after(smoke_duration_ms, window.destroy)
+    def on_close() -> None:
+        # Closing the UI withdraws consent to persist a reply still in flight.
+        # The Ollama call itself may finish after the window disappears.
+        gate = active['gate']
+        if gate is not None:
+            gate.request_cancel()
+        window.destroy()
+
+    window.protocol('WM_DELETE_WINDOW', on_close)
     window.mainloop()
 
 
