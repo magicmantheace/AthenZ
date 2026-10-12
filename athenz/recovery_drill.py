@@ -41,6 +41,19 @@ def rehearse_sqlite_backup(home: Path | None, identifier: str, *,
         raise RecoveryDrillError('Explicit --confirm is required for a recovery rehearsal')
     if not isinstance(identifier, str) or not ID.fullmatch(identifier):
         raise RecoveryDrillError('Choose a valid 32-character private SQLite backup identifier')
+    # The backup verifier uses ExperienceStore, which creates/migrates a
+    # profile on open. Refuse absent/unsafe sources before calling it so an
+    # accidental rehearsal cannot bootstrap a new private identity database.
+    from .profile_health import _home_location
+    source_home = _home_location(home)
+    database = source_home / 'identity.sqlite3'
+    backup_root = source_home / 'backups'
+    snapshot = backup_root / ('profile-' + identifier + '.sqlite3')
+    manifest = backup_root / ('profile-' + identifier + '.manifest.json')
+    if (not source_home.is_dir() or database.is_symlink() or not database.is_file()
+            or backup_root.is_symlink() or not backup_root.is_dir()
+            or any(p.is_symlink() or not p.is_file() for p in (snapshot, manifest))):
+        raise RecoveryDrillError('Existing private profile and SQLite snapshot required')
     # Deliberately do not print arbitrary paths, backup content or raw errors.
     checked = verify_backup(home, identifier)
     if checked.get('valid') is not True or checked.get('scope') != 'sqlite-only':
@@ -60,8 +73,6 @@ def rehearse_sqlite_backup(home: Path | None, identifier: str, *,
     for part in (parent, *parent.parents):
         if part.is_symlink() or (part / '.git').exists() or (part / '.git').is_symlink():
             raise RecoveryDrillError('Scratch directory cannot be within a Git checkout')
-    from .profile_health import _home_location
-    source_home = _home_location(home)
     if parent == source_home or source_home in parent.parents:
         raise RecoveryDrillError('Scratch directory must be separate from the live private profile')
     try:

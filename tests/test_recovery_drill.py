@@ -140,6 +140,7 @@ class RecoveryDrillTests(unittest.TestCase):
         with self.assertRaises(Exception):
             rehearse_sqlite_backup(self.home, 'f' * 32, confirmed=True, scratch_root=self.scratch)
         self.assertEqual(list(self.scratch.iterdir()), [])
+        self.assertFalse(self.home.exists(), 'Missing backup must not initialize a profile')
 
 
 if __name__ == '__main__':
