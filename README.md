@@ -5,7 +5,7 @@ style and choices based on approved examples; **Agent Mode** provides independen
 assistance without claiming to be the owner. Neither mode modifies model weights
 without a separate future training and evaluation pipeline.
 
-**Status: experimental v0.5 pre-release.** Human review is required for identity
+**Status: experimental v0.6 alpha (not a release).** Human review is required for identity
 claims and file changes. Task checkpoints, scoped patch proposals, reviewed
 feedback, episodic memory and the review-gated foreground controller are
 implemented. There is no unattended daemon, automatic cloud publishing, automatic
