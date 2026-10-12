@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 import zipfile
-from athenz.portable_integrity import PortableArchiveError, verify_portable_zip
+from athenz.portable_integrity import PortableArchiveError, verify_portable_zip, _safe_name
 
 
 class IntegrityTests(unittest.TestCase):
@@ -34,12 +34,17 @@ class IntegrityTests(unittest.TestCase):
             verify_portable_zip(self.path, 'fake')
 
     def test_refuses_traversal_and_windows_unsafe_names(self):
-        for name in ('AthenZ/../evil.exe', 'AthenZ/CON.txt', 'AthenZ/dir\\hack',
+        for name in ('AthenZ/../evil.exe', 'AthenZ/CON.txt',
                      'AthenZ/bad:stream', 'AthenZ/space. ', '/AthenZ/fake.exe'):
             with self.subTest(name=name):
                 sha = self.pack([('AthenZ/AthenZ.exe', b'a'), (name, b'x')])
                 with self.assertRaises(PortableArchiveError):
                     verify_portable_zip(self.path, sha)
+
+    def test_backslash_rejected_independently_of_zip_writer_normalization(self):
+        # Python's Windows zipfile normalizes native backslashes when writing.
+        with self.assertRaises(PortableArchiveError):
+            _safe_name('AthenZ/dir\\hack')
 
     def test_case_collision_and_missing_executable(self):
         sha = self.pack([('AthenZ/AthenZ.exe', b'a'), ('AthenZ/LIB', b'a'), ('AthenZ/lib', b'b')])
