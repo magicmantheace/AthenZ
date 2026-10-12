@@ -135,3 +135,9 @@ requires confirming that no prior scheduler process is still running.
 No proposal is prepared merely because the window is open. To run a bounded
 foreground polling loop separately, use `athenz-scheduler serve --confirm`.
 See [SCHEDULER.md](SCHEDULER.md) for explicit commands and recovery cautions.
+
+On first launch, the desktop serially initializes private SQLite migrations and
+the disabled scheduling table **before** starting chat/review/task worker
+threads. This avoids concurrent first-run schema creation and does not arm or
+run any job. A headless regression test and Linux virtual-display startup test
+exercise this fresh-profile path; native Windows rendering remains unverified.

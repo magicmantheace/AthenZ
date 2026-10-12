@@ -56,6 +56,10 @@ def mount_task_panel(parent, window, service: DesktopTasks, notify) -> None:
         return str(tree.item(picked[0], 'values')[0])
 
     def on_error(error: str) -> None:
+        # A background task may finish while the main window is closing.
+        # Never try to open a modal dialog on a destroyed Tk root.
+        if not window.winfo_exists():
+            return
         notify('Coding task refused; see details')
         messagebox.showerror('AthenZ task', error, parent=window)
 
@@ -76,6 +80,8 @@ def mount_task_panel(parent, window, service: DesktopTasks, notify) -> None:
         threading.Thread(target=execute, name='athenz-desktop-task', daemon=True).start()
 
     def poll() -> None:
+        if not window.winfo_exists():
+            return
         try:
             while True:
                 kind, label, result, callback = replies.get_nowait()

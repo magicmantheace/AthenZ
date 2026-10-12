@@ -193,6 +193,21 @@ class DesktopService:
             store.close()
 
 
+def bootstrap_private_home(home: Path | None = None) -> None:
+    """Migrate private state BEFORE chat/review/task UI workers can race.
+
+    SQLite migrations are forward-only and must finish serially at desktop
+    startup on a fresh profile. Queue creation itself grants no permissions.
+    """
+    store = ExperienceStore(home)
+    try:
+        pass  # Opening the handle completes v1-v4 migrations.
+    finally:
+        store.close()
+    from .scheduler import ProposalScheduler
+    ProposalScheduler(home)  # Creates a paused-only queue table, no work.
+
+
 def launch(home: Path | None = None) -> None:
     """Start a foreground Tk interface; it makes no operations on its own."""
     try:
@@ -201,6 +216,7 @@ def launch(home: Path | None = None) -> None:
     except ImportError as exc:
         raise DesktopError('Tkinter is unavailable; install Tk support for Python') from exc
 
+    bootstrap_private_home(home)
     service = DesktopService(home)
     try:
         window = tk.Tk()
