@@ -264,8 +264,13 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
     session = tk.StringVar(value='desktop')
     session_box = ttk.Entry(chat_controls, textvariable=session, width=24)
     session_box.pack(side='left', padx=(0, 8))
-    transcript = tk.Text(chat_tab, wrap='word', state='disabled', padx=10, pady=10)
-    transcript.pack(fill='both', expand=True, pady=8)
+    transcript_frame = ttk.Frame(chat_tab)
+    transcript_frame.pack(fill='both', expand=True, pady=8)
+    transcript = tk.Text(transcript_frame, wrap='word', state='disabled', padx=10, pady=10)
+    transcript.pack(side='left', fill='both', expand=True)
+    transcript_scroll = ttk.Scrollbar(transcript_frame, orient='vertical', command=transcript.yview)
+    transcript_scroll.pack(side='right', fill='y')
+    transcript.configure(yscrollcommand=transcript_scroll.set)
     send_row = ttk.Frame(chat_tab)
     send_row.pack(fill='x')
     prompt = ttk.Entry(send_row)
@@ -372,12 +377,17 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
     review_toolbar = ttk.Frame(review_tab)
     review_toolbar.pack(fill='x', pady=(0, 8))
     ttk.Label(review_toolbar, text='Pending items stay private and require approval.').pack(side='left')
-    review_tree = ttk.Treeview(review_tab, columns=('kind', 'id', 'preview'),
+    review_list_frame = ttk.Frame(review_tab)
+    review_list_frame.pack(fill='both', expand=True)
+    review_tree = ttk.Treeview(review_list_frame, columns=('kind', 'id', 'preview'),
                                show='headings', selectmode='browse')
     for col, width in [('kind', 125), ('id', 65), ('preview', 620)]:
         review_tree.heading(col, text=col.title())
         review_tree.column(col, width=width, stretch=col=='preview')
-    review_tree.pack(fill='both', expand=True)
+    review_tree.pack(side='left', fill='both', expand=True)
+    review_scroll = ttk.Scrollbar(review_list_frame, orient='vertical', command=review_tree.yview)
+    review_scroll.pack(side='right', fill='y')
+    review_tree.configure(yscrollcommand=review_scroll.set)
 
     def reload_reviews() -> None:
         try:
@@ -436,9 +446,14 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
     mount_task_panel(tasks_tab, window, DesktopTasks(home), set_status)
 
     # Local readiness screen; no external probes run automatically at startup.
-    setup_text = tk.Text(setup_tab, wrap='word', state='disabled', height=14,
+    setup_view = ttk.Frame(setup_tab)
+    setup_view.pack(fill='both', expand=True, pady=(10, 8))
+    setup_text = tk.Text(setup_view, wrap='word', state='disabled', height=14,
                          padx=10, pady=10)
-    setup_text.pack(fill='both', expand=True, pady=(10, 8))
+    setup_text.pack(side='left', fill='both', expand=True)
+    setup_scroll = ttk.Scrollbar(setup_view, orient='vertical', command=setup_text.yview)
+    setup_scroll.pack(side='right', fill='y')
+    setup_text.configure(yscrollcommand=setup_scroll.set)
     setup_controls = ttk.Frame(setup_tab)
     setup_controls.pack(fill='x')
     setup_results: queue.Queue = queue.Queue()
@@ -563,6 +578,8 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
     from .desktop_shortcuts import install_navigation
     install_navigation(window, book, (chat_tab, review_tab, tasks_tab, setup_tab),
                        (prompt, review_tree, tasks_tab, setup_basic))
+    from .desktop_zoom import install_text_zoom
+    install_text_zoom(window, style, notify=set_status)
     ttk.Label(window, textvariable=status, anchor='w').pack(fill='x', padx=16, pady=(0, 10))
     refresh_history()
     reload_reviews()
