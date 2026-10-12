@@ -1,23 +1,15 @@
-name: Docker behavioral sandbox integration
+name: Docker behavioral sandbox integration (manual only)
 
+# Actual container pulls and integration jobs consume resources; manual only.
 on:
-  pull_request:
-    paths:
-      - 'athenz/verification.py'
-      - 'tests/test_docker_integration.py'
-      - 'tests/test_sandbox_threats.py'
-      - '.github/workflows/docker-integration.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'athenz/verification.py'
-      - 'tests/test_docker_integration.py'
-      - 'tests/test_sandbox_threats.py'
-      - '.github/workflows/docker-integration.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: athenz-manual-docker-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   actual-docker-sandbox:
