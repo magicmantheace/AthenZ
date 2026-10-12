@@ -37,6 +37,8 @@ def mount_task_panel(parent, window, service: DesktopTasks, notify) -> None:
     controls.pack(fill='x')
     footer = ttk.Frame(parent)
     footer.pack(fill='x', pady=(6, 0))
+    scheduler_controls = ttk.Frame(parent)
+    scheduler_controls.pack(fill='x', pady=(6, 0))
     buttons = []
     replies: queue.Queue = queue.Queue()
     active = {'busy': False}
@@ -244,8 +246,9 @@ def mount_task_panel(parent, window, service: DesktopTasks, notify) -> None:
         run('Cancel task', lambda: service.cancel(key, discard_changes=discard, confirmed=True),
             done=lambda data: (show_text(json.dumps(data, indent=2)), refresh()))
 
-    def button(label, action, *, secondary=False):
-        control = ttk.Button(footer if secondary else controls, text=label, command=action)
+    def button(label, action, *, secondary=False, scheduled=False):
+        destination = scheduler_controls if scheduled else (footer if secondary else controls)
+        control = ttk.Button(destination, text=label, command=action)
         control.pack(side='left', padx=(0, 6), pady=2)
         buttons.append(control)
 
@@ -265,6 +268,45 @@ def mount_task_panel(parent, window, service: DesktopTasks, notify) -> None:
         lambda key: service.export(key, confirmed=True),
         'Write the immutable combined review patch to your private AthenZ directory?'), secondary=True)
     button('Cancel / discard', cancel, secondary=True)
+    # These controls deliberately do not run automatically when the desktop
+    # launches. A scheduled proposal still requires normal SHA-256 review.
+    def queue_proposal() -> None:
+        try:
+            key = selected_key()
+        except Exception as exc:
+            on_error(str(exc)); return
+        model = simpledialog.askstring('Local proposal model',
+            'Explicit Ollama model tag for this task (local only):',
+            initialvalue='qwen3.5:2b', parent=window)
+        if model is None:
+            return
+        if not messagebox.askyesno('Create PAUSED proposal queue',
+            f'Queue task {key} with model {model}?\n'
+            'The queue starts PAUSED. No patch will be applied automatically.', parent=window):
+            return
+        run('Queue proposal', lambda: service.schedule_add(key, model, confirmed=True),
+            done=lambda data: (show_text(json.dumps(data, indent=2)), refresh(key)))
+
+    button('Queue (paused)', queue_proposal, scheduled=True)
+    button('Arm next stage', lambda: selected_action('Arm next proposal',
+        lambda key: service.schedule_arm(key, confirmed=True),
+        'Authorize ONE new local model proposal for the selected ready stage?\n'
+        'No patch will be applied without your review.'), scheduled=True)
+    button('Pause queue', lambda: selected_action('Pause scheduled proposal',
+        service.schedule_pause, 'Pause this proposal queue? In-flight inference may finish.'), scheduled=True)
+    button('Run queued once', lambda: (
+        run('Run one queued proposal', lambda: service.schedule_tick(confirmed=True),
+            done=lambda data: (show_text(json.dumps(data, ensure_ascii=False, indent=2)), refresh()))
+        if messagebox.askyesno('Run one proposal',
+            'Prepare at most ONE owner-armed proposal using local Ollama?\n'
+            'This does not approve or apply code.', parent=window) else None), scheduled=True)
+    button('Remove queue', lambda: selected_action('Remove paused proposal queue',
+        lambda key: service.schedule_remove(key, confirmed=True),
+        'Delete this PAUSED queue entry? Existing worktrees and proposals are retained.'), scheduled=True)
+    button('Recover stopped job', lambda: selected_action('Reconcile stopped scheduler',
+        lambda key: service.schedule_recover(key, confirmed=True),
+        'ONLY continue if no other scheduler process is still generating this proposal.\n'
+        'Reconcile the interrupted lease without automatically rerunning inference?'), scheduled=True)
     tree.bind('<Double-1>', lambda _: show())
     # Polling drives only UI delivery; it never schedules coding or model work.
     window.after(100, poll)

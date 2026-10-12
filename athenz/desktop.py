@@ -2,7 +2,8 @@
 
 Tkinter is imported only when launching the graphical application. A pure
 service layer lets CI test privacy boundaries without a display server.
-No daemon, scheduler, model training, Docker execution or Git publishing.
+No automatic daemon, model training, unrestricted Docker or Git publishing.
+The supervised proposal queue remains paused until the owner acts.
 """
 from __future__ import annotations
 

@@ -2,7 +2,7 @@
 
 The first **foreground native desktop interface** uses Python's Tkinter/ttk
 and the existing local SQLite and Ollama services. There is no browser, web
-UI, background scheduler, or remote account integration. It does not download,
+UI, automatically started scheduler, or remote account integration. It does not download,
 train, install, push, publish or execute repository code.
 
 ## Launch (Windows Python 3.11+)
@@ -122,3 +122,16 @@ exclusive SQLite write transaction; if another process edits its contents or
 approval status before confirmation, the UI rejects the stale review and the
 owner must inspect it again. Task patch approvals use a separate digest of the
 exact replacement bytes.
+
+## Supervised proposal queue (v0.6)
+
+The desktop Tasks panel also offers an **off-by-default** proposal queue.
+Create a coding task with a fixed owner-selected file scope first, then
+**Queue (paused)** and **Arm next stage**. **Run queued once** requests a
+single local Ollama proposal on a worker thread; it never applies code.
+**Pause queue** disables future proposals, while **Recover stopped job**
+requires confirming that no prior scheduler process is still running.
+**Remove queue** deletes scheduling metadata but does not delete worktrees.
+No proposal is prepared merely because the window is open. To run a bounded
+foreground polling loop separately, use `athenz-scheduler serve --confirm`.
+See [SCHEDULER.md](SCHEDULER.md) for explicit commands and recovery cautions.

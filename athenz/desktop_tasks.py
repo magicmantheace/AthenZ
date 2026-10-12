@@ -15,6 +15,7 @@ from .chat import OllamaClient
 from .experience import ExperienceStore
 from .sequencer import SequenceController
 from .worker import Worker
+from .scheduler import ProposalScheduler
 
 KEY = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}\Z")
 
@@ -61,7 +62,11 @@ class DesktopTasks:
                     for r in ctl.store.db.execute(
                         'SELECT task_key,task,status,revision,state_json FROM checkpoints '
                         'ORDER BY updated_at DESC,id DESC LIMIT ?', (limit,))]
-        return self._call(read)
+        rows = self._call(read)
+        queues = {j['task_key']: j['state'] for j in ProposalScheduler(self.home).list()}
+        for row in rows:
+            row['scheduler'] = queues.get(row['task_key'], 'off')
+        return rows
 
     def create(self, key: str, repo: Path | str, task: str, stages: list[list[str]], *,
                confirmed: bool = False) -> dict:
@@ -83,7 +88,9 @@ class DesktopTasks:
                     'workspace': item['state']['workspace'],
                     'stages': seq['stages'],
                     'review_bundle': seq.get('final_review')}
-        return self._call(read)
+        data = self._call(read)
+        data['scheduler'] = ProposalScheduler(self.home).get(key)
+        return data
 
     def prepare(self, key: str, *, model=None) -> dict:
         self._key(key)
@@ -134,3 +141,23 @@ class DesktopTasks:
         self._key(key)
         return self._call(lambda ctl: (ctl.cancel(key, discard_changes=discard_changes) or
                                        {'status': 'cancelled', 'discarded': discard_changes}))
+
+    # Scheduler is OFF by default. Only creates model proposals. Never applies.
+    def schedule_add(self, key: str, model: str, *, confirmed: bool = False) -> dict:
+        return ProposalScheduler(self.home).register(self._key(key), model=model, confirmed=confirmed)
+
+    def schedule_arm(self, key: str, *, confirmed: bool = False) -> dict:
+        return ProposalScheduler(self.home).arm(self._key(key), confirmed=confirmed)
+
+    def schedule_pause(self, key: str) -> dict:
+        return ProposalScheduler(self.home).pause(self._key(key))
+
+    def schedule_recover(self, key: str, *, confirmed: bool = False) -> dict:
+        return ProposalScheduler(self.home).recover(self._key(key), confirmed=confirmed)
+
+    def schedule_remove(self, key: str, *, confirmed: bool = False) -> dict:
+        return {'removed': ProposalScheduler(self.home).remove(self._key(key), confirmed=confirmed)}
+
+    def schedule_tick(self, *, confirmed: bool = False) -> dict:
+        # Desktop button runs one foreground-requested tick only.
+        return ProposalScheduler(self.home).run_once(confirmed=confirmed)
