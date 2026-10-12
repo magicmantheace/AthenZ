@@ -16,6 +16,11 @@ class BootstrapTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as t:
             home = Path(t) / 'fresh'
             bootstrap_private_home(home)
+            baseline = ExperienceStore(home)
+            try:
+                expected_schema = baseline.db.execute('PRAGMA user_version').fetchone()[0]
+            finally:
+                baseline.close()
             def read(kind):
                 if kind == 0:
                     return DesktopTasks(home).list_tasks()
@@ -30,7 +35,7 @@ class BootstrapTests(unittest.TestCase):
                     store.close()
             with concurrent.futures.ThreadPoolExecutor(max_workers=10) as pool:
                 observed = list(pool.map(read, (i % 4 for i in range(24))))
-            self.assertTrue(all(x == 4 for i,x in enumerate(observed) if i%4 == 3))
+            self.assertTrue(all(x == expected_schema for i,x in enumerate(observed) if i%4 == 3))
             self.assertEqual(observed[0], [])
             self.assertEqual(observed[2], [])
 
