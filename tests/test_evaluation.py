@@ -160,6 +160,18 @@ class DecisionEvaluationTests(unittest.TestCase):
         self.assertEqual(result['total'], 1)
         self.assertEqual(len(model.calls), 1)
 
+    def test_contamination_check_reads_reference_not_format_instruction(self):
+        scenario = 'Does the owner ship a failing code review?'
+        self.store.add_decision(scenario, 'Wait', 'Do not leak private gold',
+            source='synthetic', options=['Ship', 'Wait'],
+            split='test', approved=True)
+        self.store.propose('preference', scenario + ' Owner chooses Wait.',
+                           source='synthetic', approved=True)
+        model = Stub()
+        with self.assertRaisesRegex(ValueError, 'contaminated'):
+            evaluate_decisions(self.store, model)
+        self.assertEqual(model.calls, [])
+
     def test_safe_prediction_parsing_for_non_object_json(self):
         self.store.add_decision('Test invalid JSON output', 'A', 'Private gold',
             source='synthetic', approved=True, options=['A', 'B'], split='test')
