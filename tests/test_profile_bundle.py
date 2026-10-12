@@ -18,7 +18,7 @@ class ProfileBundleTests(unittest.TestCase):
         store.propose('style', 'Synthetic original data', source='owner', approved=True)
         store.close()
         (self.home/'datasets').mkdir()
-        (self.home/'datasets'/'synthetic.jsonl').write_text('DATA_ONLY\n')
+        (self.home/'datasets'/'synthetic.jsonl').write_bytes(b'DATA_ONLY\n')
         (self.home/'runs'/'r1'/'adapter').mkdir(parents=True)
         (self.home/'runs'/'r1'/'adapter'/'adapter_model.safetensors').write_bytes(b'synthetic weights')
         (self.home/'worktrees').mkdir()
@@ -67,7 +67,10 @@ class ProfileBundleTests(unittest.TestCase):
                     _secure_name(name)
 
     def test_case_collisions_block_windows_unsafe_bundle(self):
-        (self.home/'datasets'/'SYNTHETIC.jsonl').write_text('different')
+        candidate = self.home/'datasets'/'SYNTHETIC.jsonl'
+        if candidate.exists():
+            self.skipTest('Case-insensitive Windows filesystem cannot represent both names')
+        candidate.write_text('different')
         with self.assertRaisesRegex(BackupError, 'Case-colliding'):
             create_bundle(self.home, confirmed=True)
 
