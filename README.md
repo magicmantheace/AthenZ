@@ -190,3 +190,16 @@ when enabled, it cannot apply patches, execute tests, train models, commit or
 push to Git. Each proposal must still pass independent owner SHA-256 review.
 See [docs/SCHEDULER.md](docs/SCHEDULER.md). Physical Windows and RTX 3060
 integration testing is still outstanding.
+
+## Portable Windows desktop and private setup checks (v0.6)
+
+The optional [Windows portable CI workflow](.github/workflows/windows-portable.yml)
+builds an **unsigned onedir ZIP** and verifies `AthenZ.exe --self-test` against
+a temporary profile. This is an experimental download artifact, **not a
+signed installer or verified release**. AthenZ does not auto-start or install
+Ollama, Docker, or additional model weights. The Desktop **Setup** tab checks
+local readiness and sends **no** requests to Ollama without pressing **Probe
+Ollama**. Python CLI: `athenz-doctor [--probe-ollama]`.
+
+See [Windows portable notes](docs/WINDOWS_PORTABLE.md). Native Windows display,
+HiDPI, CUDA GPU and WSL2 Docker tests remain outstanding.
