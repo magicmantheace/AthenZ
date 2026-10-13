@@ -106,3 +106,13 @@ Snapshot integrity failure reports contain a fixed public-safe category
 instead of a raw exception, and the command continues to refuse a successful
 result on unverified or changed snapshots. This is stronger input handling,
 not a claim that a worktree is an OS-level adversarial-code sandbox.
+
+Repository coding prompts and copied Docker source snapshots now share a
+conservative secret-path policy. In addition to exact names, it blocks
+`.env.*`, `credentials.*`, `secrets.*`, common private-key extensions,
+local SQLite files and well-known credential directories. Files with multiple
+hard links are refused to avoid directly importing a separate local private
+file through a tracked or selected alias. These are only filename and local
+filesystem controls, **not** content scanners or proof that code cannot
+contain an embedded credential. No automatic tests, commits or pushes are
+unlocked by these checks.

@@ -155,6 +155,36 @@ class FullTaskTests(unittest.TestCase):
             self.ctl.verify_container('math', image=IMAGE)
         self.ctl.cancel('math', discard_changes=True)
 
+    def test_sensitive_variants_are_not_copied_into_docker_snapshot(self):
+        self.ctl.cancel('math')
+        for sensitive in ('.env.production', 'secrets.yaml', 'credentials.json',
+                          'archive/owner.sqlite3', '.aws/credentials'):
+            with self.subTest(name=sensitive):
+                path = self.repo / sensitive
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('SYNTHETIC_NEVER_COPY', encoding='utf-8')
+                git(self.repo, 'add', sensitive)
+                git(self.repo, 'commit', '-m', 'synthetic protected path')
+                with tempfile.TemporaryDirectory() as folder:
+                    with self.assertRaisesRegex(WorktreeError, 'Sensitive'):
+                        snapshot_files(self.repo, Path(folder))
+
+    def test_hardlinked_tracked_file_is_refused_in_docker_snapshot(self):
+        import os
+        self.ctl.cancel('math')
+        external = self.root / 'private-synthetic-file'
+        external.write_text('secret')
+        linked = self.repo / 'ordinary.py'
+        try:
+            os.link(external, linked)
+        except (OSError, NotImplementedError):
+            self.skipTest('Host does not support synthetic hard links')
+        git(self.repo, 'add', 'ordinary.py')
+        git(self.repo, 'commit', '-m', 'test hardlink')
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(WorktreeError, 'hard-linked'):
+                snapshot_files(self.repo, Path(tmp))
+
     def test_sensitive_tracked_file_disallows_snapshot(self):
         self.ctl.cancel('math')
         (self.repo / '.env').write_text('SYNTHETIC=1')

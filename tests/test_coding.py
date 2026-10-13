@@ -58,6 +58,33 @@ class CodingTests(unittest.TestCase):
             change_status(self.store, pid)
         self.assertEqual(self.store.get_proposal(pid)['status'], 'proposed')
 
+    def test_extended_secret_names_are_not_exposed_to_model(self):
+        from athenz.coding import protected_repository_path
+        names = ['.env.local', 'credentials.json', 'secrets.yaml',
+                 'config/service.pem', '.aws/credentials', '.kube/config',
+                 'data/owner.sqlite3', '.git-credentials', 'ID_RSA.backup']
+        for name in names:
+            with self.subTest(name=name):
+                path = self.repo / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('SYNTHETIC_PRIVATE_CONTENT')
+                with self.assertRaises(ValueError):
+                    allowed_file(self.repo, name)
+        self.assertTrue(protected_repository_path(('config', 'secrets.yaml')))
+        self.assertFalse(protected_repository_path(('src', 'main.py')))
+
+    def test_hardlinked_external_file_is_not_approved_for_model_prompt(self):
+        import os
+        external = self.root / 'synthetic-private-source'
+        external.write_text('SYNTHETIC SECRET')
+        linked = self.repo / 'ordinary.py'
+        try:
+            os.link(external, linked)
+        except (OSError, NotImplementedError):
+            self.skipTest('Hard links unavailable on this test runner')
+        with self.assertRaises(ValueError):
+            allowed_file(self.repo, 'ordinary.py')
+
     def test_protects_secrets_traversal_and_symlinks(self):
         (self.repo / '.env').write_text('TOKEN=SECRET')
         with self.assertRaises(ValueError):

@@ -18,7 +18,24 @@ MAX_FILE = 36_000
 MAX_TOTAL = 85_000
 DENIED = {'.env', '.npmrc', '.pypirc', 'id_rsa', 'id_ed25519',
           'credentials', 'secrets.json', '.git', '.ssh', 'node_modules', '.venv',
-          '.athenz', '__pycache__'}
+          '.athenz', '__pycache__', '.aws', '.kube', '.gnupg', '.netrc',
+          '.git-credentials'}
+
+
+def protected_repository_path(parts) -> bool:
+    """Conservative path-only check, shared by prompt and Docker snapshot scopes.
+
+    No file contents are examined or returned. Owners must not rely on a
+    filename check alone to detect secrets embedded in otherwise normal code.
+    """
+    for part in parts:
+        part = part.casefold()
+        if (part in DENIED or part.startswith(('.env.', 'credentials.', 'secrets.'))
+                or part.endswith(('.pem', '.key', '.p12', '.pfx', '.sqlite',
+                                   '.sqlite3'))
+                or part.startswith(('id_rsa.', 'id_ed25519.'))):
+            return True
+    return False
 
 
 def digest(content: str) -> str:
@@ -40,7 +57,7 @@ def allowed_file(repo: Path, rel: str) -> Path:
     if not isinstance(rel, str) or not rel or '\\' in rel or Path(rel).is_absolute():
         raise ValueError(f'Unsafe path: {rel}')
     parts = Path(rel).parts
-    if any(p in {'.', '..'} or p.lower() in DENIED for p in parts):
+    if any(p in {'.', '..'} for p in parts) or protected_repository_path(parts):
         raise ValueError(f'Protected path: {rel}')
     repo = repo.resolve(strict=True)
     candidate = repo
@@ -51,7 +68,7 @@ def allowed_file(repo: Path, rel: str) -> Path:
     candidate = candidate.resolve(strict=True)
     if not candidate.is_relative_to(repo) or not candidate.is_file():
         raise ValueError(f'Missing or out-of-scope file: {rel}')
-    if candidate.suffix.lower() in {'.pem', '.key', '.p12'} or candidate.stat().st_size > MAX_FILE:
+    if candidate.stat().st_nlink != 1 or candidate.stat().st_size > MAX_FILE:
         raise ValueError('Sensitive or oversized file')
     return candidate
 

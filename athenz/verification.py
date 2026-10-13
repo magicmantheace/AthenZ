@@ -16,7 +16,7 @@ import subprocess
 import tempfile
 import uuid
 
-from .coding import DENIED
+from .coding import protected_repository_path
 from .worker import IMAGE, WorktreeError, _git
 
 MAX_SNAPSHOT_BYTES = 64 * 1024 * 1024
@@ -39,8 +39,7 @@ def snapshot_files(repo: Path, dest: Path) -> dict:
     for rel in sorted(names):
         pure = PurePosixPath(rel)
         if (pure.is_absolute() or '..' in pure.parts or '\\' in rel or '\x00' in rel
-                or any(p.lower() in DENIED for p in pure.parts)
-                or Path(rel).suffix.lower() in {'.pem', '.key', '.p12', '.pfx'}):
+                or protected_repository_path(pure.parts)):
             raise WorktreeError('Sensitive or unsafe tracked path: ' + rel)
         origin = repo
         target = dest
@@ -51,7 +50,10 @@ def snapshot_files(repo: Path, dest: Path) -> dict:
                 raise WorktreeError('Tracked symlink not permitted in test snapshot')
         if not origin.is_file():
             raise WorktreeError('Tracked path is not a regular file: ' + rel)
-        size = origin.stat().st_size
+        info = origin.stat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise WorktreeError('Tracked hard-linked or special file cannot enter Docker snapshot')
+        size = info.st_size
         if size > MAX_SINGLE_FILE or total + size > MAX_SNAPSHOT_BYTES:
             raise WorktreeError('Tracked source exceeds sandbox snapshot size limit')
         total += size
