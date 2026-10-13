@@ -67,13 +67,31 @@ def inspect_wav(path: Path) -> dict:
 
 
 def _audio_fingerprint(path: Path) -> str:
-    """Private in-memory checksum only, never returned or persisted."""
+    """Bounded, no-follow audio digest, never returned or persisted."""
     try:
-        h = hashlib.sha256()
-        with path.open('rb') as stream:
+        flags = os.O_RDONLY | getattr(os, 'O_BINARY', 0) | getattr(os, 'O_NOFOLLOW', 0)
+        with os.fdopen(os.open(path, flags), 'rb') as stream:
+            initial = os.fstat(stream.fileno())
+            named = path.lstat()
+            if (not stat.S_ISREG(initial.st_mode) or initial.st_nlink != 1
+                    or not stat.S_ISREG(named.st_mode) or named.st_nlink != 1
+                    or (initial.st_dev, initial.st_ino) != (named.st_dev, named.st_ino)
+                    or not 0 < initial.st_size <= MAX_AUDIO_BYTES):
+                raise VoiceError('Selected audio is linked or outside the size bound')
+            h = hashlib.sha256()
+            count = 0
             for block in iter(lambda: stream.read(1024 * 1024), b''):
+                count += len(block)
+                if count > MAX_AUDIO_BYTES:
+                    raise VoiceError('Selected audio exceeds the size bound')
                 h.update(block)
-        return h.hexdigest()
+            final = os.fstat(stream.fileno())
+            if (count != initial.st_size or
+                    (final.st_dev, final.st_ino, final.st_size, final.st_mtime_ns)
+                    != (initial.st_dev, initial.st_ino,
+                        initial.st_size, initial.st_mtime_ns)):
+                raise VoiceError('Selected audio changed during local read')
+            return h.hexdigest()
     except OSError:
         raise VoiceError('Selected audio could not be rechecked') from None
 
@@ -112,7 +130,8 @@ def _load_engine(model_dir: Path, *, device: str):
 
 
 def transcribe_wav(path: Path, model_dir: Path, *,
-                   confirmed: bool = False, device: str = 'cpu') -> dict:
+                   confirmed: bool = False, device: str = 'cpu',
+                   language: str = 'en') -> dict:
     """Transcribe in the foreground; transcript returned only to consenting owner.
 
     Does not write owner audio, transcripts, profiles or training pairs.
@@ -122,13 +141,15 @@ def transcribe_wav(path: Path, model_dir: Path, *,
         raise VoiceError('Explicit --confirm required to process private speech')
     if device not in ('cpu', 'cuda'):
         raise VoiceError('Explicitly choose cpu or cuda device')
+    if language not in ('en', 'fr', 'es', 'de'):
+        raise VoiceError('Choose an explicitly supported transcription language')
     evidence = inspect_wav(path)
     model = _local_model_dir(model_dir)
     audio = Path(path).expanduser().absolute().resolve(strict=True)
     before_audio = _audio_fingerprint(audio)
     engine = _load_engine(model, device=device)
     try:
-        segments, _ = engine.transcribe(str(audio), language='en', beam_size=1,
+        segments, _ = engine.transcribe(str(audio), language=language, beam_size=1,
                                         vad_filter=False, word_timestamps=False,
                                         condition_on_previous_text=False)
         parts = []
@@ -159,6 +180,7 @@ def transcribe_wav(path: Path, model_dir: Path, *,
     return {'schema': 1, 'status': 'transcribed' if result else 'no-speech',
             'audio_fingerprint_stable': True,
             'transcript': result, 'device_requested': device,
+            'language_requested': language,
             'model_downloaded': False, 'audio_uploaded': False,
             'microphone_accessed': False, 'submitted_to_chat': False,
             'stored_in_profile': False, 'training_authorized': False,
@@ -177,11 +199,12 @@ def main(argv: list[str] | None = None) -> None:
     work.add_argument('--model', type=Path, required=True,
                       help='Existing locally installed CTranslate2 whisper model directory')
     work.add_argument('--device', choices=['cpu', 'cuda'], default='cpu')
+    work.add_argument('--language', choices=['en', 'fr', 'es', 'de'], default='en')
     work.add_argument('--confirm', action='store_true')
     args = parser.parse_args(argv)
     report = (inspect_wav(args.wav) if args.command == 'inspect'
               else transcribe_wav(args.wav, args.model, confirmed=args.confirm,
-                                  device=args.device))
+                                  device=args.device, language=args.language))
     print(json.dumps(report, ensure_ascii=False, indent=2))
 
 

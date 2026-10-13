@@ -32,7 +32,9 @@ A trusted **local CTranslate2 faster-whisper** model must already exist with
 at least `config.json` and `model.bin`, and a compatible `faster-whisper`
 package must be installed separately. There is no dependency at routine AthenZ
 startup. The model is opened by absolute directory path with
-`local_files_only=True`. English is the fixed initial transcription language.
+`local_files_only=True`. English is the default language; the owner can explicitly select French,
+Spanish or German with `--language fr`, `es` or `de` (no automatic language
+identification or network requests).
 CPU is the default; CUDA is optional and may require separate native libraries.
 The code refuses overlong transcripts and too many speech segments, and
 returns sanitized fixed errors rather than GPU exceptions or audio paths.
@@ -56,3 +58,9 @@ inference. If the file was modified mid-run, AthenZ refuses to release the
 transcript. The digest is not printed, logged or stored; it is not a model
 provenance attestation and cannot protect against an actively malicious
 same-user process reverting the exact bytes between checks.
+
+WAV hashing uses bounded no-follow file handles and verifies a stable local
+inode, byte length and modification timestamp before releasing the result.
+The optional faster-whisper constructor is tested to require an absolute
+pre-existing model directory with `local_files_only=True` for both CPU and
+CUDA. No model weights or source audio are included in the public tests.

@@ -78,6 +78,45 @@ class VoiceTests(unittest.TestCase):
         self.assertEqual(sorted(str(p.relative_to(self.root))
                                 for p in self.root.rglob('*')), before)
 
+    def test_trusted_factory_cannot_request_remote_model_download(self):
+        import sys
+        from types import SimpleNamespace
+        from athenz.voice import _load_engine
+        seen = []
+        class FakeModel:
+            def __init__(self, path, **kwargs):
+                seen.append((path, kwargs))
+        with mock.patch.dict(sys.modules, {'faster_whisper':
+                                           SimpleNamespace(WhisperModel=FakeModel)}):
+            _load_engine(self.model.resolve(), device='cpu')
+            _load_engine(self.model.resolve(), device='cuda')
+        self.assertEqual(len(seen), 2)
+        for name, opts in seen:
+            self.assertEqual(name, str(self.model.resolve()))
+            self.assertIs(opts['local_files_only'], True)
+        self.assertEqual(seen[0][1]['compute_type'], 'int8')
+        self.assertEqual(seen[1][1]['compute_type'], 'float16')
+
+    def test_local_engine_import_failure_cannot_trigger_network(self):
+        import sys
+        from athenz.voice import _load_engine
+        with mock.patch.dict(sys.modules, {'faster_whisper': None}):
+            with self.assertRaisesRegex(VoiceError, 'Install trusted'):
+                _load_engine(self.model.resolve(), device='cpu')
+
+    def test_language_scope_can_choose_french_without_any_upload(self):
+        from types import SimpleNamespace
+        engine = self.fake_engine(SimpleNamespace(text='Bonjour le monde'))
+        with mock.patch('athenz.voice._load_engine', return_value=engine):
+            result = transcribe_wav(self.wav, self.model, confirmed=True,
+                                    language='fr')
+        self.assertEqual(result['language_requested'], 'fr')
+        self.assertEqual(engine.calls[1]['language'], 'fr')
+        self.assertFalse(result['audio_uploaded'])
+        with self.assertRaisesRegex(VoiceError, 'language'):
+            transcribe_wav(self.wav, self.model, confirmed=True,
+                           language='auto-network')
+
     def test_changed_audio_during_transcription_refuses_private_result(self):
         from types import SimpleNamespace
         class MutatingEngine:
