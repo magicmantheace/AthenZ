@@ -16,7 +16,6 @@ import shutil
 import sqlite3
 import tempfile
 import zipfile
-import hashlib
 
 from .backup import ID, _checksum, verify_backup, restore_to_new_profile
 from .profile_bundle import (MAX_TOTAL, _secure_name, verify_bundle,
@@ -199,7 +198,16 @@ def rehearse_profile_bundle(home: Path | None, identifier: str, *,
             copied = dest.joinpath(*rel.split('/'))
             if copied.is_symlink() or not copied.is_file():
                 raise RecoveryDrillError('Recovered bundle member is missing or unsafe')
-            if _checksum(copied) != (entry['sha256'], entry['bytes']):
+            checksum, length = _checksum(copied)
+            if rel == 'identity.sqlite3':
+                # Restoration MUST change SQLite: stale scheduler authority
+                # is removed and old running checkpoints are paused. Compare
+                # against the recovery provenance's POST-disarm digest, not
+                # the pre-disarm archive hash.
+                if (checksum != restored.get('restored_db_sha256') or
+                        length <= 0):
+                    raise RecoveryDrillError('Recovered database provenance is inconsistent')
+            elif (checksum, length) != (entry['sha256'], entry['bytes']):
                 raise RecoveryDrillError('Recovered bundle member hash changed')
         if (restored.get('files_restored') != len(rows) or
                 any((dest / folder).exists()
