@@ -197,3 +197,15 @@ The Python 3.12/3.13 and Windows portable runner is
 [38341100306](https://github.com/magicmantheace/AthenZ/actions/runs/38341100306).
 This is hosted synthetic/packaging evidence only and cannot certify real
 CUDA training, independent lineage or the owner's desktop.
+
+### Pinned public CI evidence for final 2026-10-12 implementation
+
+Source `2b7c1110623588f86e18493d1aee06258ff1b292` (archival development)
+was checked out by isolated CI workflows without editing `main`. Linux
+Python 3.11/3.12/3.13 ran 447 synthetic tests each with four skips and no
+failures. Windows portable packaging and executable/GUI smoke passed.
+Actual digest-pinned Docker integration and sandbox tests passed all seven
+cases in run 38341307100. Public job references: 38341284972,
+38341100306, 38341307100. Hosted runners have no access to the owner's
+local memory database or RTX 3060. The Windows full-suite job result remains
+separate until it completes and is independently inspected.

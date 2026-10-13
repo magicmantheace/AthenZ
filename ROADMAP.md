@@ -7,7 +7,8 @@ periodic model updates. It is not a literal copy of a human consciousness.
 ## Safety contracts
 - Twin estimates owner behavior; Agent works for owner. Never invent lived history.
 - Three rates of learning: approved context, reviewed/test-backed experience,
-  and benchmark-gated explicit LoRA updates (not yet implemented).
+  and explicitly approved benchmark-gated local LoRA updates (experimental
+  implementation exists; target-device training/inference not yet validated).
 - Imported chat data remains pending by default; training export only includes
   reviewed data. No private data or corpora in Git.
 - Explicit file scope, review and human action precede any code write; no
@@ -233,3 +234,19 @@ owner profile data or unattended coding action implied by this milestone.
 - [ ] Host CI regression and real owner-device model/GPU acceptance remain
   separate requirements; these safeguards are not cryptographic signatures,
   independent semantic similarity or proof of model lineage.
+
+### 2026-10-12 — Public regression evidence for registration and LoRA safety
+
+- Latest implementation SHA: `2b7c1110623588f86e18493d1aee06258ff1b292`.
+- Hosted Linux Python 3.11, 3.12 and 3.13: each ran 447 synthetic tests,
+  four skips and zero failures/errors. Evidence:
+  [regression run 38341284972](https://github.com/magicmantheace/AthenZ/actions/runs/38341284972)
+  and [compatibility/Windows portable run 38341100306](https://github.com/magicmantheace/AthenZ/actions/runs/38341100306).
+- Hosted Windows portable PyInstaller ZIP, executable self-test and Tk GUI
+  startup smoke passed on the same reviewed implementation.
+- [x] Pinned, actual Docker isolation and synthetic threat suite: seven tests
+  passed on [run 38341307100](https://github.com/magicmantheace/AthenZ/actions/runs/38341307100).
+- Full hosted Windows Python 3.11 regression is in run 38341284972; its job
+  conclusion must be independently checked before calling that platform green.
+- This is a software acceptance increment, not proof of RTX 3060 performance,
+  actual Windows 11 accessibility or independent model/adaptor lineage.
