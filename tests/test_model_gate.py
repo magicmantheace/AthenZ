@@ -278,8 +278,7 @@ class EvaluationGateTests(unittest.TestCase):
         self.assertFalse(report['model_called'])
         self.assertFalse(report['dataset_verified'])
         self.assertNotIn('synthetic held-out scenario', str(report))
-        smaller = inspect_heldout_readiness(self.store, limit=5, min_cases=6) if False else (
-            inspect_heldout_readiness(self.store, limit=5, min_cases=5))
+        smaller = inspect_heldout_readiness(self.store, limit=5, min_cases=5)
         self.assertEqual(smaller['selected_cases'], 5)
         for args in ({'limit': 0}, {'min_cases': 1}, {'split': 'train'},
                      {'limit': 5, 'min_cases': 7}, {'limit': True}):
