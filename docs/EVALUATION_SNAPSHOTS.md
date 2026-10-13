@@ -157,3 +157,17 @@ both present with distinct well-formed SHA-256 values or both absent for a
 legacy metadata-only report. This prevents mismatched or partial evaluated
 model evidence from being accepted through the report API; it does not prove
 that an Ollama model executed or independently verify a locally replaced tag.
+
+### Adapter registration digest anchors
+
+The candidate tag is not independently derivable from adapter weights, so
+checking only canonical checkpoint fields cannot detect swapping one valid
+tag for another. Each explicitly confirmed adapter registration now atomically
+writes its immutable checkpoint and a SHA-256 commitment to its **entire**
+registration into the append-only local metadata event ledger. Later adapter
+reviews refuse a missing, duplicated or mismatched registration commitment.
+Historical unanchored registrations require the owner to explicitly repeat
+registration with the same data to create the anchor; no automated candidate
+selection or repair is permitted. This detects accidental/unsanctioned SQLite
+checkpoint changes but is not a cryptographic signature or protection against
+a malicious actor who controls and can forge the entire local database.

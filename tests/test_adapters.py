@@ -148,6 +148,36 @@ class AdaptersTests(unittest.TestCase):
                 (json.dumps(original), key))
         self.assertEqual(verified_registry_entry(self.store, run), original)
 
+    def test_registry_event_anchor_is_idempotent_and_append_only(self):
+        run = self.completed()
+        original = register_adapter(self.store, run, 'candidate-a', confirmed=True)
+        self.assertEqual(register_adapter(
+            self.store, run, 'candidate-a', confirmed=True), original)
+        record = self.store.get_checkpoint('adapter_' + run)
+        rows = self.store.db.execute(
+            "SELECT operation FROM events WHERE subject_type='checkpoints' "
+            "AND subject_id=? AND operation LIKE 'adapter-registration:%'",
+            (record['id'],)).fetchall()
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0]['operation'].startswith('adapter-registration:'))
+        with self.assertRaises(Exception):
+            with self.store.db:
+                self.store.db.execute(
+                    "UPDATE events SET operation='forged' WHERE operation=?",
+                    (rows[0]['operation'],))
+
+    def test_conflicting_extra_registry_anchor_fails_closed(self):
+        run = self.completed()
+        register_adapter(self.store, run, 'candidate-a', confirmed=True)
+        record = self.store.get_checkpoint('adapter_' + run)
+        with self.store.db:
+            self.store._event('adapter-registration:' + 'f' * 64,
+                              'checkpoints', record['id'])
+        with self.assertRaisesRegex(AdapterError, 'stale or tampered'):
+            verified_registry_entry(self.store, run)
+        with self.assertRaisesRegex(AdapterError, 'immutable'):
+            register_adapter(self.store, run, 'candidate-a', confirmed=True)
+
     def test_report_approval_gate_and_revision_conflict(self):
         run=self.completed()
         register_adapter(self.store,run,'candidate-a',confirmed=True)

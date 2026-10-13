@@ -73,6 +73,19 @@ def inspect_adapter(store: ExperienceStore, run_id: str) -> dict:
             'promotion': 'not-authorized'}
 
 
+def _registration_anchor(state: dict) -> str:
+    """Content digest attached to an immutable local event, never private text."""
+    serialized = json.dumps(state, sort_keys=True, separators=(',', ':'),
+                            ensure_ascii=False, allow_nan=False).encode('utf-8')
+    return 'adapter-registration:' + hashlib.sha256(serialized).hexdigest()
+
+
+def _registration_events(store: ExperienceStore, checkpoint_id: int) -> list[str]:
+    return [row['operation'] for row in store.db.execute(
+        "SELECT operation FROM events WHERE subject_type='checkpoints' AND subject_id=? "
+        "AND operation LIKE 'adapter-registration:%' ORDER BY id", (checkpoint_id,))]
+
+
 def register_adapter(store: ExperienceStore, run_id: str, candidate_model: str, *,
                      confirmed: bool = False) -> dict:
     if not confirmed:
@@ -83,13 +96,29 @@ def register_adapter(store: ExperienceStore, run_id: str, candidate_model: str, 
     registered = {**evidence, 'candidate_model': candidate_model,
                   'lineage': 'owner-label-unverified', 'deployment': 'none'}
     key = 'adapter_' + run_id
-    prior = store.get_checkpoint(key)
-    if prior is not None:
-        if prior['state'] != registered or prior['status'] != 'complete':
-            raise AdapterError('Existing immutable registry entry cannot be replaced')
-    else:
-        store.checkpoint(key, 'Private adapter registry entry; not a deployed model',
-                         registered, status='complete')
+    # Checkpoint metadata is mutable local SQLite state. Bind its complete
+    # canonical registration, including the candidate tag, to the separate
+    # append-only events ledger in the SAME database transaction.
+    with store.db:
+        store.db.execute('BEGIN IMMEDIATE')
+        prior = store.get_checkpoint(key)
+        if prior is not None:
+            if prior['state'] != registered or prior['status'] != 'complete':
+                raise AdapterError('Existing immutable registry entry cannot be replaced')
+            checkpoint_id = prior['id']
+        else:
+            checkpoint_id = store.checkpoint(
+                key, 'Private adapter registry entry; not a deployed model',
+                registered, status='complete')
+        anchor = _registration_anchor(registered)
+        events = _registration_events(store, checkpoint_id)
+        if events:
+            if events != [anchor]:
+                raise AdapterError('Existing immutable registry entry cannot be replaced')
+        else:
+            # Explicit owner confirmation also migrates historical entries
+            # lacking an event anchor, but NEVER changes their checkpoint data.
+            store._event(anchor, 'checkpoints', checkpoint_id)
     return registered
 
 
@@ -110,6 +139,8 @@ def verified_registry_entry(store: ExperienceStore, run_id: str) -> dict:
                 'candidate_model': candidate,
                 'lineage': 'owner-label-unverified', 'deployment': 'none'}
     if state != expected:
+        raise AdapterError('Registry entry is stale or tampered')
+    if _registration_events(store, entry['id']) != [_registration_anchor(expected)]:
         raise AdapterError('Registry entry is stale or tampered')
     return state
 
