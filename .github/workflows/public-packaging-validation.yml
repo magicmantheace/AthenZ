@@ -1,0 +1,85 @@
+name: AthenZ public compatibility and portable packaging (isolated)
+# CI-only public branch. Run against immutable reviewed source commit.
+on:
+  push:
+    branches: [ci/public-packaging-validation-2026-10-12]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: athenz-public-packaging-validation
+  cancel-in-progress: true
+
+jobs:
+  python-compat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: d538bde4602fab4daeb8cedec3daec6a298b0673
+          persist-credentials: false
+      - name: Verify pinned source
+        run: test "$(git rev-parse HEAD)" = "d538bde4602fab4daeb8cedec3daec6a298b0673"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install AthenZ
+        run: python -m pip install -e .
+      - name: Full synthetic unittest suite
+        run: python -m unittest discover -s tests -v
+
+  portable-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: d538bde4602fab4daeb8cedec3daec6a298b0673
+          persist-credentials: false
+      - name: Verify pinned source
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "d538bde4602fab4daeb8cedec3daec6a298b0673"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Build unsigned portable app
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check . 'pyinstaller==6.16.0'
+          python -m PyInstaller --noconfirm --clean --onedir --windowed --name AthenZ --collect-submodules athenz packaging/desktop_launcher.py
+      - name: Executable offline self-test
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path 'dist/AthenZ/AthenZ.exe').Path
+          $p = Start-Process -FilePath $exe -ArgumentList '--self-test' -PassThru
+          if (-not $p.WaitForExit(30000)) { Stop-Process -Id $p.Id -Force; throw 'Self-test timed out' }
+          if ($p.ExitCode -ne 0) { throw "Portable executable self-test failed: $($p.ExitCode)" }
+      - name: Native Tk GUI startup smoke
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path 'dist/AthenZ/AthenZ.exe').Path
+          $p = Start-Process -FilePath $exe -ArgumentList '--gui-self-test' -PassThru
+          if (-not $p.WaitForExit(30000)) { Stop-Process -Id $p.Id -Force; throw 'GUI startup timed out' }
+          if ($p.ExitCode -ne 0) { throw "Portable GUI self-test failed: $($p.ExitCode)" }
+      - name: Package ZIP and checksum
+        shell: pwsh
+        run: |
+          Compress-Archive -Path 'dist/AthenZ' -DestinationPath 'AthenZ-windows-unsigned-portable.zip' -CompressionLevel Optimal
+          $digest = (Get-FileHash -Path 'AthenZ-windows-unsigned-portable.zip' -Algorithm SHA256).Hash.ToLowerInvariant()
+          python -m athenz.portable_integrity AthenZ-windows-unsigned-portable.zip --sha256 $digest
+          Set-Content -Path 'AthenZ-windows-unsigned-portable.sha256' -Value "$digest  AthenZ-windows-unsigned-portable.zip" -Encoding ascii
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AthenZ-windows-unsigned-portable-d538bde4602fab4daeb8cedec3daec6a298b0673
+          path: |
+            AthenZ-windows-unsigned-portable.zip
+            AthenZ-windows-unsigned-portable.sha256
+          retention-days: 7
+          if-no-files-found: error
