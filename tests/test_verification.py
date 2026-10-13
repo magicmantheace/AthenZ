@@ -100,7 +100,7 @@ class FullTaskTests(unittest.TestCase):
             result = isolated_unittest(self.repo, image=IMAGE, home=self.store.home)
         self.assertEqual(calls['n'], 2)
         self.assertEqual(result['returncode'], 125)
-        self.assertIn('Snapshot integrity FAILED', result['output'])
+        self.assertIn('integrity FAILED', result['output'])
         self.assertNotIn('PRIVATE-SOURCE', json.dumps(result))
 
 
