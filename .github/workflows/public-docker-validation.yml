@@ -1,0 +1,41 @@
+name: AthenZ public actual Docker sandbox validation
+on:
+  push:
+    branches: [ci/public-docker-validation-2026-10-12]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: athenz-public-docker-validation
+  cancel-in-progress: true
+
+jobs:
+  actual-docker-sandbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: be8cf5b93a396b4737bf145e6896d7cac8b9eb66
+          persist-credentials: false
+      - name: Verify pinned implementation
+        run: test "$(git rev-parse HEAD)" = "be8cf5b93a396b4737bf145e6896d7cac8b9eb66"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install AthenZ
+        run: python -m pip install -e .
+      - name: Resolve Docker image by registry digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull python:3.11-slim
+          IMAGE="$(docker image inspect python:3.11-slim --format '{{index .RepoDigests 0}}')"
+          [[ "$IMAGE" =~ ^[a-z0-9][a-z0-9._/-]*@sha256:[a-f0-9]{64}$ ]]
+          echo "ATHENZ_TEST_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+      - name: Actual sandbox behavior and threat regressions
+        env:
+          ATHENZ_INTEGRATION_DOCKER: '1'
+        run: python -m unittest tests.test_docker_integration tests.test_sandbox_threats -v
