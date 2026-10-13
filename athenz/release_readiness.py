@@ -76,6 +76,10 @@ def record(home: Path | None, check_id: str, status: str, *, confirmed: bool = F
         con.execute('CREATE TABLE IF NOT EXISTS observations '
                     '(check_id TEXT PRIMARY KEY, status TEXT NOT NULL, '
                     'source TEXT NOT NULL, recorded_at TEXT NOT NULL)')
+        con.execute('CREATE TABLE IF NOT EXISTS observation_history '
+                    '(id INTEGER PRIMARY KEY AUTOINCREMENT, '
+                    'check_id TEXT NOT NULL, status TEXT NOT NULL, '
+                    'source TEXT NOT NULL, recorded_at TEXT NOT NULL)')
         with con:
             con.execute('BEGIN IMMEDIATE')
             con.execute("INSERT INTO observations (check_id,status,source,recorded_at) "
@@ -83,6 +87,10 @@ def record(home: Path | None, check_id: str, status: str, *, confirmed: bool = F
                         "ON CONFLICT(check_id) DO UPDATE SET status=excluded.status, "
                         "source=excluded.source, recorded_at=excluded.recorded_at",
                         (check_id, status))
+            con.execute(
+                "INSERT INTO observation_history (check_id,status,source,recorded_at) "
+                "VALUES (?,?,'owner-reported',strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
+                (check_id, status))
     finally:
         con.close()
     if os.name != 'nt':
@@ -96,12 +104,22 @@ def status_report(home: Path | None) -> dict:
     private = _private_home(home)
     db = private / 'release-acceptance.sqlite3'
     observed: dict[str, str] = {}
+    history_count = 0
     if db.is_file():
         # SQLite mode=ro prevents creation of a new database on a status query.
         con = sqlite3.connect(db.as_uri() + '?mode=ro', uri=True, timeout=5)
         try:
-            observed = {str(key): str(value) for key, value in con.execute(
-                'SELECT check_id,status FROM observations')}
+            rows = list(con.execute('SELECT check_id,status,source FROM observations'))
+            if any(key not in dict(CHECKS) or status not in VALID
+                   or source != 'owner-reported' for key, status, source in rows):
+                raise ReadinessError('Private acceptance observations are invalid')
+            observed = {str(key): str(value) for key, value, _ in rows}
+            history_exists = con.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND "
+                "name='observation_history'").fetchone()
+            if history_exists:
+                history_count = int(con.execute(
+                    'SELECT COUNT(*) FROM observation_history').fetchone()[0])
         except sqlite3.DatabaseError as exc:
             raise ReadinessError('Private acceptance database is invalid') from exc
         finally:
@@ -109,7 +127,9 @@ def status_report(home: Path | None) -> dict:
     items = [{'id': key, 'check': description, 'status': observed.get(key, 'not-recorded'),
               'source': 'owner-reported' if key in observed else 'none',
               'independently_attested': False} for key, description in CHECKS]
-    return {'schema': 1, 'requirements': items, 'recorded': sum(x['status'] != 'not-recorded' for x in items),
+    return {'schema': 1, 'requirements': items,
+            'owner_observation_history_events': history_count,
+            'recorded': sum(x['status'] != 'not-recorded' for x in items),
             'all_owner_reported_passed': all(x['status'] == 'passed' for x in items),
             'release_certified': False, 'model_deployment_authorized': False,
             'hardware_independently_validated': False}

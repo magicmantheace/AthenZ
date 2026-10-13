@@ -46,6 +46,32 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertFalse(report['release_certified'])
         self.assertFalse(report['model_deployment_authorized'])
 
+    def test_owner_status_changes_keep_non_authorizing_local_history(self):
+        import sqlite3
+        check = CHECKS[0][0]
+        record(self.home, check, 'failed', confirmed=True)
+        record(self.home, check, 'blocked', confirmed=True)
+        record(self.home, check, 'passed', confirmed=True)
+        report = status_report(self.home)
+        self.assertEqual(report['owner_observation_history_events'], 3)
+        self.assertEqual(report['requirements'][0]['status'], 'passed')
+        self.assertFalse(report['release_certified'])
+        with sqlite3.connect(self.home / 'release-acceptance.sqlite3') as db:
+            history = db.execute(
+                'SELECT status FROM observation_history WHERE check_id=? ORDER BY id',
+                (check,)).fetchall()
+        self.assertEqual(history, [('failed',), ('blocked',), ('passed',)])
+
+    def test_invalid_database_status_fails_closed(self):
+        import sqlite3
+        check = CHECKS[0][0]
+        record(self.home, check, 'passed', confirmed=True)
+        with sqlite3.connect(self.home / 'release-acceptance.sqlite3') as db:
+            db.execute('UPDATE observations SET status=? WHERE check_id=?',
+                       ('unverified-external-certification', check))
+        with self.assertRaisesRegex(ReadinessError, 'observations are invalid'):
+            status_report(self.home)
+
     def test_all_manually_passed_never_certifies_hardware(self):
         for key, _ in CHECKS:
             record(self.home, key, 'passed', confirmed=True)

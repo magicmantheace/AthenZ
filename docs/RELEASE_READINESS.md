@@ -62,3 +62,16 @@ media nor validates external models, datasets, Windows/WSL2 hardware,
 complete-profile restore, or independent release acceptance. Owner-reported
 `profile-recovery` remains a distinct manual acceptance checkpoint.
 See [BACKUP.md](BACKUP.md).
+
+## Local observation history and fail-closed status reading
+
+Each owner-confirmed acceptance observation now appends an audit event in the
+same transaction as the current per-check status update. A later owner-reported
+pass does not erase earlier failed or blocked records. The read-only status
+report gives an aggregate history-event count, without automatically claiming
+certification, changing permissions, or logging personal device details.
+Malformed current check/status/source values are rejected rather than silently
+turning into release approval. Legacy databases without an event-history table
+remain readable (history count zero until a new owner-confirmed record).
+This is a local SQLite observation history, **not tamper-proof attestation**;
+an administrator who controls the database could rewrite its contents.
