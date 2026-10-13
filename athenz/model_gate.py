@@ -104,6 +104,15 @@ def _consistent_comparison_metadata(report: dict) -> bool:
             abs(gain - round((candidate - baseline) / count, 8)) > 1e-8 or
             report.get('eligible_for_review') is not (candidate > baseline)):
         return False
+    digests = ('baseline_digest', 'candidate_digest')
+    if any(key in report for key in digests):
+        if not all(key in report for key in digests):
+            return False
+        values = [report[key] for key in digests]
+        if (any(not isinstance(value, str) or len(value) != 64 or
+                any(letter not in '0123456789abcdef' for letter in value)
+                for value in values) or values[0] == values[1]):
+            return False
     paired = ('paired_improved', 'paired_regressed',
               'paired_unchanged', 'paired_one_sided_p_value')
     if any(name in report for name in paired):
@@ -245,6 +254,12 @@ def save_report(store: ExperienceStore, comparison: dict, *, confirmed: bool = F
         _reject_overlapping_decision_splits(store)
     except ValueError as exc:
         raise BenchmarkError('Evaluation partitions overlap; re-evaluation required') from exc
+    current_ids = [row[0] for row in store.db.execute(
+        "SELECT id FROM decisions WHERE status='approved' AND split=? "
+        "ORDER BY id LIMIT ?", (split, count))]
+    expected_ids_sha = hashlib.sha256(json.dumps(current_ids).encode()).hexdigest()
+    if len(current_ids) != count or comparison.get('case_ids_sha256') != expected_ids_sha:
+        raise BenchmarkError('Evaluation held-out case identities changed before saving')
     if (comparison.get('heldout_fingerprint') != _heldout_fingerprint(store, split, count)
             or comparison.get('reference_fingerprint') != _reference_fingerprint(store)):
         raise BenchmarkError('Evaluation evidence changed before saving; rerun comparison')

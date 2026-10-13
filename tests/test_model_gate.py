@@ -172,6 +172,26 @@ class EvaluationGateTests(unittest.TestCase):
         with self.assertRaisesRegex(BenchmarkError, 'partitions overlap'):
             save_report(self.store, report, confirmed=True)
 
+    def test_report_persistence_rejects_forged_case_identity_digest(self):
+        with mock.patch('athenz.model_gate.evaluate_decisions',
+                        side_effect=self.observations()):
+            valid = compare_models(self.store, Model('base'), Model('candidate'), self.sha)
+        forged = {**valid, 'case_ids_sha256': '0' * 64}
+        with self.assertRaisesRegex(BenchmarkError, 'case identities changed'):
+            save_report(self.store, forged, confirmed=True)
+
+    def test_report_persistence_rejects_partial_or_identical_model_digests(self):
+        with mock.patch('athenz.model_gate.evaluate_decisions',
+                        side_effect=self.observations()):
+            valid = compare_models(self.store, Model('base'), Model('candidate'), self.sha)
+        for altered in (
+                {**valid, 'candidate_digest': 'a' * 64},
+                {**valid, 'candidate_digest': 'not-a-digest'},
+                {key: value for key, value in valid.items() if key != 'baseline_digest'}):
+            with self.subTest(altered=altered.get('candidate_digest')):
+                with self.assertRaisesRegex(BenchmarkError, 'metadata is inconsistent'):
+                    save_report(self.store, altered, confirmed=True)
+
     def test_worse_candidate_not_ready(self):
         with mock.patch('athenz.model_gate.evaluate_decisions', side_effect=self.observations(10, 8)):
             r = compare_models(self.store, Model('base'), Model('candidate'), self.sha)

@@ -147,3 +147,13 @@ checks verified artifact fingerprints but did not reject every extra or changed
 non-weight field. This does not independently establish candidate lineage; it
 prevents unreviewed changes to registry fields from influencing later manual
 selection or runtime routing.
+
+### Persisted held-out case identity and model digest checks
+
+When a model comparison is saved for owner review, its reported aggregate
+case-ID hash must match the current, ordered, approved held-out case IDs. The
+report's optional baseline and candidate model digest fields must be either
+both present with distinct well-formed SHA-256 values or both absent for a
+legacy metadata-only report. This prevents mismatched or partial evaluated
+model evidence from being accepted through the report API; it does not prove
+that an Ollama model executed or independently verify a locally replaced tag.
