@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .evaluation import (evaluate_decisions, _fingerprint, _heldout_rows,
                          _reference_fingerprint, _reject_overlapping_decision_splits,
-                         _wilson_interval)
+                         _wilson_interval, _heldout_prompt_messages)
 from .experience import ExperienceStore
 from .training import DatasetError, _private_root, _write_new, verify_dataset
 
@@ -167,16 +167,20 @@ def _heldout_fingerprint(store: ExperienceStore, split: str, limit: int) -> str:
 
 
 def inspect_heldout_readiness(store: ExperienceStore, *, split: str = 'calibration',
-                             limit: int = 100, min_cases: int = 10) -> dict:
+                             limit: int = 100, min_cases: int = 10,
+                             seed: int = 42) -> dict:
     """Private-text-free, read-only benchmark planning; no Ollama or training.
 
     This is a bounded preflight for selecting reviewed held-out cases, NOT a
     model readiness, dataset-consent, or benchmark-accuracy certification.
     """
     if (split not in {'calibration', 'test'} or type(limit) is not int or
-            type(min_cases) is not int or not 2 <= min_cases <= limit <= 1000):
+            type(min_cases) is not int or not 2 <= min_cases <= limit <= 1000
+            or type(seed) is not int or not 0 <= seed < 2**32):
         raise BenchmarkError('Select a valid held-out split, limit and minimum sample count')
     rows = _heldout_rows(store, split, limit)
+    initial_cases_sha = _fingerprint(rows)
+    initial_reference_sha = _reference_fingerprint(store)
     total = store.db.execute(
         "SELECT COUNT(*) FROM decisions WHERE status='approved' AND split=?",
         (split,)).fetchone()[0]
@@ -190,6 +194,7 @@ def inspect_heldout_readiness(store: ExperienceStore, *, split: str = 'calibrati
     # for the protected evaluator at inference time.
     sufficient = len(rows) >= min_cases
     options_valid = True
+    reference_profile_clean = True
     for row in rows:
         try:
             choices = json.loads(row[3])
@@ -198,16 +203,30 @@ def inspect_heldout_readiness(store: ExperienceStore, *, split: str = 'calibrati
             break
         if (not isinstance(choices, list) or not 2 <= len(choices) <= 6
                 or any(not isinstance(choice, str) for choice in choices)
-                or row[2] not in choices):
+                or row[2] not in choices or
+                len({choice.strip().casefold() for choice in choices}) != len(choices)):
             options_valid = False
             break
-    return {'schema': 1, 'split': split, 'limit': limit,
+        try:
+            _heldout_prompt_messages(store, row, seed)
+        except ValueError:
+            # Covers reference-profile collisions or changed prompt structure.
+            # Neither offending private text nor any prompt reaches the report.
+            reference_profile_clean = False
+            break
+    snapshot_stable = (_fingerprint(_heldout_rows(store, split, limit))
+                       == initial_cases_sha and
+                       _reference_fingerprint(store) == initial_reference_sha)
+    return {'schema': 1, 'split': split, 'limit': limit, 'seed': seed,
             'minimum_cases': min_cases, 'approved_cases': total,
             'selected_cases': len(rows),
             'split_independence_check': 'lexical-pass' if clean else 'lexical-overlap',
             'minimum_cases_met': sufficient,
             'heldout_options_valid': options_valid,
-            'ready_for_owner_review': clean and sufficient and options_valid,
+            'reference_profile_clean': reference_profile_clean,
+            'evidence_snapshot_stable': snapshot_stable,
+            'ready_for_owner_review': (clean and sufficient and options_valid and
+                                       reference_profile_clean and snapshot_stable),
             'model_called': False, 'dataset_verified': False,
             'private_text_returned': False, 'promotion': 'not-authorized'}
 

@@ -198,6 +198,7 @@ def evaluate_decisions(store: IdentityStore, model, *, split: str = 'test',
         if _reference_fingerprint(store) != reference_sha:
             raise ValueError('Approved reference evidence changed during evaluation')
         messages, shuffled = _heldout_prompt_messages(store, item, seed)
+        letters = 'ABCDEF'
         # Check again after building messages, which can query private memories.
         if _reference_fingerprint(store) != reference_sha:
             raise ValueError('Approved reference evidence changed during evaluation')

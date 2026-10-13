@@ -244,3 +244,11 @@ Twin reference profile. This avoids divergent leakage checks between preflight
 and inference. Ambiguous answer-choice lists (identical normalized choice
 labels, including whitespace/case variants) are rejected before any model
 request. Gold rationales remain excluded from model-visible prompts.
+
+The held-out preflight also assembles the *exact* synthetic, seeded Twin
+reference prompts without calling Ollama. It checks lexical exposure of
+private held-out scenarios and distinctive rationales in the selected approved
+reference context, verifies all answer options are unambiguous, and rejects
+changed approval snapshots detected during inspection. Only boolean status
+flags are returned; the prompts, answers and reference evidence never leave
+the owner's private profile. This remains lexical rather than semantic proof.

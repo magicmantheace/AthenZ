@@ -328,6 +328,44 @@ class EvaluationGateTests(unittest.TestCase):
         self.assertFalse(obj['private_text_returned'])
         self.assertNotIn('synthetic held-out scenario', json.dumps(obj))
 
+    def test_readonly_preflight_detects_approved_reference_contamination(self):
+        self.store.propose('style', 'synthetic held-out scenario 1',
+                           source='owner', approved=True)
+        with mock.patch('athenz.runtime.model_digest',
+                        side_effect=AssertionError('no model inventory')):
+            report = inspect_heldout_readiness(self.store)
+        self.assertFalse(report['reference_profile_clean'])
+        self.assertFalse(report['ready_for_owner_review'])
+        self.assertTrue(report['evidence_snapshot_stable'])
+        self.assertNotIn('synthetic held-out scenario 1', str(report))
+
+    def test_preflight_refuses_ambiguous_answers_without_model(self):
+        first = self.store.db.execute(
+            "SELECT id FROM decisions WHERE split='calibration' ORDER BY id LIMIT 1"
+        ).fetchone()[0]
+        self.store.db.execute('UPDATE decisions SET options_json=? WHERE id=?',
+            (json.dumps(['yes', 'YES ', 'no']), first))
+        self.store.db.commit()
+        report = inspect_heldout_readiness(self.store)
+        self.assertFalse(report['heldout_options_valid'])
+        self.assertFalse(report['ready_for_owner_review'])
+
+    def test_preflight_seed_validation_and_stale_reference_are_sanitized(self):
+        with self.assertRaisesRegex(BenchmarkError, 'valid held-out split'):
+            inspect_heldout_readiness(self.store, seed=True)
+        with self.assertRaisesRegex(BenchmarkError, 'valid held-out split'):
+            inspect_heldout_readiness(self.store, seed=-1)
+        original = __import__('athenz.model_gate', fromlist=['_reference_fingerprint'])._reference_fingerprint
+        count = {'n': 0}
+        def drifting(store):
+            count['n'] += 1
+            return original(store) if count['n'] == 1 else 'f' * 64
+        with mock.patch('athenz.model_gate._reference_fingerprint',
+                        side_effect=drifting):
+            report = inspect_heldout_readiness(self.store)
+        self.assertFalse(report['evidence_snapshot_stable'])
+        self.assertFalse(report['ready_for_owner_review'])
+
     def test_worse_candidate_not_ready(self):
         with mock.patch('athenz.model_gate.evaluate_decisions', side_effect=self.observations(10, 8)):
             r = compare_models(self.store, Model('base'), Model('candidate'), self.sha)
