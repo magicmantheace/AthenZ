@@ -170,6 +170,27 @@ class FullTaskTests(unittest.TestCase):
         self.assertNotIn('PRIVATE-CHANGED', json.dumps(result))
         self.assertIn('integrity FAILED', result['output'])
 
+    def test_owner_revision_change_during_docker_refuses_stale_sequence_evidence(self):
+        self.finish()
+        from athenz.verification import isolated_unittest
+        real_run = subprocess.run
+        def delayed_old_test(argv, *args, **kwargs):
+            if argv[0] == 'docker':
+                cp = self.store.get_checkpoint('math')
+                self.store.checkpoint('math', cp['task'], cp['state'],
+                                      status='paused', expected_revision=cp['revision'])
+                return subprocess.CompletedProcess(argv, 0, 'synthetic passed', '')
+            return real_run(argv, *args, **kwargs)
+        before = len(self.store.list_items('test_runs'))
+        with mock.patch('athenz.verification.shutil.which', return_value='/usr/bin/docker'), \
+             mock.patch('athenz.verification.subprocess.run',
+                        side_effect=delayed_old_test):
+            with self.assertRaisesRegex(SequenceError, 'checkpoint changed during container'):
+                self.ctl.verify_container('math', image=IMAGE)
+        self.assertEqual(len(self.store.list_items('test_runs')), before)
+        self.assertIsNone(self.ctl._load('math')[1].get('behavioral_evidence'))
+        self.ctl.cancel('math', discard_changes=True)
+
     def test_full_sequence_evidence_and_export(self):
         self.finish()
         with mock.patch('athenz.verification.shutil.which', return_value='/usr/bin/docker'), \

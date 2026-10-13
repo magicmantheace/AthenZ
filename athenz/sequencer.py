@@ -279,9 +279,15 @@ class SequenceController:
         self._integrity(item, seq)
         workspace = Path(item['state']['workspace'])
         result = isolated_unittest(workspace, image=image, home=self.store.home, timeout=timeout)
-        # Snapshot data was independently hashed after copying; re-check the
-        # live workspace before recording the result to reject obvious drift.
-        self._integrity(item, seq)
+        # Do not let late results from a superseded owner task, rollback or
+        # revised scope become independent test evidence. Both this check and
+        # _save's revision CAS are required; local file hashes alone cannot
+        # establish which checkpoint authorized the container run.
+        latest_item, latest_seq = self._load(key)
+        if (latest_item['revision'] != item['revision']
+                or latest_seq != seq or latest_seq['phase'] != 'complete'):
+            raise SequenceError('Sequence checkpoint changed during container verification')
+        self._integrity(latest_item, latest_seq)
         proposal_id = seq['approved'][-1]['proposal_id']
         files_digest = result['snapshot_sha256']
         test_id = self.store.record_test(
@@ -291,6 +297,8 @@ class SequenceController:
         row = self.store.db.execute('SELECT output_sha256 FROM test_runs WHERE id=?',
                                     (test_id,)).fetchone()
         item, seq = self._load(key)
+        if item['revision'] != latest_item['revision'] or seq != latest_seq:
+            raise SequenceError('Sequence checkpoint changed before evidence persistence')
         seq = dict(seq)
         seq['behavioral_evidence'] = {
             'test_run_id': test_id, 'runner': result['runner'], 'image': result['image'],

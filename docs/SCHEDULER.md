@@ -150,3 +150,10 @@ verification also rechecks the checkpoint revision, proposal ID and applied
 status before recording test evidence. If the owner superseded the task during
 Docker execution, the late test result is discarded. This is not a defense
 against an adversary with the ability to edit the host between both checks.
+
+Multi-stage coding verification additionally compares the full task sequence
+and its checkpoint revision after Docker returns, before writing behavioral
+evidence. A concurrent owner scope edit, cancellation or superseding revision
+refuses the late result even if its copied source remains unchanged. The final
+checkpoint save is still revision-fenced; public tests simulate owner updates
+during an isolated test without executing untrusted code on the host.
