@@ -88,3 +88,23 @@ unsafe private profile roots. The size is only an estimate: the eventual
 SQLite consistent snapshot and selected files may change before the user
 explicitly runs `create --confirm`. The ZIP remains **plaintext**; the
 inspection grants no authorization to create, restore or share it.
+
+## Supervised full-profile recovery rehearsal
+
+```sh
+athenz-recovery-drill <bundle-id> --bundle --confirm
+# Optional: --scratch /existing/private/scratch-directory
+```
+
+The `--bundle` option restores a **verified plaintext selected-profile ZIP**
+into a freshly created, disposable local scratch profile, checks its SQLite
+integrity, verifies every recovered dataset/review/adapter file against the
+original ZIP manifest, and independently confirms that scheduler leases,
+running checkpoints and model-routing pointers are disarmed. It then deletes
+the temporary recovered copy. It never selects the recovered profile, deploys
+weights, starts Ollama, or modifies an existing destination. The scratch
+location must be an existing safe directory outside the live profile and any
+Git checkout with sufficient disk space; private plaintext temporarily exists
+there during the explicit rehearsal. Reports contain only counts and booleans,
+not private names, records, local paths or model contents. This is a recovery
+rehearsal, not encrypted backup or independent model provenance.

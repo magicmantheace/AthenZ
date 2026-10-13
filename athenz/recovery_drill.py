@@ -15,8 +15,12 @@ from pathlib import Path
 import shutil
 import sqlite3
 import tempfile
+import zipfile
+import hashlib
 
-from .backup import ID, verify_backup, restore_to_new_profile
+from .backup import ID, _checksum, verify_backup, restore_to_new_profile
+from .profile_bundle import (MAX_TOTAL, _secure_name, verify_bundle,
+                             restore_bundle_new)
 
 
 # A failed disk-space check is safer than filling an owner's device. 2 GiB is
@@ -27,6 +31,33 @@ MIN_FREE_MARGIN = 32 * 1024 ** 2
 
 class RecoveryDrillError(ValueError):
     """Consent, capacity or isolated recovery checks failed."""
+
+
+def _safe_scratch_parent(source_home: Path, scratch_root: Path | None,
+                         required_bytes: int) -> Path:
+    """Validate an existing non-Git scratch parent and conservative disk budget."""
+    if scratch_root is not None:
+        supplied = Path(scratch_root).expanduser().absolute()
+        if not supplied.is_dir() or any(
+                p.is_symlink() or getattr(p, 'is_junction', lambda: False)()
+                for p in (supplied, *supplied.parents)):
+            raise RecoveryDrillError('Scratch parent must be a real existing directory')
+        parent = supplied.resolve(strict=True)
+    else:
+        parent = Path(tempfile.gettempdir()).resolve()
+    for part in (parent, *parent.parents):
+        if (part.is_symlink() or (part / '.git').exists() or
+                (part / '.git').is_symlink()):
+            raise RecoveryDrillError('Scratch directory cannot be within a Git checkout')
+    if parent == source_home or source_home in parent.parents:
+        raise RecoveryDrillError('Scratch directory must be separate from the live private profile')
+    try:
+        free = shutil.disk_usage(parent).free
+    except OSError as exc:
+        raise RecoveryDrillError('Cannot verify temporary free disk space') from exc
+    if free < required_bytes + MIN_FREE_MARGIN:
+        raise RecoveryDrillError('Insufficient scratch space for a safe recovery rehearsal')
+    return parent
 
 
 def rehearse_sqlite_backup(home: Path | None, identifier: str, *,
@@ -62,30 +93,7 @@ def rehearse_sqlite_backup(home: Path | None, identifier: str, *,
     if type(expected_size) is not int or not 0 < expected_size <= MAX_SNAPSHOT:
         raise RecoveryDrillError('Backup exceeds the bounded rehearsal size')
 
-    if scratch_root is not None:
-        supplied = Path(scratch_root).expanduser().absolute()
-        if not supplied.is_dir() or any(
-                p.is_symlink() or getattr(p, 'is_junction', lambda: False)()
-                for p in (supplied, *supplied.parents)):
-            raise RecoveryDrillError('Scratch parent must be a real existing directory')
-        # Windows short and long path spellings may reference the same
-        # directory; canonicalize before inspecting Git and profile ancestry.
-        parent = supplied.resolve(strict=True)
-    else:
-        parent = Path(tempfile.gettempdir()).resolve()
-    # Avoid leaking snapshot contents into Git. Refuse the scratch ancestor if
-    # a repository marker or symlink appears in any traversed parent.
-    for part in (parent, *parent.parents):
-        if part.is_symlink() or (part / '.git').exists() or (part / '.git').is_symlink():
-            raise RecoveryDrillError('Scratch directory cannot be within a Git checkout')
-    if parent == source_home or source_home in parent.parents:
-        raise RecoveryDrillError('Scratch directory must be separate from the live private profile')
-    try:
-        free = shutil.disk_usage(parent).free
-    except OSError as exc:
-        raise RecoveryDrillError('Cannot verify temporary free disk space') from exc
-    if free < expected_size * 2 + MIN_FREE_MARGIN:
-        raise RecoveryDrillError('Insufficient scratch space for a safe recovery rehearsal')
+    parent = _safe_scratch_parent(source_home, scratch_root, expected_size * 2)
 
     with tempfile.TemporaryDirectory(prefix='athenz-recovery-drill-', dir=parent) as scratch:
         sandbox = Path(scratch)
@@ -123,15 +131,107 @@ def rehearse_sqlite_backup(home: Path | None, identifier: str, *,
             'full_profile_recovery_validated': False}
 
 
+def rehearse_profile_bundle(home: Path | None, identifier: str, *,
+                           confirmed: bool = False,
+                           scratch_root: Path | None = None) -> dict:
+    """Rehearse full selected-asset recovery in a disposable offline profile.
+
+    Plaintext may temporarily exist under owner-selected local scratch.
+    Neither the source profile nor external model/adapter runtime is activated.
+    Reports contain only fixed technical booleans and artifact counts.
+    """
+    if confirmed is not True:
+        raise RecoveryDrillError('Explicit --confirm required for plaintext bundle rehearsal')
+    if not isinstance(identifier, str) or not ID.fullmatch(identifier):
+        raise RecoveryDrillError('Choose a valid private profile bundle identifier')
+    from .profile_health import _home_location
+    source_home = _home_location(home)
+    archive = source_home / 'bundles' / ('bundle-' + identifier + '.zip')
+    sidecar = source_home / 'bundles' / ('bundle-' + identifier + '.manifest.json')
+    if (not source_home.is_dir() or
+            not (source_home / 'identity.sqlite3').is_file() or
+            (source_home / 'identity.sqlite3').is_symlink() or
+            any(p.is_symlink() or not p.is_file() for p in (archive, sidecar))):
+        raise RecoveryDrillError('Existing private profile and verified bundle required')
+    verified = verify_bundle(source_home, identifier)
+    bytes_needed = verified.get('bytes')
+    if type(bytes_needed) is not int or not 0 < bytes_needed <= MAX_TOTAL + 2 * 1024**2:
+        raise RecoveryDrillError('Private bundle exceeds the rehearsal size bound')
+    # Archive is stored, not compressed, and the restore destination plus
+    # original verifier scratch may need ~2x its size. Reserve a 3x margin.
+    parent = _safe_scratch_parent(source_home, scratch_root, bytes_needed * 3)
+    with tempfile.TemporaryDirectory(prefix='athenz-bundle-drill-', dir=parent) as scratch:
+        sandbox = Path(scratch)
+        if os.name != 'nt':
+            sandbox.chmod(0o700)
+        dest = sandbox / 'recovered'
+        restored = restore_bundle_new(source_home, identifier, dest, confirmed=True)
+        db_path = dest / 'identity.sqlite3'
+        if db_path.is_symlink() or not db_path.is_file():
+            raise RecoveryDrillError('Recovered bundle database is unsafe')
+        with closing(sqlite3.connect(db_path.as_uri() + '?mode=ro&immutable=1', uri=True)) as db:
+            integrity = db.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
+            version = db.execute('PRAGMA user_version').fetchone()[0]
+            scheduling = db.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='proposal_schedule'"
+            ).fetchone()
+            active_jobs = (db.execute(
+                "SELECT count(*) FROM proposal_schedule WHERE state!='paused' OR lease IS NOT NULL"
+            ).fetchone()[0] if scheduling else 0)
+            runtime_routes = db.execute(
+                "SELECT count(*) FROM checkpoints WHERE task_key='ollama_runtime'"
+            ).fetchone()[0]
+            running = db.execute(
+                "SELECT count(*) FROM checkpoints WHERE status='running'"
+            ).fetchone()[0]
+        if (not integrity or not 1 <= version <= 5 or active_jobs or
+                runtime_routes or running or
+                restored.get('scheduler_disarmed') is not True or
+                restored.get('model_routing_reset') is not True):
+            raise RecoveryDrillError('Recovered bundle retained execution authority')
+        # The restore path rechecked the source ZIP checksum. Independently
+        # hash every restored member against the included per-file manifest.
+        with zipfile.ZipFile(archive, mode='r') as zf:
+            manifest = json.loads(zf.read('manifest.json'))
+        rows = manifest['files']
+        for entry in rows:
+            rel = _secure_name(entry['path'])
+            copied = dest.joinpath(*rel.split('/'))
+            if copied.is_symlink() or not copied.is_file():
+                raise RecoveryDrillError('Recovered bundle member is missing or unsafe')
+            if _checksum(copied) != (entry['sha256'], entry['bytes']):
+                raise RecoveryDrillError('Recovered bundle member hash changed')
+        if (restored.get('files_restored') != len(rows) or
+                any((dest / folder).exists()
+                    for folder in ('worktrees', 'snapshots', 'backups', 'bundles'))):
+            raise RecoveryDrillError('Recovered profile contains out-of-scope files')
+        if _checksum(archive)[0] != verified['sha256']:
+            raise RecoveryDrillError('Private bundle changed during rehearsal')
+    return {'schema': 1, 'backup_type': 'selected-profile-bundle',
+            'rehearsal_passed': True, 'database_integrity_ok': True,
+            'selected_files_verified': len(rows),
+            'scheduler_disarmed': True, 'running_checkpoints_paused': True,
+            'model_routing_reset': True, 'temp_profile_deleted': True,
+            'live_profile_replaced': False, 'source_profile_may_be_touched': True,
+            'private_records_exposed': False, 'independent_hardware_validation': False,
+            'externally_installed_models_restored': False}
+
+
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(description='Explicit offline SQLite restore rehearsal; never activates a profile')
-    p.add_argument('backup_id', help='Existing SHA-verified private SQLite backup identifier')
+    p.add_argument('backup_id', help='Existing 32-character SQLite or profile-bundle identifier')
+    p.add_argument('--bundle', action='store_true',
+                   help='Rehearse selected private profile bundle instead of SQLite-only backup')
     p.add_argument('--home', type=Path, default=None, help='Existing private AthenZ home outside Git')
     p.add_argument('--scratch', type=Path, default=None, help='Optional existing trusted scratch parent')
     p.add_argument('--confirm', action='store_true', help='Required to read private backup and run a rehearsal')
     a = p.parse_args(argv)
-    print(json.dumps(rehearse_sqlite_backup(a.home, a.backup_id, confirmed=a.confirm,
-                                            scratch_root=a.scratch), indent=2))
+    result = (rehearse_profile_bundle(a.home, a.backup_id, confirmed=a.confirm,
+                                      scratch_root=a.scratch)
+              if a.bundle else
+              rehearse_sqlite_backup(a.home, a.backup_id, confirmed=a.confirm,
+                                     scratch_root=a.scratch))
+    print(json.dumps(result, indent=2))
 
 
 if __name__ == '__main__':

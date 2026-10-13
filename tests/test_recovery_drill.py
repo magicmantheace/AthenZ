@@ -50,6 +50,56 @@ class RecoveryDrillTests(unittest.TestCase):
             store.close()
         return create_backup(self.home, confirmed=True)['id']
 
+    def test_selected_bundle_recovery_rehearsal_disarms_and_deletes_copy(self):
+        from athenz.profile_bundle import create_bundle
+        from athenz.recovery_drill import rehearse_profile_bundle
+        store = ExperienceStore(self.home)
+        try:
+            store.propose('style', 'PRIVATE-BUNDLE-OWNER-RECORD',
+                          source='synthetic', approved=True)
+            store.checkpoint('ollama_runtime', 'synthetic', {'active_tag': 'unsafe'})
+            store.checkpoint('active-worker', 'synthetic', {'secret': 'not-displayed'},
+                             status='running')
+        finally:
+            store.close()
+        (self.home / 'datasets').mkdir()
+        (self.home / 'datasets' / 'synthetic.jsonl').write_bytes(b'PRIVATE-DATA')
+        (self.home / 'runs' / 'local' / 'adapter').mkdir(parents=True)
+        (self.home / 'runs' / 'local' / 'adapter' / 'adapter_model.safetensors').write_bytes(
+            b'PRIVATE-ADAPTER')
+        bundle = create_bundle(self.home, confirmed=True)
+        original_archive = (self.home / 'bundles' / f"bundle-{bundle['id']}.zip").read_bytes()
+        with self.assertRaisesRegex(RecoveryDrillError, 'confirm'):
+            rehearse_profile_bundle(self.home, bundle['id'], scratch_root=self.scratch)
+        result = rehearse_profile_bundle(self.home, bundle['id'], confirmed=True,
+                                         scratch_root=self.scratch)
+        self.assertTrue(result['rehearsal_passed'])
+        self.assertEqual(result['selected_files_verified'], 3)
+        self.assertTrue(result['temp_profile_deleted'])
+        self.assertTrue(result['scheduler_disarmed'])
+        self.assertTrue(result['model_routing_reset'])
+        self.assertFalse(result['externally_installed_models_restored'])
+        self.assertFalse(result['live_profile_replaced'])
+        self.assertNotIn('PRIVATE', json.dumps(result))
+        self.assertEqual(list(self.scratch.iterdir()), [])
+        self.assertEqual((self.home / 'bundles' / f"bundle-{bundle['id']}.zip").read_bytes(),
+                         original_archive)
+        with patch('builtins.print') as shown:
+            main([bundle['id'], '--bundle', '--home', str(self.home),
+                  '--scratch', str(self.scratch), '--confirm'])
+        cli = json.loads(shown.call_args.args[0])
+        self.assertEqual(cli['backup_type'], 'selected-profile-bundle')
+        self.assertNotIn(str(self.home), json.dumps(cli))
+
+    def test_bundle_rehearsal_missing_source_has_no_side_effects(self):
+        from athenz.recovery_drill import rehearse_profile_bundle
+        missing = self.base / 'unknown-profile'
+        with self.assertRaisesRegex(RecoveryDrillError, 'Existing private profile'):
+            rehearse_profile_bundle(missing, 'f' * 32, confirmed=True,
+                                    scratch_root=self.scratch)
+        self.assertFalse(missing.exists())
+        self.assertEqual(list(self.scratch.iterdir()), [])
+
     def test_no_consent_means_no_private_backup_read(self):
         with patch('athenz.recovery_drill.verify_backup', side_effect=AssertionError('read')):
             with self.assertRaisesRegex(RecoveryDrillError, 'confirm'):
