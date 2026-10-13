@@ -158,3 +158,17 @@ and [additional Linux Python matrix + Windows portable build run 38331854750](ht
 The unsigned portable artifact is retained only seven days and is not a
 signed release or a trusted installer. GitHub Actions does not reveal or certify
 any local owner profile or production hardware.
+
+### Hosted Docker and latest source coverage
+
+On 2026-10-12 the owner-approved public-runner Docker test was invoked from
+an isolated `ci/` branch with read-only checkout pinned to source commit
+`be8cf5b93a396b4737bf145e6896d7cac8b9eb66`. Run
+[38332727303](https://github.com/magicmantheace/AthenZ/actions/runs/38332727303)
+passed seven real-Docker integration/sandbox threat tests with a registry
+SHA-256-addressed image. No model inference or owner private files were used.
+Run [38332502198](https://github.com/magicmantheace/AthenZ/actions/runs/38332502198)
+passed Linux Python 3.12/3.13 regression and unsigned Windows portable
+smokes against the same source; run 38332623888 passed Linux Python 3.11.
+These tests are hosted evidence only, not independent container isolation
+certification or acceptance on the owner's hardware.

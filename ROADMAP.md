@@ -142,3 +142,23 @@ hardware tests do not currently block further independent engineering.
   Hosted Windows Python 3.11 full regression also passed (run 38331720210):
   413 tests, seven platform-dependent skips, zero errors and zero failures.
   This is a hosted runner gate, not owner-device hardware acceptance.
+
+### v0.7 lexical held-out protection and hosted sandbox check
+
+- [x] Fail-closed held-out evaluation check for literal and sufficiently
+  distinctive normalized-word collisions in approved private Twin context.
+- [x] Withhold approved SFT instruction pairs matching held-out scenarios by
+  normalized word sequence, even with changed punctuation or capitalization;
+  reverify/revoke stale exports when the private held-out set changes.
+- [x] Hosted Docker integration and synthetic sandbox threat suite: seven tests
+  passed using a registry-digest-pinned image in public GitHub Actions run
+  [38332727303](https://github.com/magicmantheace/AthenZ/actions/runs/38332727303).
+- [x] Linux Python 3.11/3.12/3.13: 417 tests each, four skips, no failures
+  against the reviewed `be8cf5b93a396b4737bf145e6896d7cac8b9eb66`
+  source (public CI runs 38332623888 and 38332502198).
+- [x] Hosted unsigned Windows PyInstaller + offline executable/Tk smoke passed
+  on this source (public run 38332502198). Artifact retention is seven days.
+- [ ] Native owner-device WSL2, real Ollama model, RTX 3060 and assistive
+  technology tests remain outstanding. True semantic held-out contamination
+  and training-weight memorization detection are not established by these
+  normalized-string checks.
