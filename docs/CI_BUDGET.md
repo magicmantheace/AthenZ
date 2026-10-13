@@ -257,3 +257,21 @@ Windows Python 3.11's longer full-suite job belongs to the first run and
 must have a completed success conclusion before claiming that full platform
 regression passed. Hosted runners contain only synthetic profiles; actual
 RTX 3060 CUDA/WSL2/owner Ollama is still unverified.
+
+### Selected-profile bundle recovery rehearsal (final implementation)
+
+Pinned source `cffd2005a7db6a32a0e822fee5dffde8d8540e9b` adds disposable
+full-profile restoration rehearsal and strict backup sidecar JSON validation.
+The corrected recovery assertion verifies an intentionally disarmed SQLite
+snapshot against the **post-restoration** SHA, with non-SQLite private assets
+compared byte-for-byte to the ZIP manifest. Public Python 3.12 and 3.13
+completed 500 tests with four skips each and no failure in
+[38351342271](https://github.com/magicmantheace/AthenZ/actions/runs/38351342271).
+That run also passed unsigned Windows portable packaging and Tk GUI startup.
+The full Linux/Windows Python 3.11 run
+[38351334337](https://github.com/magicmantheace/AthenZ/actions/runs/38351334337)
+and real Docker sandbox run
+[38351452118](https://github.com/magicmantheace/AthenZ/actions/runs/38351452118)
+are independent evidence; their success must be checked rather than assumed.
+All hosted inputs are synthetic and contain no owner private records, models,
+archive material, passwords or environment identifiers.

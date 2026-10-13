@@ -312,3 +312,24 @@ Supervised proposal-queue failure reports now contain fixed non-sensitive
 categories, not raw driver/model exceptions that could reveal private
 prompts, filesystem paths or local environment details. These improvements
 do not authorize unattended code edits, automatic model training or promotion.
+
+## Rehearse selected-profile recovery without activating it
+
+For an existing, owner-approved **plaintext** private bundle produced by
+`athenz-profile create --confirm`, AthenZ can now independently rehearse
+restoration in an automatically deleted local scratch profile:
+
+```sh
+athenz-rehearse-backup <32-character-bundle-id> --bundle --confirm
+# Optionally choose an existing scratch parent with --scratch /safe/private/dir
+```
+
+The rehearsal validates all selected artifact fingerprints after extraction,
+checks the recovered SQLite schema, and verifies that old scheduled leases,
+running checkpoints and active model routing are disarmed. The SQLite snapshot
+is deliberately changed during recovery: the rehearsal compares it with its
+**post-disarm** recovery fingerprint rather than assuming it remains identical
+to the archived bytes. Scratch storage needs free space and temporarily holds
+unencrypted private material; cleanup is not secure erasure. No downloaded or
+installed Ollama models, Docker worktrees, or external adapters are activated.
+See [private profile bundles](docs/PROFILE_BUNDLES.md).

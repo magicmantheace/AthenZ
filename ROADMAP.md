@@ -338,3 +338,29 @@ owner profile data or unattended coding action implied by this milestone.
 - [ ] Hosted Windows full Python 3.11 result for run 38348235713 must be
   checked separately; native RTX 3060, WSL2, real local Ollama, assistive
   technology and semantic paraphrase handling still need owner validation.
+
+### 2026-10-12 — Disposable selected-profile recovery acceptance increment
+
+- [x] Add `athenz-rehearse-backup <bundle-id> --bundle --confirm` for a
+  bounded, explicitly authorized recovery into a disposable local profile.
+  Verify every selected recovered artifact against the private ZIP manifest,
+  verify the intentionally modified SQLite file against its **post-disarm**
+  recovery digest and independently reject retained scheduler leases, running
+  jobs, or active Ollama routing. No live profile activation is permitted.
+- [x] Require existing trusted non-Git scratch space, sufficient free disk,
+  owner consent and safe paths. Temporary plaintext is removed on exit;
+  neither temporary deletion nor checksum comparison is encryption/signature.
+- [x] SQLite-only and full-bundle verifiers reject malformed **outer** JSON
+  manifests, booleans presented as sizes, invalid SHA types, and corrupt schema
+  metadata with controlled private errors. No raw source file or text is sent
+  to hosted tests.
+- [x] Synthetic recovery drills cover active synthetic scheduler leases,
+  existing running checkpoints, external private adapter assets, unsafe Git
+  scratch roots, missing sources and exception sanitization.
+- [x] Reviewed implementation `cffd2005a7db6a32a0e822fee5dffde8d8540e9b`
+  passed 500 synthetic tests on Linux Python 3.12/3.13 with four platform skips
+  each; Windows unsigned portable executable/Tk startup checks passed
+  ([public run 38351342271](https://github.com/magicmantheace/AthenZ/actions/runs/38351342271)).
+- [ ] Full hosted Windows/Python 3.11 validation and actual owner-device
+  restoration, encrypted transport, installed model lineage and independent
+  acceptance remain separate from these synthetic tests.
