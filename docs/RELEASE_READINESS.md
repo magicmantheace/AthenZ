@@ -75,3 +75,18 @@ turning into release approval. Legacy databases without an event-history table
 remain readable (history count zero until a new owner-confirmed record).
 This is a local SQLite observation history, **not tamper-proof attestation**;
 an administrator who controls the database could rewrite its contents.
+
+### Inspect owner-only acceptance history
+
+```powershell
+athenz-release-readiness history --limit 25
+```
+
+This is a read-only, bounded view (1–100 newest records) of previously
+owner-confirmed acceptance observations. It returns only the known check IDs,
+owner-reported outcomes and local record timestamps. It never starts tests,
+trains a model, changes the profile, publishes evidence or certifies a release.
+For databases without prior history events, the command returns an empty list
+without creating files. The status command remains the source of the current
+per-check owner observation; use history to review how those observations
+changed over time.

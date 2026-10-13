@@ -135,12 +135,48 @@ def status_report(home: Path | None) -> dict:
             'hardware_independently_validated': False}
 
 
+def history_report(home: Path | None, *, limit: int = 25) -> dict:
+    """Return a bounded read-only view of owner-only acceptance history."""
+    if type(limit) is not int or not 1 <= limit <= 100:
+        raise ReadinessError('History limit must be an integer from 1 to 100')
+    private = _private_home(home)
+    db = private / 'release-acceptance.sqlite3'
+    records: list[dict] = []
+    if db.is_file():
+        con = sqlite3.connect(db.as_uri() + '?mode=ro', uri=True, timeout=5)
+        try:
+            present = con.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' "
+                "AND name='observation_history'").fetchone()
+            if present:
+                rows = con.execute(
+                    "SELECT check_id,status,source,recorded_at FROM observation_history "
+                    "ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+                for check_id, status, source, timestamp in rows:
+                    if (check_id not in dict(CHECKS) or status not in VALID
+                            or source != 'owner-reported' or
+                            not isinstance(timestamp, str) or len(timestamp) > 40 or
+                            not timestamp.endswith('Z')):
+                        raise ReadinessError('Private acceptance history is invalid')
+                    records.append({'id': check_id, 'status': status,
+                                    'source': source, 'recorded_at': timestamp})
+        except sqlite3.DatabaseError as exc:
+            raise ReadinessError('Private acceptance history is invalid') from exc
+        finally:
+            con.close()
+    return {'schema': 1, 'events': records, 'count': len(records),
+            'independently_attested': False, 'release_certified': False}
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description='AthenZ manual release-acceptance evidence, local only')
     parser.add_argument('--home', type=Path, default=None, help='Private AthenZ profile outside Git')
     actions = parser.add_subparsers(dest='action', required=True)
     actions.add_parser('plan', help='Public release checks, no filesystem writes')
     actions.add_parser('status', help='Read owner reports without changing data')
+    history = actions.add_parser('history', help='Read latest owner observation events only')
+    history.add_argument('--limit', type=int, default=25,
+                         help='Maximum events to return (1..100)')
     mark = actions.add_parser('record', help='Record an owner observation; never certifies release')
     mark.add_argument('check_id', choices=[name for name, _ in CHECKS])
     mark.add_argument('result', choices=sorted(VALID))
@@ -150,6 +186,8 @@ def main(argv: list[str] | None = None) -> None:
         output = acceptance_plan()
     elif args.action == 'status':
         output = status_report(args.home)
+    elif args.action == 'history':
+        output = history_report(args.home, limit=args.limit)
     else:
         output = record(args.home, args.check_id, args.result, confirmed=args.confirm)
     print(json.dumps(output, indent=2))

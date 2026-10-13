@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from athenz.release_readiness import (CHECKS, ReadinessError, acceptance_plan,
-                                      main, record, status_report)
+                                      main, record, status_report, history_report)
 
 
 class ReleaseReadinessTests(unittest.TestCase):
@@ -71,6 +71,33 @@ class ReleaseReadinessTests(unittest.TestCase):
                        ('unverified-external-certification', check))
         with self.assertRaisesRegex(ReadinessError, 'observations are invalid'):
             status_report(self.home)
+
+    def test_history_is_read_only_bounded_and_keeps_status_order(self):
+        check = CHECKS[0][0]
+        self.assertEqual(history_report(self.home), {
+            'schema': 1, 'events': [], 'count': 0,
+            'independently_attested': False, 'release_certified': False})
+        self.assertFalse(self.home.exists())
+        for status in ('failed', 'blocked', 'passed'):
+            record(self.home, check, status, confirmed=True)
+        history = history_report(self.home, limit=2)
+        self.assertEqual([x['status'] for x in history['events']],
+                         ['passed', 'blocked'])
+        self.assertEqual(history['count'], 2)
+        self.assertFalse(history['independently_attested'])
+        self.assertEqual(status_report(self.home)['requirements'][0]['status'],
+                         'passed')
+
+    def test_history_cli_is_read_only_and_limit_checked(self):
+        with patch('builtins.print') as printer:
+            main(['--home', str(self.home), 'history', '--limit', '5'])
+        output = json.loads(printer.call_args.args[0])
+        self.assertEqual(output['events'], [])
+        self.assertFalse(self.home.exists())
+        for invalid in (0, -1, 101, True):
+            with self.subTest(limit=invalid):
+                with self.assertRaisesRegex(ReadinessError, 'History limit'):
+                    history_report(self.home, limit=invalid)
 
     def test_all_manually_passed_never_certifies_hardware(self):
         for key, _ in CHECKS:
