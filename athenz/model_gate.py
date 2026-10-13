@@ -166,6 +166,39 @@ def _heldout_fingerprint(store: ExperienceStore, split: str, limit: int) -> str:
     return _fingerprint(_heldout_rows(store, split, limit))
 
 
+def inspect_heldout_readiness(store: ExperienceStore, *, split: str = 'calibration',
+                             limit: int = 100, min_cases: int = 10) -> dict:
+    """Private-text-free, read-only benchmark planning; no Ollama or training.
+
+    This is a bounded preflight for selecting reviewed held-out cases, NOT a
+    model readiness, dataset-consent, or benchmark-accuracy certification.
+    """
+    if (split not in {'calibration', 'test'} or type(limit) is not int or
+            type(min_cases) is not int or not 2 <= min_cases <= limit <= 1000):
+        raise BenchmarkError('Select a valid held-out split, limit and minimum sample count')
+    rows = _heldout_rows(store, split, limit)
+    total = store.db.execute(
+        "SELECT COUNT(*) FROM decisions WHERE status='approved' AND split=?",
+        (split,)).fetchone()[0]
+    try:
+        _reject_overlapping_decision_splits(store)
+        clean = True
+    except ValueError:
+        clean = False
+    # This report never exposes the scenario/answer/rationale/options. It
+    # deliberately leaves actual semantic leakage and full model verification
+    # for the protected evaluator at inference time.
+    sufficient = len(rows) >= min_cases
+    return {'schema': 1, 'split': split, 'limit': limit,
+            'minimum_cases': min_cases, 'approved_cases': total,
+            'selected_cases': len(rows),
+            'split_independence_check': 'lexical-pass' if clean else 'lexical-overlap',
+            'minimum_cases_met': sufficient,
+            'ready_for_owner_review': clean and sufficient,
+            'model_called': False, 'dataset_verified': False,
+            'private_text_returned': False, 'promotion': 'not-authorized'}
+
+
 def compare_models(store: ExperienceStore, baseline_model, candidate_model,
                    dataset_sha256: str, *, split: str = 'calibration', limit: int = 100,
                    seed: int = 42, min_cases: int = 10) -> dict:

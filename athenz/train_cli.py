@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .experience import ExperienceStore
 from .training import build_dataset, delete_dataset, inspect_dataset, verify_dataset
-from .model_gate import compare_models, save_report
+from .model_gate import compare_models, save_report, inspect_heldout_readiness
 from .chat import OllamaClient
 from .finetune import create_run, describe_run, execute_run
 from .adapters import register_adapter, selection, select_for_review, rollback_selection
@@ -28,6 +28,10 @@ def parser() -> argparse.ArgumentParser:
     x = sub.add_parser('delete', help='Delete only a named AthenZ dataset and manifest')
     x.add_argument('sha256')
     x.add_argument('--confirm', action='store_true')
+    x = sub.add_parser('inspect-heldout', help='Check aggregate held-out case counts and split overlap without inference')
+    x.add_argument('--split', choices=['calibration', 'test'], default='calibration')
+    x.add_argument('--limit', type=int, default=100)
+    x.add_argument('--min-cases', type=int, default=10)
     x = sub.add_parser('compare', help='Compare two local models on the SAME held-out decision cases')
     x.add_argument('sha256', help='Previously approved private dataset hash')
     x.add_argument('--baseline', required=True)
@@ -105,6 +109,9 @@ def main(argv: list[str] | None = None) -> None:
     try:
         if args.command == 'inspect':
             result = inspect_dataset(store)
+        elif args.command == 'inspect-heldout':
+            result = inspect_heldout_readiness(
+                store, split=args.split, limit=args.limit, min_cases=args.min_cases)
         elif args.command == 'build':
             result = build_dataset(store, confirmed=args.confirm)
         elif args.command == 'verify':

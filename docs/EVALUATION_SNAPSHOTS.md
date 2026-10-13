@@ -217,3 +217,14 @@ The persisted aggregate chance estimate is also range-checked. This cannot
 prove the model's statistical independence or that all benchmark choices are
 appropriately balanced; it prevents obviously contradictory comparison
 metadata from being mistaken for independent performance evidence.
+
+## Read-only held-out benchmark readiness preflight
+
+Run `athenz-training inspect-heldout --split calibration --limit 100 --min-cases 10`
+to inspect private aggregate approved case counts, bounded selection size,
+and whether the existing strict lexical train/calibration/test overlap check
+passes. No Ollama requests, model imports, training, dataset export, scenario
+text, expected choices or gold rationales are included in this report.
+It does not verify a specific training dataset, detect semantic paraphrases
+or attest to model accuracy. It is a preparation step only; `compare --confirm`
+and any later reviewed model change remain separate explicit user decisions.

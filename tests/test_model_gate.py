@@ -7,7 +7,8 @@ import unittest
 from unittest import mock
 
 from athenz.experience import ExperienceStore
-from athenz.model_gate import BenchmarkError, compare_models, save_report
+from athenz.model_gate import (BenchmarkError, compare_models, save_report,
+                               inspect_heldout_readiness)
 from athenz.evaluation import _fingerprint, _heldout_rows, _reference_fingerprint
 from athenz.training import build_dataset
 
@@ -267,6 +268,39 @@ class EvaluationGateTests(unittest.TestCase):
                 with self.assertRaisesRegex(BenchmarkError, 'metadata is inconsistent'):
                     save_report(self.store, {**report, 'chance_expected': invalid},
                                 confirmed=True)
+
+    def test_heldout_readiness_is_readonly_aggregate_and_bounded(self):
+        with mock.patch('athenz.runtime.model_digest',
+                        side_effect=AssertionError('no Ollama access')):
+            report = inspect_heldout_readiness(self.store)
+        self.assertEqual((report['approved_cases'], report['selected_cases']), (12, 12))
+        self.assertTrue(report['ready_for_owner_review'])
+        self.assertFalse(report['model_called'])
+        self.assertFalse(report['dataset_verified'])
+        self.assertNotIn('synthetic held-out scenario', str(report))
+        smaller = inspect_heldout_readiness(self.store, limit=5, min_cases=6) if False else (
+            inspect_heldout_readiness(self.store, limit=5, min_cases=5))
+        self.assertEqual(smaller['selected_cases'], 5)
+        for args in ({'limit': 0}, {'min_cases': 1}, {'split': 'train'},
+                     {'limit': 5, 'min_cases': 7}, {'limit': True}):
+            with self.subTest(args=args), self.assertRaises(BenchmarkError):
+                inspect_heldout_readiness(self.store, **args)
+
+    def test_heldout_readiness_flags_cross_split_overlap_without_disclosing_case(self):
+        self.store.add_decision('synthetic held-out scenario 1!', 'yes',
+            'Private excluded case', source='synthetic', split='test',
+            options=['yes', 'no'], approved=True)
+        report = inspect_heldout_readiness(self.store)
+        self.assertEqual(report['split_independence_check'], 'lexical-overlap')
+        self.assertFalse(report['ready_for_owner_review'])
+        self.assertNotIn('Private excluded', str(report))
+
+    def test_heldout_inspection_cli_route_is_non_inferential(self):
+        from athenz.train_cli import parser
+        parsed = parser().parse_args(['inspect-heldout', '--split', 'test',
+                                      '--limit', '25', '--min-cases', '5'])
+        self.assertEqual((parsed.command, parsed.split, parsed.limit,
+                          parsed.min_cases), ('inspect-heldout', 'test', 25, 5))
 
     def test_worse_candidate_not_ready(self):
         with mock.patch('athenz.model_gate.evaluate_decisions', side_effect=self.observations(10, 8)):
