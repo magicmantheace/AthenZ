@@ -97,7 +97,10 @@ hardware tests do not currently block further independent engineering.
   probe; no private content in diagnostic responses.
 - [x] Windows-only unsigned PyInstaller onedir packaging workflow, disposable
   SQLite/Tcl self-test, 7-day artifact; no automatic release, OS startup or install.
-- [ ] Confirm actual frozen Windows CI artifact builds and offline smoke passes.
+- [x] Hosted Windows CI produced the unsigned PyInstaller portable ZIP and passed
+  offline executable + native Tk GUI startup smokes on 2026-10-12
+  (public Actions run 38331854750; artifact expires after 7 days).
+  **This is NOT owner-device compatibility, code signing or installer validation.**
 - [ ] Native Windows 11 GUI/HiDPI/accessibility and RTX 3060 Ollama/WSL2 Docker
   hardware acceptance; Windows installer, signing and rollback remain outstanding.
 
@@ -122,3 +125,20 @@ hardware tests do not currently block further independent engineering.
 - [x] Owner-confirmed bounded localhost-only generation check using fixed synthetic prompt, no AthenZ private context, no reply persistence and sanitized outcome.
 - [x] Offline fake-model, actual loopback HTTP, proxy bypass and redirect refusal regression tests.
 - [ ] Real owner-device inference with installed Ollama model and RTX 3060/WSL2 acceleration remains unverified; does not certify hardware.
+
+## Public hosted acceptance evidence — 2026-10-12
+
+- The repository was verified public. Free standard public-repository GitHub-hosted
+  runners are being used on isolated `ci/` branches; the test workflow checks out
+  an exact SHA of the archival development branch, never `main`.
+- At reviewed source `d538bde4602fab4daeb8cedec3daec6a298b0673`,
+  GitHub Actions Linux Python 3.11 (run 38331720210), Linux 3.12 and 3.13
+  (run 38331854750) passed the full 413-test suite (four skips each).
+- Hosted Windows PyInstaller onedir executable and Tk GUI startup smoke passed
+  (run 38331854750), with SHA-256 checked on the ZIP and a seven-day
+  downloadable unsigned artifact. This does not establish portable desktop
+  readiness on the owner's Windows 11 or with real Ollama/RTX 3060.
+- No private owner database, training corpus or personal context was uploaded.
+  The remaining native Windows 3.11 full regression status is tracked
+  separately in run 38331720210 and must be checked before a platform gate
+  is considered passed.

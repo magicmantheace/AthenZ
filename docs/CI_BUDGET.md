@@ -135,3 +135,26 @@ provisional test run is **not** a release gate or a complete source verification
 Full and wheel modes still refuse incomplete source trees. No GitHub Actions
 are invoked by this command, but locally reviewed tests are not an OS sandbox.
 
+
+## Public-repository GitHub Actions validation (2026-10-12)
+
+The repository has been verified **public**. The owner subsequently authorized
+use of standard public GitHub-hosted Actions for development validation. This
+supersedes the earlier blanket prohibition on cloud test runs **only for public
+standard runners**; the restriction against unexpectedly triggering workflows
+on `main` and against uploading private profile data remains in force.
+
+Validation is triggered by commits to isolated `ci/public-runner-validation-*`
+and `ci/public-packaging-validation-*` branches. Their workflows pin
+`actions/checkout` to the exact commit to test on the archival source branch,
+use read-only `contents` permission and disable persisted checkout credentials.
+These CI-only workflows are not copied to `main` or the archival source branch;
+neither branch's prior automatic-trigger policy changes. Linux Python
+3.11/3.12/3.13 and an unsigned Windows portable build/GUI smoke now have hosted
+passing evidence. No physical target-PC or GPU validation is implied.
+
+Evidence: [regression Linux + Windows run 38331720210](https://github.com/magicmantheace/AthenZ/actions/runs/38331720210)
+and [additional Linux Python matrix + Windows portable build run 38331854750](https://github.com/magicmantheace/AthenZ/actions/runs/38331854750).
+The unsigned portable artifact is retained only seven days and is not a
+signed release or a trusted installer. GitHub Actions does not reveal or certify
+any local owner profile or production hardware.
