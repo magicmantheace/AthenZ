@@ -284,3 +284,25 @@ owner profile data or unattended coding action implied by this milestone.
   implementation in [38343274127](https://github.com/magicmantheace/AthenZ/actions/runs/38343274127).
 - [ ] Target-machine RTX 3060/WSL2/Ollama/LoRA integration still requires
   explicit owner-observed acceptance; CI hosted runners are insufficient.
+
+### 2026-10-12 — Owner benchmark preparation and evidence consistency
+
+- [x] Compare baseline/candidate evaluations only with plausible, matching
+  random-chance baselines on the same held-out cases.
+- [x] Owner-confirmed comparison persistence rechecks installed local Ollama
+  tag digests and rejects stale baseline/candidate weight identities.
+- [x] Owner review cannot save fabricated Wilson 95% intervals or invalid
+  response counts in new aggregate evidence.
+- [x] Read-only `athenz-training inspect-heldout` reports limited approved
+  held-out sample counts, strong lexical split overlap and option validity
+  without contacting a model or outputting private scenario text.
+- [x] Release acceptance current results must agree with the latest local
+  owner-observed audit history for the same check, while legacy unanchored
+  records remain readable.
+- [x] Source commit `1def9ba7d983fc617575f62b8ad3341499cb513a`
+  passed 471 regression tests on Linux Python 3.11, 3.12 and 3.13
+  (four platform skips each), plus hosted Windows portable packaging in
+  runs [38346880275](https://github.com/magicmantheace/AthenZ/actions/runs/38346880275)
+  and [38346862618](https://github.com/magicmantheace/AthenZ/actions/runs/38346862618).
+- [ ] Full Windows Python 3.11 suite and actual owner-device RTX 3060/WSL2
+  training and inference require separate completed acceptance results.

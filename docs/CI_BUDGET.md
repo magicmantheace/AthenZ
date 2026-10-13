@@ -227,3 +227,16 @@ separate actual Docker integration job
 [38343274127](https://github.com/magicmantheace/AthenZ/actions/runs/38343274127)
 passed seven tests. The public CI runner never sees owner profiles or tests
 native RTX 3060 hardware; no automatic model training is initiated.
+
+### 2026-10-12 — v0.7 held-out preflight and provenance increment
+
+Pinned implementation `1def9ba7d983fc617575f62b8ad3341499cb513a`
+adds model-tag freshness checks on benchmark save, consistent Wilson/invalid
+predictions/chance estimates, local acceptance-history consistency and a
+read-only held-out case preflight. Public GitHub Actions Linux Python
+3.11/3.12/3.13 passed 471 tests (four skips each) on runs
+38346880275 and 38346862618. The latter run also passed Windows unsigned
+portable packaging and executable/GUI startup smoke. Native Windows full
+regression for the same commit runs separately in 38346880275; do not
+mistake a still-running job for a platform pass. No private owner profile,
+credentials or installed model weights were uploaded to the public CI runner.

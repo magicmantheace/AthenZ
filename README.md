@@ -274,3 +274,20 @@ history. See [hardware probe](docs/HARDWARE_PROBE.md),
 Hosted public GitHub Actions runs exercise synthetic tests and a packaged
 Windows application, not the actual owner machine. CUDA/WSL2/QLoRA
 compatibility still requires owner-supervised real-hardware testing.
+
+## Read-only held-out evaluation preflight (experimental v0.7)
+
+Before spending GPU/inference time comparing locally installed model tags,
+run `athenz-training inspect-heldout --split calibration --limit 100 --min-cases 10`.
+This local, read-only command reports the count of owner-approved held-out
+decisions, whether the minimum is met, lexical train/calibration/test overlap,
+and whether selected case options are well-formed. It does **not** invoke
+Ollama, verify the training dataset, disclose private choices or promote a
+model. See [evaluation evidence](docs/EVALUATION_SNAPSHOTS.md).
+
+When an owner later saves a model comparison, AthenZ rechecks that the installed
+Ollama baseline and candidate tags still have their previously evaluated
+digests. Saved confidence intervals, invalid prediction counts and random
+chance baseline metadata must agree with the underlying aggregate evidence.
+This still cannot independently attest a model's origins or guarantee that
+future weights and owner data are free from semantic contamination.
