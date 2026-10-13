@@ -83,6 +83,15 @@ def _consistent_comparison_metadata(report: dict) -> bool:
     names = ('baseline_correct', 'candidate_correct', 'baseline_accuracy',
              'candidate_accuracy')
     present = [key in report for key in names]
+    digests = ('baseline_digest', 'candidate_digest')
+    if any(key in report for key in digests):
+        if not all(key in report for key in digests):
+            return False
+        values = [report[key] for key in digests]
+        if (any(not isinstance(value, str) or len(value) != 64 or
+                any(letter not in '0123456789abcdef' for letter in value)
+                for value in values) or values[0] == values[1]):
+            return False
     if not any(present):
         # Older owner-reviewed records omit these statistics altogether.
         return not any(key in report for key in (
@@ -104,15 +113,6 @@ def _consistent_comparison_metadata(report: dict) -> bool:
             abs(gain - round((candidate - baseline) / count, 8)) > 1e-8 or
             report.get('eligible_for_review') is not (candidate > baseline)):
         return False
-    digests = ('baseline_digest', 'candidate_digest')
-    if any(key in report for key in digests):
-        if not all(key in report for key in digests):
-            return False
-        values = [report[key] for key in digests]
-        if (any(not isinstance(value, str) or len(value) != 64 or
-                any(letter not in '0123456789abcdef' for letter in value)
-                for value in values) or values[0] == values[1]):
-            return False
     paired = ('paired_improved', 'paired_regressed',
               'paired_unchanged', 'paired_one_sided_p_value')
     if any(name in report for name in paired):
