@@ -209,3 +209,21 @@ cases in run 38341307100. Public job references: 38341284972,
 38341100306, 38341307100. Hosted runners have no access to the owner's
 local memory database or RTX 3060. The Windows full-suite job result remains
 separate until it completes and is independently inspected.
+
+### 2026-10-12 — Latest owner-readiness development CI
+
+Implementation `4089049c402701b832919a0768449db9a7615427` includes opt-in
+synthetic CUDA compute, separately reported Ollama synthetic instruction
+following and read-only release-observation history. Public Actions
+[38343154083](https://github.com/magicmantheace/AthenZ/actions/runs/38343154083)
+passed Linux Python 3.11 (460 tests, four skips), and
+[38343157982](https://github.com/magicmantheace/AthenZ/actions/runs/38343157982)
+passed Linux Python 3.12/3.13 (460 tests each, four skips), plus unsigned
+Windows portable packaging and startup smoke. A prior Windows test-cleanup
+failure from synthetic SQLite handles was fixed before this source; full
+Windows 3.11 regression on the pinned source is tracked separately in run
+38343154083 and must be verified before declaring that job green. The
+separate actual Docker integration job
+[38343274127](https://github.com/magicmantheace/AthenZ/actions/runs/38343274127)
+passed seven tests. The public CI runner never sees owner profiles or tests
+native RTX 3060 hardware; no automatic model training is initiated.

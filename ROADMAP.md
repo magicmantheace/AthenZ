@@ -258,3 +258,29 @@ owner profile data or unattended coding action implied by this milestone.
   No private profile access, model download, GPU IDs or automatic startup.
 - [ ] Actual owner-PC PyTorch CUDA, RTX 3060 and WSL2 results remain unobserved;
   this opt-in diagnostic is not QLoRA readiness certification.
+
+### 2026-10-12 — Owner-observed CUDA, inference and acceptance readiness
+
+- [x] Explicit `athenz-doctor --probe-cuda --confirm` does a tiny synthetic
+  PyTorch CUDA tensor computation using an already installed local Torch.
+  Optional import, driver errors and replies are sanitized; default startup
+  has no CUDA action. QLoRA training performance is **not** validated.
+- [x] Explicit synthetic Ollama inference reports separately whether text was
+  generated and whether the bounded prompt's exact READY instruction was
+  followed. Incomplete/error responses are rejected; owner content is not
+  read or stored, and quality/lineage are not certified.
+- [x] Release acceptance retains previous owner-reported failed/blocked/pass
+  observations in a separate local SQLite history and exposes a bounded,
+  read-only `athenz-release-readiness history --limit 25` command. Neither
+  outcome authorizes deployment or replaces independent verification.
+- [x] The portable Windows ZIP and startup smoke passed against implementation
+  `4089049c402701b832919a0768449db9a7615427` in public Actions run
+  [38343157982](https://github.com/magicmantheace/AthenZ/actions/runs/38343157982).
+- [x] Public Linux Python 3.11/3.12/3.13 ran 460 tests each with four skips,
+  zero failures or errors (runs
+  [38343154083](https://github.com/magicmantheace/AthenZ/actions/runs/38343154083)
+  and [38343157982](https://github.com/magicmantheace/AthenZ/actions/runs/38343157982)).
+- [x] Actual Docker isolation/threat suite: seven passed against the same
+  implementation in [38343274127](https://github.com/magicmantheace/AthenZ/actions/runs/38343274127).
+- [ ] Target-machine RTX 3060/WSL2/Ollama/LoRA integration still requires
+  explicit owner-observed acceptance; CI hosted runners are insufficient.
