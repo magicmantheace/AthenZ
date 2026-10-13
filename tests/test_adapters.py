@@ -178,6 +178,24 @@ class AdaptersTests(unittest.TestCase):
         with self.assertRaisesRegex(AdapterError, 'immutable'):
             register_adapter(self.store, run, 'candidate-a', confirmed=True)
 
+    def test_legacy_registration_requires_explicit_anchor_reconfirmation(self):
+        run = self.completed()
+        evidence = inspect_adapter(self.store, run)
+        legacy = {**evidence, 'candidate_model': 'candidate-a',
+                  'lineage': 'owner-label-unverified', 'deployment': 'none'}
+        self.store.checkpoint('adapter_' + run,
+                              'Private adapter registry entry; not a deployed model',
+                              legacy, status='complete')
+        with self.assertRaisesRegex(AdapterError, 'stale or tampered'):
+            verified_registry_entry(self.store, run)
+        with self.assertRaisesRegex(AdapterError, 'confirm'):
+            register_adapter(self.store, run, 'candidate-a')
+        upgraded = register_adapter(self.store, run, 'candidate-a', confirmed=True)
+        self.assertEqual(upgraded, legacy)
+        self.assertEqual(verified_registry_entry(self.store, run), legacy)
+        with self.assertRaisesRegex(AdapterError, 'immutable'):
+            register_adapter(self.store, run, 'candidate-b', confirmed=True)
+
     def test_report_approval_gate_and_revision_conflict(self):
         run=self.completed()
         register_adapter(self.store,run,'candidate-a',confirmed=True)

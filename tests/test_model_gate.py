@@ -192,6 +192,21 @@ class EvaluationGateTests(unittest.TestCase):
                 with self.assertRaisesRegex(BenchmarkError, 'metadata is inconsistent'):
                     save_report(self.store, altered, confirmed=True)
 
+    def test_legacy_comparison_rejects_one_sided_model_digest(self):
+        with mock.patch('athenz.model_gate.evaluate_decisions',
+                        side_effect=self.observations()):
+            full = compare_models(self.store, Model('base'), Model('candidate'), self.sha)
+        legacy = {key: value for key, value in full.items()
+                  if key not in ('baseline_correct', 'candidate_correct',
+                                 'baseline_accuracy', 'candidate_accuracy',
+                                 'paired_improved', 'paired_regressed',
+                                 'paired_unchanged', 'paired_one_sided_p_value')}
+        self.assertTrue(save_report(self.store, legacy, confirmed=True))
+        malformed = {key: value for key, value in legacy.items()
+                     if key != 'candidate_digest'}
+        with self.assertRaisesRegex(BenchmarkError, 'metadata is inconsistent'):
+            save_report(self.store, malformed, confirmed=True)
+
     def test_worse_candidate_not_ready(self):
         with mock.patch('athenz.model_gate.evaluate_decisions', side_effect=self.observations(10, 8)):
             r = compare_models(self.store, Model('base'), Model('candidate'), self.sha)
