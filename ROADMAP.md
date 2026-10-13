@@ -163,3 +163,34 @@ hardware tests do not currently block further independent engineering.
   technology tests remain outstanding. True semantic held-out contamination
   and training-weight memorization detection are not established by these
   normalized-string checks.
+
+### 2026-10-12 — v0.7 evidence isolation and paired model comparison increment
+
+- [x] Reviewed SFT export protects held-out decision scenarios and distinctive
+  gold rationales even when embedded inside longer instruction/completion text.
+  A compiled four-token-prefix index keeps this deterministic for larger owner
+  histories, while preserving conservative exact-sequence comparisons.
+- [x] Approved scenario duplicates crossing train/calibration/test partitions,
+  after Unicode/case/punctuation/whitespace normalization, fail closed before
+  inference, at benchmark persistence and at adapter review. The database
+  never exposes collided text in errors or report metadata.
+- [x] Local baseline/candidate benchmark evidence checks each case's predicted
+  choice, correctness flag, invalid response count and aggregate accuracy.
+  Reported paired win/loss/tie counts and an exact one-sided sign-test tail
+  provide descriptive information without automatic promotion.
+- [x] Immutable aggregate reports are checked for internal arithmetic and
+  finite values again when written or read for adapter selection; legacy
+  metadata-only reports remain readable but are not independently attested.
+- [x] On reviewed implementation `9b423813bfba6039e45be113d8155683da77b668`,
+  public CI run [38334418348](https://github.com/magicmantheace/AthenZ/actions/runs/38334418348)
+  ran 433 Python tests on Linux 3.11 (four skips, no failures/errors);
+  [38334386292](https://github.com/magicmantheace/AthenZ/actions/runs/38334386292)
+  passed Linux Python 3.12 and 3.13 (433 tests each, four skips), and the
+  unsigned Windows portable build, packaged self-test and Tk GUI startup smoke.
+- [ ] True semantic paraphrase detection, independence from prior model-weight
+  memorization, independently attested local candidate lineage, owner-device
+  Windows 11 accessibility and RTX 3060 Ollama acceptance remain outstanding.
+
+The score comparison is **not** an independent model certification. There is
+no automatic training, model switching, installer release, network access to
+owner profile data or unattended coding action implied by this milestone.

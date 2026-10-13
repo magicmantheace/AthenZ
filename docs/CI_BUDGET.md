@@ -172,3 +172,16 @@ passed Linux Python 3.12/3.13 regression and unsigned Windows portable
 smokes against the same source; run 38332623888 passed Linux Python 3.11.
 These tests are hosted evidence only, not independent container isolation
 certification or acceptance on the owner's hardware.
+
+### Public hosted v0.7 benchmark review suite
+
+Validated source commit `9b423813bfba6039e45be113d8155683da77b668`
+includes strengthened held-out train/calibration/test partition checks,
+private gold-rationale SFT exclusion, O(tokens) indexed protected-phrase
+lookup, paired candidate evaluation arithmetic, and owner-review-time stale
+report rejection. Hosted runs 38334418348 and 38334386292 validate the
+Linux 3.11/3.12/3.13 433-test suites and unsigned Windows portable smoke.
+Run 38334418348 additionally checks the Windows Python 3.11 full suite;
+read its individual job result before claiming a Windows regression pass.
+All CI-only branches check out the immutable implementation SHA; `main`
+remains untouched and no private identity data is uploaded.
