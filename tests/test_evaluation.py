@@ -60,9 +60,14 @@ class DecisionEvaluationTests(unittest.TestCase):
         self.assertEqual(r1['chance_expected'], .5)
 
     def test_repeated_answer_options_are_refused_before_model_call(self):
-        self.store.add_decision('Distinct synthetic decision about review gates?',
+        row_id = self.store.add_decision('Distinct synthetic decision about review gates?',
             'Approve', 'Private scenario rationale', source='synthetic',
-            options=['Approve', 'APPROVE ', 'Reject'], split='test', approved=True)
+            options=['Approve', 'Reject'], split='test', approved=True)
+        # Normal owner entry already rejects duplicate choices; simulate a
+        # legacy/corrupted local row to exercise scoring's independent guard.
+        self.store.db.execute('UPDATE decisions SET options_json=? WHERE id=?',
+            (json.dumps(['Approve', 'APPROVE ', 'Reject']), row_id))
+        self.store.db.commit()
         model = Stub()
         with self.assertRaisesRegex(ValueError, 'invalid held-out options'):
             evaluate_decisions(self.store, model)
