@@ -62,6 +62,28 @@ class SequenceTests(unittest.TestCase):
         self.assertEqual(self.controller.apply('task', proposal['sha256']), 1)
         return proposal
 
+    def test_crlf_source_and_crlf_patch_preserve_exact_review_hashes(self):
+        self.controller.cancel('task')
+        (self.repo / 'calc.py').write_bytes(
+            b'def add(a,b):\r\n    return a - b\r\n')
+        git(self.repo, 'add', 'calc.py')
+        git(self.repo, 'commit', '-m', 'synthetic CRLF source')
+        self.controller.start('crlf', self.repo, 'Correct CRLF arithmetic', [['calc.py']])
+        class CrLfModel:
+            def generate(self, messages, **kwargs):
+                return json.dumps({'summary': 'Preserve CRLF byte layout', 'changes': [
+                    {'path': 'calc.py',
+                     'new_content': 'def add(a,b):\r\n    return a + b\r\n'}]})
+        review = self.controller.prepare('crlf', CrLfModel())
+        self.assertEqual(self.controller.apply('crlf', review['sha256']), 1)
+        result = self.controller.syntax('crlf')
+        self.assertTrue(result['passed'])
+        self.assertEqual(self.controller.advance('crlf')['phase'], 'complete')
+        checkout = Path(self.controller.worker.resume('crlf')['state']['workspace'])
+        self.assertEqual((checkout / 'calc.py').read_bytes(),
+                         b'def add(a,b):\r\n    return a + b\r\n')
+        self.controller.cancel('crlf', discard_changes=True)
+
     def test_manual_checkpoint_failure_rolls_back_proposal(self):
         # Foreground tasks need the same atomic proposal/checkpoint boundary
         # as scheduler-driven tasks: a failed save must not leak a proposal.

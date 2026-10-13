@@ -157,3 +157,12 @@ evidence. A concurrent owner scope edit, cancellation or superseding revision
 refuses the late result even if its copied source remains unchanged. The final
 checkpoint save is still revision-fenced; public tests simulate owner updates
 during an isolated test without executing untrusted code on the host.
+
+### Exact CRLF/LF patch fingerprints on Windows
+
+The multistage controller now derives baseline, current-workspace and syntax
+checks through the same raw-newline UTF-8 reader used by the review/undo patch
+engine. Windows text-mode newline conversion previously could compare a CRLF
+patch's exact stored SHA-256 against a normalized LF in-memory copy and reject
+a valid owner-approved edit. New synthetic review/apply/validate tests cover
+original CRLF source and CRLF replacement without silently changing bytes.

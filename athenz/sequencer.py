@@ -13,7 +13,7 @@ import os
 import re
 from pathlib import Path
 
-from .coding import allowed_file, change_status, digest, diff_for, propose
+from .coding import allowed_file, change_status, digest, diff_for, propose, read_exact
 from .controller import proposal_digest
 from .worker import Worker, WorktreeError, _git
 from .verification import isolated_unittest, snapshot_files
@@ -62,7 +62,7 @@ class SequenceController:
         actual_changed = set()
         for rel, sha in expected.items():
             path = allowed_file(workspace, rel)
-            if digest(path.read_text(encoding='utf-8')) != sha:
+            if digest(read_exact(path)) != sha:
                 raise SequenceError(f'Workspace content differs from reviewed state: {rel}')
             if sha != seq['baseline'][rel]:
                 actual_changed.add(rel)
@@ -86,7 +86,7 @@ class SequenceController:
         workspace = Path(item['state']['workspace'])
         try:
             scope = sorted({p for stage in stages for p in stage})
-            baseline = {p: digest(allowed_file(workspace, p).read_text('utf-8')) for p in scope}
+            baseline = {p: digest(read_exact(allowed_file(workspace, p))) for p in scope}
             seq = {'phase': 'ready', 'stages': stages, 'index': 0, 'current': None,
                    'baseline': baseline, 'expected': dict(baseline),
                    'approved': [], 'failures': 0, 'max_failures': max_failures,
@@ -221,7 +221,7 @@ class SequenceController:
         lines = []
         for rel in sorted(seq['baseline']):
             try:
-                ast.parse(allowed_file(workspace, rel).read_text('utf-8'), filename=rel)
+                ast.parse(read_exact(allowed_file(workspace, rel)), filename=rel)
                 lines.append(f'{rel}: parsed')
             except SyntaxError as exc:
                 lines.append(f'{rel}: line {exc.lineno}: invalid syntax')
