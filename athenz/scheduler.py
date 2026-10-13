@@ -257,10 +257,15 @@ class ProposalScheduler:
                 result = ctl.prepare(key, LeasedModel(), before_persist=fence)
                 outcome, note = 'review', 'proposal awaits owner SHA-256 review'
             except Exception as exc:
-                # Failed lease-fenced proposal/checkpoint transactions roll back
-                # together. Never retry inference automatically.
-                outcome, note = 'paused', ('refused: ' + type(exc).__name__)[:100]
-                result = {'status': 'refused', 'task_key': key, 'error': str(exc)[:400]}
+                # Local model/runner exceptions can embed paths, model output,
+                # private prompts or external error messages. Never forward
+                # them into status JSON, SQLite notes or CLI/UI output.
+                # Failed proposal/checkpoint transactions roll back together.
+                reason = ('authorization-or-scope-revoked'
+                          if isinstance(exc, SchedulerError)
+                          else 'local-proposal-failed')
+                outcome, note = 'paused', 'refused: ' + reason
+                result = {'status': 'refused', 'task_key': key, 'error': reason}
             with store.db:
                 store.db.execute('BEGIN IMMEDIATE')
                 actual = store.db.execute('SELECT state,lease FROM proposal_schedule WHERE task_key=?', (key,)).fetchone()
@@ -282,8 +287,8 @@ class ProposalScheduler:
     def serve(self, *, confirmed: bool = False, ticks: int = 1, interval: int = 30,
               on_tick=None, model_factory=None) -> list[dict]:
         """Bounded foreground poll. Not a daemon, not persistent on reboot."""
-        if not confirmed or not isinstance(ticks, int) or not 1 <= ticks <= 120 or \
-                not isinstance(interval, int) or not 5 <= interval <= 3600:
+        if not confirmed or type(ticks) is not int or not 1 <= ticks <= 120 or \
+                type(interval) is not int or not 5 <= interval <= 3600:
             raise SchedulerError('Confirm 1–120 foreground checks at intervals of 5–3600 seconds')
         events = []
         for i in range(ticks):

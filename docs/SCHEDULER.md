@@ -85,3 +85,13 @@ Synthetic tests cover queue authorization, concurrency, crash recovery,
 pausing mid-inference, replay avoidance, tampering and stage-by-stage review.
 Actual Windows desktop, Ollama inference and WSL2 Docker tests on the owner's
 hardware remain unverified.
+
+### Sanitized supervised proposal failures
+
+A model-generation or scope-validation exception is never returned verbatim
+to the desktop, CLI or persisted queue status. Only fixed categories
+(`authorization-or-scope-revoked` or `local-proposal-failed`) are displayed;
+raw exception messages might include private prompts, file paths, model output
+or other untrusted strings. The queue still pauses with no automatic retry,
+patch application, testing or deployment. Foreground polling also rejects
+boolean values masquerading as integer tick or delay bounds.

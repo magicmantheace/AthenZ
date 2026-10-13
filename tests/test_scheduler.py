@@ -357,6 +357,32 @@ class SchedulerTests(unittest.TestCase):
                          self.ui.review('demo')['sha256'])
         self.assertEqual(self.scheduler.run_once(confirmed=True)['status'], 'idle')
 
+    def test_model_failure_does_not_expose_private_exception_text(self):
+        self.add(); self.scheduler.arm('demo', confirmed=True)
+        secret = 'PRIVATE-OWNER-SCENARIO-MODEL-EXCEPTION'
+        class LeakyModel(Model):
+            def generate(self, messages, **kwargs):
+                raise RuntimeError(secret)
+        result = self.scheduler.run_once(
+            confirmed=True, model_factory=lambda _: LeakyModel())
+        self.assertEqual(result['status'], 'paused')
+        self.assertEqual(result['result']['error'], 'local-proposal-failed')
+        self.assertNotIn(secret, json.dumps(result))
+        self.assertNotIn(secret, json.dumps(self.scheduler.get('demo')))
+        with self.scheduler._open() as store:
+            status = store.db.execute(
+                "SELECT last_result FROM proposal_schedule WHERE task_key='demo'"
+            ).fetchone()['last_result']
+        self.assertNotIn(secret, status)
+        self.assertEqual(self.ui.detail('demo')['phase'], 'ready')
+
+    def test_foreground_poll_rejects_boolean_bounds(self):
+        self.add()
+        with self.assertRaises(SchedulerError):
+            self.scheduler.serve(confirmed=True, ticks=True)
+        with self.assertRaises(SchedulerError):
+            self.scheduler.serve(confirmed=True, ticks=1, interval=True)
+
     def test_model_failure_does_not_loop_or_run_host_commands(self):
         self.add(); self.scheduler.arm('demo', confirmed=True)
         def bad(_): raise RuntimeError('synthetic GPU error')
