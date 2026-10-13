@@ -33,6 +33,17 @@ def _normalized_words(text: str) -> str:
     return ' '.join(re.findall(r'\w+', unicodedata.normalize('NFKC', text).casefold()))
 
 
+def _distinctive_embedded(text_words: str, protected: set[str]) -> bool:
+    """Detect verbatim word-sequence leaks with harmless surrounding prose.
+
+    Require four words and at least 20 characters to avoid suppressing
+    generic short phrases. Equality is guarded separately even for short text.
+    """
+    haystack = ' ' + text_words + ' '
+    return any(len(phrase.split()) >= 4 and len(phrase.replace(' ', '')) >= 20
+               and (' ' + phrase + ' ') in haystack for phrase in protected if phrase)
+
+
 def _digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -56,10 +67,12 @@ def _private_root(store: ExperienceStore) -> Path:
 
 
 def _read_approved(store: ExperienceStore) -> tuple[list[tuple[int, str, str]], dict]:
-    scenarios = [r['scenario'] for r in store.db.execute(
-        "SELECT scenario FROM decisions WHERE split IN ('test','calibration')")]
+    protected_rows = store.db.execute(
+        "SELECT scenario,rationale FROM decisions WHERE split IN ('test','calibration')").fetchall()
+    scenarios = [r['scenario'] for r in protected_rows]
     heldout = {normalized(scenario) for scenario in scenarios}
     heldout_words = {_normalized_words(scenario) for scenario in scenarios}
+    rationale_words = {_normalized_words(r['rationale']) for r in protected_rows}
     rows = store.db.execute('''SELECT id,instruction,ideal_answer FROM train_pairs
                                WHERE status='approved' ORDER BY id''').fetchall()
     if len(rows) > 50_000:
@@ -72,7 +85,13 @@ def _read_approved(store: ExperienceStore) -> tuple[list[tuple[int, str, str]], 
         key, target = normalized(instruction), normalized(answer)
         if not key or not target or len(instruction) > 20_000 or len(answer) > 20_000:
             raise DatasetError('Reviewed pair is empty or oversized; correct source entry')
-        if key in heldout or _normalized_words(instruction) in heldout_words:
+        instruction_words = _normalized_words(instruction)
+        answer_words = _normalized_words(answer)
+        if (key in heldout or instruction_words in heldout_words
+                or _distinctive_embedded(instruction_words, heldout_words)
+                or _distinctive_embedded(answer_words, heldout_words)
+                or _distinctive_embedded(instruction_words, rationale_words)
+                or _distinctive_embedded(answer_words, rationale_words)):
             withheld += 1
             continue
         prior = by_instruction.get(key)

@@ -72,3 +72,16 @@ approved-pair conflict/deduplication semantics. Newly added held-out scenarios
 invalidate an already exported dataset when its reviewable source selection
 changes. The check is still lexical: true paraphrases and leaked facts in
 otherwise different answers remain a v0.7 benchmark-data quality risk.
+
+## Embedded held-out text in reviewed SFT training
+
+Reviewed SFT pairs are withheld when their instruction or answer contains a
+long, distinctive protected calibration/test scenario or private rationale,
+including with changed punctuation, hyphenation, capitalization, or surrounding
+prose. Short/common phrases are not used as substring triggers (four words and
+20 nonspace characters required), but complete held-out instruction matches
+still exclude short exact cases. This is a privacy-oriented conservative
+lexical guard—not semantic paraphrase detection or proof against memorization.
+The selection is recomputed during immutable dataset verification, so new
+protected text invalidates previously built training snapshots. No held-out
+texts or examples are logged by inspection reports.

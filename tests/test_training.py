@@ -79,6 +79,47 @@ class TrainingDatasetTests(unittest.TestCase):
         with self.assertRaisesRegex(DatasetError, 'stale'):
             verify_dataset(self.store, output['sha256'])
 
+    def test_embedded_heldout_scenario_in_training_prompt_is_withheld(self):
+        self.pair('Please answer this: Should we bypass the validation checks before deploying? Explain.',
+                  'Approval should wait')
+        self.pair('Unrelated operator instruction?', 'Safe response')
+        self.store.add_decision('Should we bypass the validation checks before deploying?',
+            'No', 'Wait for evidence', source='synthetic', split='test',
+            options=['Yes', 'No'])
+        report = inspect_dataset(self.store)
+        self.assertEqual(report['heldout_excluded'], 1)
+        result = build_dataset(self.store, confirmed=True)
+        self.assertNotIn('Approval should wait', Path(result['path']).read_text())
+
+    def test_distinctive_heldout_rationale_in_training_answer_is_withheld(self):
+        private_reason = 'Distinct private fallback policy requires supervisor verification'
+        self.pair('Explain the local workflow?', 'The answer cites: ' + private_reason + '.')
+        self.pair('Another unrelated topic?', 'Safe reviewed content')
+        self.store.add_decision('Would the operator authorize this exception?',
+            'Wait', private_reason, source='synthetic', split='test',
+            options=['Allow', 'Wait'])
+        report = inspect_dataset(self.store)
+        self.assertEqual(report['heldout_excluded'], 1)
+        result = build_dataset(self.store, confirmed=True)
+        self.assertNotIn(private_reason, Path(result['path']).read_text())
+
+    def test_new_heldout_rationale_invalidates_existing_dataset(self):
+        private_reason = 'Unique validated remediation protocol must be followed'
+        self.pair('Routine explanation?', 'Contains ' + private_reason)
+        result = build_dataset(self.store, confirmed=True)
+        self.store.add_decision('How do we handle the new exception?',
+            'Wait', private_reason, source='synthetic', split='calibration',
+            options=['Allow', 'Wait'])
+        with self.assertRaisesRegex(DatasetError, 'stale'):
+            verify_dataset(self.store, result['sha256'])
+
+    def test_short_common_words_do_not_block_unrelated_training(self):
+        self.pair('What should we run after edits?', 'Please run tests')
+        self.store.add_decision('Run tests', 'Yes', 'Run tests',
+            source='synthetic', split='test', options=['Yes', 'No'])
+        report = inspect_dataset(self.store)
+        self.assertEqual((report['included'], report['heldout_excluded']), (1, 0))
+
     def test_conflicting_approved_replies_block_export(self):
         self.pair('What is rule?', 'Always test first')
         self.pair(' WHAT IS RULE? ', 'Never run tests')
