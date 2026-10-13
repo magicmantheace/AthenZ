@@ -164,7 +164,13 @@ def rehearse_profile_bundle(home: Path | None, identifier: str, *,
         if os.name != 'nt':
             sandbox.chmod(0o700)
         dest = sandbox / 'recovered'
-        restored = restore_bundle_new(source_home, identifier, dest, confirmed=True)
+        try:
+            restored = restore_bundle_new(source_home, identifier, dest, confirmed=True)
+        except (OSError, ValueError, sqlite3.DatabaseError, zipfile.BadZipFile):
+            # OS errors and lower-level recovery diagnostics may contain
+            # private filenames, paths or owner content. Never print them
+            # through this explicitly sanitized rehearsal interface.
+            raise RecoveryDrillError('Temporary private bundle recovery failed') from None
         db_path = dest / 'identity.sqlite3'
         if db_path.is_symlink() or not db_path.is_file():
             raise RecoveryDrillError('Recovered bundle database is unsafe')
@@ -190,9 +196,17 @@ def rehearse_profile_bundle(home: Path | None, identifier: str, *,
             raise RecoveryDrillError('Recovered bundle retained execution authority')
         # The restore path rechecked the source ZIP checksum. Independently
         # hash every restored member against the included per-file manifest.
-        with zipfile.ZipFile(archive, mode='r') as zf:
-            manifest = json.loads(zf.read('manifest.json'))
-        rows = manifest['files']
+        try:
+            with zipfile.ZipFile(archive, mode='r') as zf:
+                info = zf.getinfo('manifest.json')
+                if info.file_size > 2 * 1024 * 1024:
+                    raise RecoveryDrillError('Private bundle manifest changed during rehearsal')
+                manifest = json.loads(zf.read(info))
+            if not isinstance(manifest, dict) or not isinstance(manifest.get('files'), list):
+                raise RecoveryDrillError('Private bundle manifest changed during rehearsal')
+            rows = manifest['files']
+        except (OSError, KeyError, TypeError, ValueError, zipfile.BadZipFile):
+            raise RecoveryDrillError('Private bundle manifest changed during rehearsal') from None
         for entry in rows:
             rel = _secure_name(entry['path'])
             copied = dest.joinpath(*rel.split('/'))

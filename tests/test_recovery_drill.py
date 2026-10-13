@@ -91,6 +91,20 @@ class RecoveryDrillTests(unittest.TestCase):
         self.assertEqual(cli['backup_type'], 'selected-profile-bundle')
         self.assertNotIn(str(self.home), json.dumps(cli))
 
+    def test_bundle_rehearsal_sanitizes_failed_temporary_restore(self):
+        from athenz.profile_bundle import create_bundle
+        from athenz.recovery_drill import rehearse_profile_bundle
+        store = ExperienceStore(self.home)
+        store.close()
+        bundle = create_bundle(self.home, confirmed=True)
+        with patch('athenz.recovery_drill.restore_bundle_new',
+                   side_effect=OSError('PRIVATE-OWNER-PATH-OR-PROMPT')):
+            with self.assertRaisesRegex(RecoveryDrillError, 'Temporary private bundle') as caught:
+                rehearse_profile_bundle(self.home, bundle['id'], confirmed=True,
+                                        scratch_root=self.scratch)
+        self.assertNotIn('PRIVATE-OWNER', str(caught.exception))
+        self.assertEqual(list(self.scratch.iterdir()), [])
+
     def test_bundle_rehearsal_missing_source_has_no_side_effects(self):
         from athenz.recovery_drill import rehearse_profile_bundle
         missing = self.base / 'unknown-profile'

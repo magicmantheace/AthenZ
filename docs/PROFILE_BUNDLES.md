@@ -108,3 +108,9 @@ Git checkout with sufficient disk space; private plaintext temporarily exists
 there during the explicit rehearsal. Reports contain only counts and booleans,
 not private names, records, local paths or model contents. This is a recovery
 rehearsal, not encrypted backup or independent model provenance.
+
+A restore failure inside the temporary bundle rehearsal returns a fixed
+local error, not an underlying operating-system exception that may contain
+private paths, prompts or artifact filenames. The independently re-read ZIP
+manifest is bounded before parsing and must remain structurally valid. A
+failure in the rehearsal never authorizes activating the temporary recovery.
