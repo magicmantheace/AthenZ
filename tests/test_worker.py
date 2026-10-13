@@ -42,6 +42,42 @@ class WorktreeTests(unittest.TestCase):
         self.addCleanup(self.store.close)
         self.worker = Worker(self.store)
 
+    def test_failed_git_command_does_not_reveal_private_stderr(self):
+        from athenz.worker import _git
+        failed = subprocess.CompletedProcess(
+            ['git'], returncode=128, stdout='PRIVATE-PROMPT-CONTENT',
+            stderr='fatal: PRIVATE-OWNER-PATH/secret-repo')
+        with mock.patch('athenz.worker.subprocess.run', return_value=failed):
+            with self.assertRaises(WorktreeError) as caught:
+                _git(self.repo, 'rev-parse', '--show-toplevel')
+        self.assertNotIn('PRIVATE', str(caught.exception))
+        self.assertIn('Local Git operation failed', str(caught.exception))
+
+    def test_container_runner_refuses_unsafe_mount_path_and_invalid_timeout(self):
+        self.worker.begin('scope-test', self.repo, 'Safe test operation')
+        self.worker.propose('scope-test', StubModel(), ['calc.py','util.py'])
+        self.worker.apply('scope-test')
+        image = 'python@sha256:' + 'a' * 64
+        with self.assertRaises(ValueError):
+            self.worker.container_tests('scope-test', image=image, timeout=True)
+        with self.assertRaises(ValueError):
+            self.worker.container_tests('scope-test', image=image, timeout=181)
+        current = self.store.get_checkpoint('scope-test')
+        state = dict(current['state'])
+        state['workspace'] = str(self.worker.root / 'injected,readonly=false')
+        self.store.checkpoint('scope-test', current['task'], state,
+                              status='paused', expected_revision=current['revision'])
+        with mock.patch('athenz.worker.shutil.which', return_value='/usr/bin/docker'):
+            # Resume catches a renamed worktree independently; do not let
+            # Docker run even if earlier worktree checks are bypassed.
+            with mock.patch.object(self.worker, 'resume', return_value={
+                **current, 'state': {**current['state'], 'workspace':
+                    str(self.worker.root / 'injected,readonly=false')}}):
+                with mock.patch('athenz.worker.subprocess.run',
+                                side_effect=AssertionError('should not run Docker')):
+                    with self.assertRaisesRegex(WorktreeError, 'Unsafe Docker bind-mount'):
+                        self.worker.container_tests('scope-test', image=image)
+
     def test_multifile_isolated_proposal_restart_and_review(self):
         begun = self.worker.begin('work1', self.repo, 'Fix arithmetic helpers')
         path = Path(begun['state']['workspace'])

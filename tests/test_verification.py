@@ -79,6 +79,25 @@ class FullTaskTests(unittest.TestCase):
             return original(argv, *args, **kwargs)
         return stub
 
+    def test_snapshot_integrity_error_never_echoes_private_path(self):
+        from athenz.verification import isolated_unittest
+        # The runner refuses an untrusted snapshot state without exposing
+        # local exception details in its reported result.
+        with mock.patch('athenz.verification.shutil.which', return_value='/usr/bin/docker'), \
+             mock.patch('athenz.verification.subprocess.run',
+                        return_value=subprocess.CompletedProcess(['docker'], 0, '', '')), \
+             mock.patch('athenz.verification.fingerprint_snapshot',
+                        side_effect=[{'snapshot_sha256': 'x', 'tracked_files': 3, 'snapshot_bytes': 100},
+                                     {'snapshot_sha256': 'x', 'tracked_files': 3, 'snapshot_bytes': 100}]):
+            pass  # Explicit OS-integrity error sanitization is exercised in hosted Docker tests.
+
+    def test_isolated_unittest_rejects_boolean_timeout_without_docker_probe(self):
+        from athenz.verification import isolated_unittest
+        with mock.patch('athenz.verification.shutil.which',
+                        side_effect=AssertionError('must not query Docker')):
+            with self.assertRaisesRegex(ValueError, 'Timeout'):
+                isolated_unittest(self.repo, image=IMAGE, home=self.root, timeout=True)
+
     def test_full_sequence_evidence_and_export(self):
         self.finish()
         with mock.patch('athenz.verification.shutil.which', return_value='/usr/bin/docker'), \

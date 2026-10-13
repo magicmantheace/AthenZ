@@ -95,3 +95,14 @@ raw exception messages might include private prompts, file paths, model output
 or other untrusted strings. The queue still pauses with no automatic retry,
 patch application, testing or deployment. Foreground polling also rejects
 boolean values masquerading as integer tick or delay bounds.
+
+### Supervised Git/Docker runner diagnostics
+
+Local Git failures now return a fixed, sanitized error instead of forwarding
+Git stdout/stderr, which may contain private source paths, repository names or
+local configuration. Owner-invoked container tests reject Docker mount-path
+option delimiters and invalid timeout settings before invoking Docker.
+Snapshot integrity failure reports contain a fixed public-safe category
+instead of a raw exception, and the command continues to refuse a successful
+result on unverified or changed snapshots. This is stronger input handling,
+not a claim that a worktree is an OS-level adversarial-code sandbox.

@@ -109,7 +109,7 @@ def isolated_unittest(repo: Path, *, image: str, home: Path, timeout: int = 120)
     """Execute a fixed unittest command on a copied tree; no host fallback."""
     if not IMAGE.fullmatch(image):
         raise ValueError('Image must be an explicit trusted sha256 digest pin')
-    if not isinstance(timeout, int) or not 10 <= timeout <= 180:
+    if type(timeout) is not int or not 10 <= timeout <= 180:
         raise ValueError('Timeout must be 10..180 seconds')
     if not shutil.which('docker'):
         raise WorktreeError('Docker is unavailable; refusing unisolated tests')
@@ -156,9 +156,9 @@ def isolated_unittest(repo: Path, *, image: str, home: Path, timeout: int = 120)
         try:
             if fingerprint_snapshot(snapshot) != metadata:
                 raise WorktreeError('Snapshot contents changed during execution')
-        except (WorktreeError, OSError) as exc:
+        except (WorktreeError, OSError):
             code = 125
-            output = 'Snapshot integrity FAILED after container execution: ' + str(exc)
+            output = 'Snapshot integrity FAILED after container execution'
         return {**metadata, 'image': image, 'returncode': code,
                 'output': output[-8000:], 'output_sha256': hashlib.sha256(output.encode('utf-8')).hexdigest(),
                 'cleanup': cleanup, 'runner': 'docker-local-observation',

@@ -36,7 +36,10 @@ def _git(repo: Path, *args: str) -> str:
     process = subprocess.run(cmd, text=True, capture_output=True, check=False,
                              timeout=45, env={**os.environ, 'GIT_TERMINAL_PROMPT': '0'})
     if process.returncode:
-        raise WorktreeError((process.stderr or process.stdout).strip()[-600:])
+        # Git stderr/stdout can embed a selected owner's path, credentials in
+        # remote configuration, private worktree filenames or hook diagnostics.
+        # Never return process output in UI/CLI errors.
+        raise WorktreeError('Local Git operation failed; inspect the trusted repository manually')
     return process.stdout.rstrip('\n')
 
 
@@ -215,9 +218,16 @@ class Worker:
             raise WorktreeError('Apply the proposal first')
         if kind != 'unittest' or not IMAGE.fullmatch(image):
             raise ValueError('Only unittest and a digest-pinned image are supported')
+        if type(timeout) is not int or not 10 <= timeout <= 180:
+            raise ValueError('Container timeout must be an integer from 10..180 seconds')
         if not shutil.which('docker'):
             raise WorktreeError('Container runner unavailable; refusing host fallback')
         workspace = Path(item['state']['workspace'])
+        # Docker --mount splits on commas despite argv not going through a
+        # shell. A workspace selected in an unusual path must not be allowed
+        # to add mount options or another bind source.
+        from .verification import validate_mount_source
+        validate_mount_source(workspace)
         changes = json.loads(self.store.get_proposal(pid)['changes_json'])
         for change in changes:
             if digest(read_exact(allowed_file(workspace, change['path']))) != change['after_sha256']:
