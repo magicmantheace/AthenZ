@@ -23,6 +23,34 @@ MAX_SNAPSHOT_BYTES = 64 * 1024 * 1024
 MAX_SINGLE_FILE = 16 * 1024 * 1024
 
 
+def _verified_regular_bytes(path: Path, *, limit: int = MAX_SINGLE_FILE) -> bytes:
+    """Read one local file without following the final symlink, and fence races.
+
+    Source trees are still owner-trusted inputs; this detects ordinary file
+    replacement/mutation while staging, not a hostile same-user process that
+    can interfere with directory ancestors.
+    """
+    flags = os.O_RDONLY | getattr(os, 'O_BINARY', 0) | getattr(os, 'O_NOFOLLOW', 0)
+    try:
+        with os.fdopen(os.open(path, flags), 'rb') as stream:
+            opened = os.fstat(stream.fileno())
+            named = path.lstat()
+            if (not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1
+                    or not stat.S_ISREG(named.st_mode) or named.st_nlink != 1
+                    or (opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino)
+                    or opened.st_size > limit):
+                raise WorktreeError('Unsafe or oversized source file for Docker snapshot')
+            payload = stream.read(limit + 1)
+            final = os.fstat(stream.fileno())
+            if (len(payload) != opened.st_size or len(payload) > limit
+                    or (final.st_dev, final.st_ino, final.st_size, final.st_mtime_ns)
+                       != (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns)):
+                raise WorktreeError('Source file changed during Docker snapshot capture')
+            return payload
+    except OSError:
+        raise WorktreeError('Unable to safely read Docker snapshot source') from None
+
+
 def snapshot_files(repo: Path, dest: Path) -> dict:
     """Copy tracked tree into new location, then attest copied bytes.
 
@@ -38,9 +66,10 @@ def snapshot_files(repo: Path, dest: Path) -> dict:
     summary = hashlib.sha256()
     for rel in sorted(names):
         pure = PurePosixPath(rel)
-        if (pure.is_absolute() or '..' in pure.parts or '\\' in rel or '\x00' in rel
+        if (pure.is_absolute() or '..' in pure.parts or '\\' in rel
+                or len(rel) > 1024 or any(ord(ch) < 32 or ord(ch) == 127 for ch in rel)
                 or protected_repository_path(pure.parts)):
-            raise WorktreeError('Sensitive or unsafe tracked path: ' + rel)
+            raise WorktreeError('Sensitive, control-character or unsafe tracked path')
         origin = repo
         target = dest
         for part in pure.parts:
@@ -50,18 +79,13 @@ def snapshot_files(repo: Path, dest: Path) -> dict:
                 raise WorktreeError('Tracked symlink not permitted in test snapshot')
         if not origin.is_file():
             raise WorktreeError('Tracked path is not a regular file: ' + rel)
-        info = origin.stat()
-        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
-            raise WorktreeError('Tracked hard-linked or special file cannot enter Docker snapshot')
-        size = info.st_size
-        if size > MAX_SINGLE_FILE or total + size > MAX_SNAPSHOT_BYTES:
+        payload = _verified_regular_bytes(origin)
+        size = len(payload)
+        if total + size > MAX_SNAPSHOT_BYTES:
             raise WorktreeError('Tracked source exceeds sandbox snapshot size limit')
         total += size
         target.parent.mkdir(parents=True, exist_ok=True)
         target.parent.chmod(0o755)  # readonly container user must traverse copy
-        payload = origin.read_bytes()
-        if len(payload) != size:
-            raise WorktreeError('Tracked file changed while copying')
         target.write_bytes(payload)
         target.chmod(0o444)
         digest = hashlib.sha256(payload).hexdigest()
@@ -88,15 +112,13 @@ def fingerprint_snapshot(snapshot: Path) -> dict:
             raise WorktreeError('Snapshot contains a symlink or non-regular file')
         rel = path.relative_to(snapshot).as_posix()
         count += 1
-        size = path.stat().st_size
-        if count > 2000 or size > MAX_SINGLE_FILE or total + size > MAX_SNAPSHOT_BYTES:
-            raise WorktreeError('Snapshot exceeds file or size limit')
-        total += size
-        file_hash = hashlib.sha256()
-        with path.open('rb') as handle:
-            for block in iter(lambda: handle.read(65536), b''):
-                file_hash.update(block)
-        summary.update(rel.encode('utf-8') + b'\0' + file_hash.hexdigest().encode('ascii') + b'\n')
+        payload = _verified_regular_bytes(path)
+        if (count > 2000 or len(payload) + total > MAX_SNAPSHOT_BYTES
+                or len(rel) > 1024 or any(ord(ch) < 32 or ord(ch) == 127 for ch in rel)):
+            raise WorktreeError('Snapshot exceeds file, path or total-size limit')
+        total += len(payload)
+        summary.update(rel.encode('utf-8') + b'\0'
+                       + hashlib.sha256(payload).hexdigest().encode('ascii') + b'\n')
     return {'snapshot_sha256': summary.hexdigest(), 'tracked_files': count,
             'snapshot_bytes': total}
 

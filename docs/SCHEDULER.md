@@ -128,3 +128,14 @@ worktree, which could contain untracked private files and Git metadata.
 The test result remains a local observation rather than a cryptographic
 attestation; Docker and filesystem isolation require owner-device verification.
 The runner still uses a fixed unittest command with no host fallback.
+
+### Stable source handles and private snapshot filenames
+
+The Docker snapshot copier now opens regular source files with no-follow
+semantics where supported, checks the opened inode against its named path,
+rejects hard links and oversized files, and rechecks file metadata after the
+read. The post-test snapshot verifier uses the same checks. Tracked Git paths
+with control characters or excessive length are refused before copying or
+reporting private names. This hardens common file-replacement races; a fully
+malicious process controlling ancestor directories or the same operating
+system account is **not** an independently isolated attacker model.

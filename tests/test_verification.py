@@ -104,6 +104,47 @@ class FullTaskTests(unittest.TestCase):
         self.assertNotIn('PRIVATE-SOURCE', json.dumps(result))
 
 
+    def test_snapshot_regular_file_reader_refuses_symlinks_hardlinks_and_mutation(self):
+        from athenz.verification import _verified_regular_bytes
+        import os
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ordinary = root / 'ordinary.py'
+            ordinary.write_bytes(b'plain')
+            self.assertEqual(_verified_regular_bytes(ordinary), b'plain')
+            with self.assertRaises(WorktreeError):
+                _verified_regular_bytes(ordinary, limit=2)
+            linked = root / 'hardlinked.py'
+            try:
+                os.link(ordinary, linked)
+            except (OSError, NotImplementedError):
+                self.skipTest('No hardlink support')
+            with self.assertRaises(WorktreeError):
+                _verified_regular_bytes(ordinary)
+            linked.unlink()
+            alias = root / 'alias.py'
+            try:
+                alias.symlink_to(ordinary)
+            except (OSError, NotImplementedError):
+                self.skipTest('No symlink privilege on this runner')
+            with self.assertRaises(WorktreeError):
+                _verified_regular_bytes(alias)
+
+    def test_tracked_control_character_name_is_rejected_before_private_copy(self):
+        self.ctl.cancel('math')
+        strange = 'PRIVATE\nTRACKED.py'
+        p = self.repo / strange
+        try:
+            p.write_text('SYNTHETIC_NOT_COPIED')
+            git(self.repo, 'add', strange)
+            git(self.repo, 'commit', '-m', 'synthetic bad tracked filename')
+        except (OSError, subprocess.CalledProcessError):
+            self.skipTest('Host Git filesystem disallows control-character filenames')
+        with tempfile.TemporaryDirectory() as t:
+            with self.assertRaisesRegex(WorktreeError, 'control-character') as caught:
+                snapshot_files(self.repo, Path(t))
+            self.assertNotIn('PRIVATE', str(caught.exception))
+
     def test_isolated_unittest_rejects_boolean_timeout_without_docker_probe(self):
         from athenz.verification import isolated_unittest
         with mock.patch('athenz.verification.shutil.which',
