@@ -85,3 +85,16 @@ lexical guard—not semantic paraphrase detection or proof against memorization.
 The selection is recomputed during immutable dataset verification, so new
 protected text invalidates previously built training snapshots. No held-out
 texts or examples are logged by inspection reports.
+
+## Consistent paired-model benchmark evidence
+
+Both local model result sets are checked against their individual held-out
+case outcomes before reporting accuracy gains. Invalid/contradictory case
+flags, missing or inconsistent aggregate counts, impossible accuracy, and
+invalid-prediction counts fail closed. Paired improvement/regression counts
+and an exact one-sided sign-test probability are reported as aggregate-only
+metadata without releasing owner prompts or case-level answers. The small
+sample, case-dependence and possible repeated evaluation invalidate automatic
+significance or promotion claims. Eligibility remains owner review only and
+still requires a strictly positive observed accuracy gain; model selection
+and training remain separate, explicitly approved operations.

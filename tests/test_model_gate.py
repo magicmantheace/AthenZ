@@ -47,7 +47,8 @@ class EvaluationGateTests(unittest.TestCase):
             return {'heldout_sha256': heldout_sha, 'reference_sha256': reference_sha,
                     'total':len(ids), 'correct':correct, 'accuracy':correct/len(ids),
                     'chance_expected':0.5, 'cases':[{'id':i + tweak,'expected':'A',
-                    'predicted':'A','correct': True} for i in ids]}
+                    'predicted':'A' if index < correct else 'B',
+                    'correct': index < correct} for index, i in enumerate(ids)]}
         return [one(first), one(second, offset)]
 
     def test_candidate_comparison_has_no_personal_text_and_no_promotion(self):
@@ -75,6 +76,8 @@ class EvaluationGateTests(unittest.TestCase):
         reports[0]['accuracy_interval_95'] = [0.15, 0.72]
         reports[1]['accuracy_interval_95'] = [0.46, 0.94]
         reports[0]['invalid_predictions'] = 2
+        for case in reports[0]['cases'][-2:]:
+            case['predicted'] = None
         reports[1]['invalid_predictions'] = 0
         with mock.patch('athenz.model_gate.evaluate_decisions', side_effect=reports):
             result = compare_models(self.store, Model('base'), Model('candidate'),
@@ -96,6 +99,51 @@ class EvaluationGateTests(unittest.TestCase):
                 altered = {**original, 'accuracy_gain': value}
                 with self.assertRaisesRegex(BenchmarkError, 'Invalid observed accuracy gain'):
                     save_report(self.store, altered, confirmed=True)
+
+    def test_paired_candidate_evidence_and_exact_probability(self):
+        with mock.patch('athenz.model_gate.evaluate_decisions',
+                        side_effect=self.observations(5, 9)):
+            result = compare_models(self.store, Model('base'), Model('candidate'), self.sha)
+        self.assertEqual((result['paired_improved'], result['paired_regressed'],
+                          result['paired_unchanged']), (4, 0, 8))
+        self.assertEqual(result['paired_one_sided_p_value'], 0.0625)
+        self.assertTrue(result['eligible_for_review'])
+        self.assertEqual(result['promotion'], 'not-authorized')
+        with mock.patch('athenz.model_gate.evaluate_decisions',
+                        side_effect=self.observations(9, 5)):
+            worse = compare_models(self.store, Model('base'), Model('candidate'), self.sha)
+        self.assertEqual((worse['paired_improved'], worse['paired_regressed']), (0, 4))
+        self.assertEqual(worse['paired_one_sided_p_value'], 1.0)
+
+    def test_inconsistent_observed_case_totals_refused(self):
+        for change in ('wrong_correct', 'wrong_accuracy', 'false_case',
+                       'invalid_prediction_count', 'boolean_seed'):
+            cases = self.observations()
+            if change == 'wrong_correct':
+                cases[1]['correct'] = 100
+            elif change == 'wrong_accuracy':
+                cases[1]['accuracy'] = 0.01
+            elif change == 'false_case':
+                cases[1]['cases'][0]['correct'] = False
+            elif change == 'invalid_prediction_count':
+                cases[1]['invalid_predictions'] = 1
+            with self.subTest(change=change):
+                with mock.patch('athenz.model_gate.evaluate_decisions',
+                                side_effect=cases):
+                    with self.assertRaisesRegex(BenchmarkError,
+                                                 'evaluation|Evaluation|sample count'):
+                        compare_models(self.store, Model('base'),
+                                       Model('candidate'), self.sha,
+                                       seed=True if change == 'boolean_seed' else 42)
+
+    def test_paired_probability_no_discordance(self):
+        with mock.patch('athenz.model_gate.evaluate_decisions',
+                        side_effect=self.observations(8, 8)):
+            report = compare_models(self.store, Model('base'),
+                                    Model('candidate'), self.sha)
+        self.assertEqual(report['paired_improved'], 0)
+        self.assertEqual(report['paired_regressed'], 0)
+        self.assertEqual(report['paired_one_sided_p_value'], 1.0)
 
     def test_worse_candidate_not_ready(self):
         with mock.patch('athenz.model_gate.evaluate_decisions', side_effect=self.observations(10, 8)):
