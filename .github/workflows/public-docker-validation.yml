@@ -18,10 +18,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: cffd2005a7db6a32a0e822fee5dffde8d8540e9b
+          ref: f6ce0afebc7f10270b5ff443f61d843e3d5f9a43
           persist-credentials: false
       - name: Verify pinned implementation
-        run: test "$(git rev-parse HEAD)" = "cffd2005a7db6a32a0e822fee5dffde8d8540e9b"
+        run: test "$(git rev-parse HEAD)" = "f6ce0afebc7f10270b5ff443f61d843e3d5f9a43"
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
