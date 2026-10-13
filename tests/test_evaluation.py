@@ -80,6 +80,36 @@ class DecisionEvaluationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'overlap evaluation splits'):
             evaluate_decisions(self.store, Stub(), split='calibration')
 
+    def test_high_overlap_scenarios_crossing_splits_are_rejected(self):
+        self.store.add_decision(
+            'Would the owner authorize deployment after all automated validation checks pass today?',
+            'No', 'Synthetic training rationale',
+            source='synthetic', approved=True)
+        self.store.add_decision(
+            'Would the owner authorize deployment after all automated local validation checks pass today?',
+            'No', 'Synthetic held-out rationale',
+            source='synthetic', options=['Yes', 'No'],
+            split='test', approved=True)
+        stub = Stub()
+        with self.assertRaisesRegex(ValueError, 'overlap evaluation splits'):
+            evaluate_decisions(self.store, stub)
+        self.assertEqual(stub.calls, [])
+
+    def test_distinct_scenarios_with_shared_lead_in_remain_evaluable(self):
+        self.store.add_decision(
+            'Would the owner authorize deployment after all automated validation checks pass today?',
+            'No', 'Training choice',
+            source='synthetic', approved=True)
+        self.store.add_decision(
+            'Would the owner authorize deployment after all automated security scans fail today?',
+            'No', 'Independent held-out choice',
+            source='synthetic', options=['Yes', 'No'],
+            split='test', approved=True)
+        stub = Stub()
+        outcome = evaluate_decisions(self.store, stub)
+        self.assertEqual(outcome['total'], 1)
+        self.assertEqual(len(stub.calls), 1)
+
     def test_unapproved_overlapping_decision_does_not_block(self):
         self.store.add_decision('Should we keep all test cases separate?',
             'Yes', 'Pending, not yet approved', source='synthetic')

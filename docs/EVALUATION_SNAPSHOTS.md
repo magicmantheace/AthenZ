@@ -171,3 +171,14 @@ registration with the same data to create the anchor; no automated candidate
 selection or repair is permitted. This detects accidental/unsanctioned SQLite
 checkpoint changes but is not a cryptographic signature or protection against
 a malicious actor who controls and can forge the entire local database.
+
+### Strong lexical near-duplicates across evaluation splits
+
+In addition to exact normalized case matches, approved training/calibration/
+test decision scenarios are checked for unusually high token-set overlap
+(Jaccard at least 0.88, at least eight distinct words, at least 48 characters
+excluding spaces). An inverted-word index avoids a quadratic all-pairs scan;
+only a private generic error is returned. This detects small insertion,
+removal or reordered-word variants, not semantic synonyms. Shared introductory
+phrases below the threshold remain eligible. Near matches may reflect genuine
+separate choices; the owner must review and partition them before evaluation.

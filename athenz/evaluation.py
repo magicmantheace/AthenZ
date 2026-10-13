@@ -55,13 +55,16 @@ def _scenario_split_key(text: str) -> str:
 
 
 def _reject_overlapping_decision_splits(store: IdentityStore) -> None:
-    """Prevent trivial train/calibration/test answer contamination.
+    """Reject exact and strong lexical near-duplicates across approved splits.
 
-    Only approved records count as visible training or scored references;
-    unapproved content is not model evidence. The check does not inspect
-    private model weights or find nonlexical paraphrases.
+    Strong near matches need >=8 distinct words, >=48 nonspace characters
+    and >=88% token-set Jaccard similarity. This conservative leakage check
+    is NOT a semantic similarity model and may require owner cleanup when
+    differently worded scenarios should legitimately be separate cases.
     """
     seen: dict[str, str] = {}
+    near: list[tuple[str, frozenset[str]]] = []
+    by_token: dict[str, set[int]] = {}
     rows = store.db.execute(
         "SELECT scenario,split FROM decisions WHERE status='approved' "
         "AND split IN ('train','calibration','test') ORDER BY id")
@@ -70,6 +73,27 @@ def _reject_overlapping_decision_splits(store: IdentityStore) -> None:
         prior = seen.setdefault(key, row['split'])
         if key and prior != row['split']:
             raise ValueError('Approved decision scenarios overlap evaluation splits')
+        tokens = frozenset(key.split())
+        if len(tokens) < 8 or sum(map(len, tokens)) < 48:
+            continue
+        # Candidate lookup avoids an unbounded all-pairs Cartesian scan when
+        # many private decisions are present. Common short tokens are ignored.
+        candidate_ids: set[int] = set()
+        for token in tokens:
+            if len(token) >= 5:
+                candidate_ids.update(by_token.get(token, ()))
+        for candidate_id in candidate_ids:
+            old_split, old_tokens = near[candidate_id]
+            if old_split == row['split']:
+                continue
+            overlap = len(tokens & old_tokens)
+            if 100 * overlap >= 88 * len(tokens | old_tokens):
+                raise ValueError('Approved decision scenarios overlap evaluation splits')
+        index = len(near)
+        near.append((row['split'], tokens))
+        for token in tokens:
+            if len(token) >= 5:
+                by_token.setdefault(token, set()).add(index)
 
 
 def _fingerprint(rows) -> str:
