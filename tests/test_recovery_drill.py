@@ -60,6 +60,16 @@ class RecoveryDrillTests(unittest.TestCase):
             store.checkpoint('ollama_runtime', 'synthetic', {'active_tag': 'unsafe'})
             store.checkpoint('active-worker', 'synthetic', {'secret': 'not-displayed'},
                              status='running')
+            with store.db:
+                store.db.execute("""CREATE TABLE proposal_schedule (
+                    task_key TEXT PRIMARY KEY, scope_sha256 TEXT NOT NULL,
+                    model_name TEXT NOT NULL, state TEXT NOT NULL, lease TEXT,
+                    last_result TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL, updated_at TEXT NOT NULL)""")
+                store.db.execute("""INSERT INTO proposal_schedule
+                    (task_key,scope_sha256,model_name,state,lease,created_at,updated_at)
+                    VALUES ('synthetic-bundle-task',?,'test-model','running',?, ?, ?)""",
+                    ('0'*64, 'f'*32, '2026-01-01', '2026-01-01'))
         finally:
             store.close()
         (self.home / 'datasets').mkdir()
@@ -104,6 +114,18 @@ class RecoveryDrillTests(unittest.TestCase):
                                         scratch_root=self.scratch)
         self.assertNotIn('PRIVATE-OWNER', str(caught.exception))
         self.assertEqual(list(self.scratch.iterdir()), [])
+
+    def test_bundle_rehearsal_refuses_git_scoped_scratch_location(self):
+        from athenz.profile_bundle import create_bundle
+        from athenz.recovery_drill import rehearse_profile_bundle
+        store = ExperienceStore(self.home)
+        store.close()
+        bundle = create_bundle(self.home, confirmed=True)
+        (self.scratch / '.git').mkdir()
+        with self.assertRaisesRegex(RecoveryDrillError, 'Git checkout'):
+            rehearse_profile_bundle(self.home, bundle['id'], confirmed=True,
+                                    scratch_root=self.scratch)
+        self.assertEqual(sorted(p.name for p in self.scratch.iterdir()), ['.git'])
 
     def test_bundle_rehearsal_missing_source_has_no_side_effects(self):
         from athenz.recovery_drill import rehearse_profile_bundle
