@@ -185,3 +185,15 @@ Run 38334418348 additionally checks the Windows Python 3.11 full suite;
 read its individual job result before claiming a Windows regression pass.
 All CI-only branches check out the immutable implementation SHA; `main`
 remains untouched and no private identity data is uploaded.
+
+### Latest isolated public CI source (adapter/LoRA integrity)
+
+Public runners check out pinned archival source, never the default branch.
+After previous Linux and Windows 433-test baselines, the development sequence
+introduced immutable adapter registration digest anchors, checkpoint-fenced
+training and strong lexical near-duplicate exclusion. The most recent
+implementation source is `2b7c1110623588f86e18493d1aee06258ff1b292`.
+The Python 3.12/3.13 and Windows portable runner is
+[38341100306](https://github.com/magicmantheace/AthenZ/actions/runs/38341100306).
+This is hosted synthetic/packaging evidence only and cannot certify real
+CUDA training, independent lineage or the owner's desktop.

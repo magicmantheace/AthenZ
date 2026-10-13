@@ -206,3 +206,30 @@ owner profile data or unattended coding action implied by this milestone.
   run can be marked complete. Generated adapters are still NOT auto-deployed.
 - [ ] Real RTX 3060 CUDA and process interruption behavior needs an on-device
   acceptance test; synthetic tests cannot certify training quality.
+
+### 2026-10-12 — Adapter registration and training lifecycle integrity
+
+- [x] Entire immutable adapter registration, including candidate tag, lineage
+  and no-deployment marker, is atomically committed into the checkpoint and
+  separately bound to a SHA-256 digest in the append-only local metadata event
+  ledger. Missing, conflicting or changed anchors block subsequent review.
+  Older registrations require explicit owner re-confirmation to add an anchor.
+- [x] Model-comparison persistence checks ordered held-out case-ID hashes and
+  requires well-formed distinct baseline/candidate digests when present;
+  partial digest metadata fails closed, including on legacy reports.
+- [x] QLoRA training completion is revision-fenced to its owner-authorized
+  running checkpoint. A concurrent owner pause or checkpoint update cannot
+  be overwritten by completion or by an error handler.
+- [x] Invalid/zero/noninteger training example counts and unsafe adapter
+  weight pointers are refused; no automatic training or model promotion.
+- [x] Distinctive approved decision scenarios with at least 88% lexical
+  word-set overlap (8+ distinct words/48+ characters) cannot cross evaluation
+  partitions without explicit owner cleanup. Reviewed SFT instructions/answers
+  with such strong similarity to private held-out scenarios/rationales are
+  excluded from training exports and invalidate stale exports.
+- [x] Synthetic regressions added for valid-tag swap attempts, append-only
+  registration anchors, legacy owner re-confirmation, training authority
+  races, invalid trainer outputs and lexical near-duplicates.
+- [ ] Host CI regression and real owner-device model/GPU acceptance remain
+  separate requirements; these safeguards are not cryptographic signatures,
+  independent semantic similarity or proof of model lineage.
