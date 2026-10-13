@@ -173,6 +173,10 @@ class FullTaskTests(unittest.TestCase):
                 with tempfile.TemporaryDirectory() as folder:
                     with self.assertRaisesRegex(WorktreeError, 'Sensitive'):
                         snapshot_files(self.repo, Path(folder))
+                # Remove each synthetic tracked secret before checking the
+                # next variant; otherwise only the first path is exercised.
+                git(self.repo, 'rm', sensitive)
+                git(self.repo, 'commit', '-m', 'remove synthetic protected path')
 
     def test_hardlinked_tracked_file_is_refused_in_docker_snapshot(self):
         import os
