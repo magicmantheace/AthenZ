@@ -207,3 +207,13 @@ Legacy reports without both model digests can still be inspected according
 to their older metadata contract, but cannot establish model lineage or
 independently attest candidate quality. Reports never initiate model pulling,
 training, tagging or switching.
+
+### Chance-baseline integrity in paired comparisons
+
+Both model evaluation passes must report the same finite, plausible random
+chance baseline for their identical held-out cases. Divergent, non-finite or
+non-numeric chance baselines fail before a paired comparison can be saved.
+The persisted aggregate chance estimate is also range-checked. This cannot
+prove the model's statistical independence or that all benchmark choices are
+appropriately balanced; it prevents obviously contradictory comparison
+metadata from being mistaken for independent performance evidence.

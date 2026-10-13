@@ -241,6 +241,33 @@ class EvaluationGateTests(unittest.TestCase):
                 with self.assertRaisesRegex(BenchmarkError, 'metadata is inconsistent'):
                     save_report(self.store, {**valid, **changed}, confirmed=True)
 
+    def test_comparison_rejects_conflicting_or_malformed_chance_baselines(self):
+        for malformed in (float('nan'), float('inf'), -0.1, 0, 0.9, True):
+            reports = self.observations()
+            reports[1]['chance_expected'] = malformed
+            with self.subTest(chance=malformed):
+                with mock.patch('athenz.model_gate.evaluate_decisions', side_effect=reports):
+                    with self.assertRaisesRegex(BenchmarkError, 'chance baseline'):
+                        compare_models(self.store, Model('base'), Model('candidate'),
+                                       self.sha)
+        reports = self.observations()
+        reports[1]['chance_expected'] = 0.4
+        with mock.patch('athenz.model_gate.evaluate_decisions', side_effect=reports):
+            with self.assertRaisesRegex(BenchmarkError, 'chance baselines disagree'):
+                compare_models(self.store, Model('base'), Model('candidate'),
+                               self.sha)
+
+    def test_report_save_rejects_fabricated_chance_expected(self):
+        with mock.patch('athenz.model_gate.evaluate_decisions',
+                        side_effect=self.observations()):
+            report = compare_models(self.store, Model('base'), Model('candidate'),
+                                    self.sha)
+        for invalid in (0, -0.1, 1.0, 'none', float('inf'), True):
+            with self.subTest(chance=invalid):
+                with self.assertRaisesRegex(BenchmarkError, 'metadata is inconsistent'):
+                    save_report(self.store, {**report, 'chance_expected': invalid},
+                                confirmed=True)
+
     def test_worse_candidate_not_ready(self):
         with mock.patch('athenz.model_gate.evaluate_decisions', side_effect=self.observations(10, 8)):
             r = compare_models(self.store, Model('base'), Model('candidate'), self.sha)

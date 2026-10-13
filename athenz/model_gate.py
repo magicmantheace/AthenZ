@@ -38,6 +38,10 @@ def _validated_case_outcomes(report: dict) -> list[dict]:
             or type(accuracy) not in (int, float) or not isfinite(accuracy)
             or abs(accuracy - correct / count) > 1e-9):
         raise BenchmarkError('Evaluation aggregate accuracy disagrees with case evidence')
+    chance = report.get('chance_expected')
+    if (type(chance) not in (int, float) or not isfinite(chance)
+            or not 0 < chance <= 0.5):
+        raise BenchmarkError('Evaluation chance baseline is missing or invalid')
     invalid = 0
     true_correct = 0
     for case in cases:
@@ -79,7 +83,11 @@ def _consistent_comparison_metadata(report: dict) -> bool:
     include all aggregate fields and are checked before persistence/review.
     """
     count = report.get('cases')
-    if type(count) is not int or count <= 0:
+    if type(count) is not int or not 0 < count <= 1000:
+        return False
+    chance = report.get('chance_expected')
+    if chance is not None and (type(chance) not in (int, float) or
+                               not isfinite(chance) or not 0 < chance <= 0.5):
         return False
     names = ('baseline_correct', 'candidate_correct', 'baseline_accuracy',
              'candidate_accuracy')
@@ -196,6 +204,8 @@ def compare_models(store: ExperienceStore, baseline_model, candidate_model,
         raise BenchmarkError('Insufficient, unequal or changed held-out evaluation cases')
     baseline_cases = _validated_case_outcomes(first)
     candidate_cases = _validated_case_outcomes(second)
+    if abs(first['chance_expected'] - second['chance_expected']) > 1e-9:
+        raise BenchmarkError('Evaluation chance baselines disagree on held-out cases')
     improved = sum(not a['correct'] and b['correct']
                    for a, b in zip(baseline_cases, candidate_cases))
     regressed = sum(a['correct'] and not b['correct']
