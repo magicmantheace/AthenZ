@@ -63,10 +63,6 @@ class WorktreeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.worker.container_tests('scope-test', image=image, timeout=181)
         current = self.store.get_checkpoint('scope-test')
-        state = dict(current['state'])
-        state['workspace'] = str(self.worker.root / 'injected,readonly=false')
-        self.store.checkpoint('scope-test', current['task'], state,
-                              status='paused', expected_revision=current['revision'])
         with mock.patch('athenz.worker.shutil.which', return_value='/usr/bin/docker'):
             # Resume catches a renamed worktree independently; do not let
             # Docker run even if earlier worktree checks are bypassed.

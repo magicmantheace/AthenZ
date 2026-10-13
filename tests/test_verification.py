@@ -80,16 +80,24 @@ class FullTaskTests(unittest.TestCase):
         return stub
 
     def test_snapshot_integrity_error_never_echoes_private_path(self):
-        from athenz.verification import isolated_unittest
-        # The runner refuses an untrusted snapshot state without exposing
-        # local exception details in its reported result.
+        from athenz.verification import isolated_unittest, fingerprint_snapshot
+        calls = {'n': 0}
+        def tampered_late(path):
+            calls['n'] += 1
+            if calls['n'] == 2:
+                raise OSError('PRIVATE-SOURCE-REPO-PATH')
+            return fingerprint_snapshot(path)
         with mock.patch('athenz.verification.shutil.which', return_value='/usr/bin/docker'), \
              mock.patch('athenz.verification.subprocess.run',
                         return_value=subprocess.CompletedProcess(['docker'], 0, '', '')), \
              mock.patch('athenz.verification.fingerprint_snapshot',
-                        side_effect=[{'snapshot_sha256': 'x', 'tracked_files': 3, 'snapshot_bytes': 100},
-                                     {'snapshot_sha256': 'x', 'tracked_files': 3, 'snapshot_bytes': 100}]):
-            pass  # Explicit OS-integrity error sanitization is exercised in hosted Docker tests.
+                        side_effect=tampered_late):
+            result = isolated_unittest(self.repo, image=IMAGE, home=self.store.home)
+        self.assertEqual(calls['n'], 2)
+        self.assertEqual(result['returncode'], 125)
+        self.assertIn('Snapshot integrity FAILED', result['output'])
+        self.assertNotIn('PRIVATE-SOURCE', json.dumps(result))
+
 
     def test_isolated_unittest_rejects_boolean_timeout_without_docker_probe(self):
         from athenz.verification import isolated_unittest

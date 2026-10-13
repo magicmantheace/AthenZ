@@ -33,8 +33,11 @@ def _git(repo: Path, *args: str) -> str:
     # No shell; no model-controlled Git flags, and no prompts/remote operations.
     cmd = ['git', '-c', 'core.hooksPath=/dev/null', '-c', 'protocol.file.allow=never',
            '-C', str(repo), *args]
-    process = subprocess.run(cmd, text=True, capture_output=True, check=False,
-                             timeout=45, env={**os.environ, 'GIT_TERMINAL_PROMPT': '0'})
+    try:
+        process = subprocess.run(cmd, text=True, capture_output=True, check=False,
+                                 timeout=45, env={**os.environ, 'GIT_TERMINAL_PROMPT': '0'})
+    except (OSError, subprocess.TimeoutExpired):
+        raise WorktreeError('Local Git command unavailable or timed out') from None
     if process.returncode:
         # Git stderr/stdout can embed a selected owner's path, credentials in
         # remote configuration, private worktree filenames or hook diagnostics.
