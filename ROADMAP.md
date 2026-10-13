@@ -153,8 +153,9 @@ hardware tests do not currently block further independent engineering.
 - [x] Hosted Docker integration and synthetic sandbox threat suite: seven tests
   passed using a registry-digest-pinned image in public GitHub Actions run
   [38332727303](https://github.com/magicmantheace/AthenZ/actions/runs/38332727303).
-- [x] Linux Python 3.11/3.12/3.13: 417 tests each, four skips, no failures
-  against the reviewed `be8cf5b93a396b4737bf145e6896d7cac8b9eb66`
+- [x] Linux Python 3.11/3.12/3.13: 417 tests each, four skips,
+  no failures, and hosted Windows Python 3.11: 417 tests, seven skips, no
+  failures against reviewed `be8cf5b93a396b4737bf145e6896d7cac8b9eb66`
   source (public CI runs 38332623888 and 38332502198).
 - [x] Hosted unsigned Windows PyInstaller + offline executable/Tk smoke passed
   on this source (public run 38332502198). Artifact retention is seven days.
