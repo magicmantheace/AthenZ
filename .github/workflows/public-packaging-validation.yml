@@ -23,10 +23,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 9d633885d5d161fe2b8c8c71604e47cf74866ad7
+          ref: d7c35fb21af9451a9614b390631aaab97bdd7456
           persist-credentials: false
       - name: Verify pinned source
-        run: test "$(git rev-parse HEAD)" = "9d633885d5d161fe2b8c8c71604e47cf74866ad7"
+        run: test "$(git rev-parse HEAD)" = "d7c35fb21af9451a9614b390631aaab97bdd7456"
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
@@ -41,11 +41,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 9d633885d5d161fe2b8c8c71604e47cf74866ad7
+          ref: d7c35fb21af9451a9614b390631aaab97bdd7456
           persist-credentials: false
       - name: Verify pinned source
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "9d633885d5d161fe2b8c8c71604e47cf74866ad7"
+        run: test "$(git rev-parse HEAD)" = "d7c35fb21af9451a9614b390631aaab97bdd7456"
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -77,7 +77,7 @@ jobs:
           Set-Content -Path 'AthenZ-windows-unsigned-portable.sha256' -Value "$digest  AthenZ-windows-unsigned-portable.zip" -Encoding ascii
       - uses: actions/upload-artifact@v4
         with:
-          name: AthenZ-windows-unsigned-portable-9d633885d5d161fe2b8c8c71604e47cf74866ad7
+          name: AthenZ-windows-unsigned-portable-d7c35fb21af9451a9614b390631aaab97bdd7456
           path: |
             AthenZ-windows-unsigned-portable.zip
             AthenZ-windows-unsigned-portable.sha256
