@@ -179,6 +179,15 @@ def execute_conversion(store: ExperienceStore, run_id: str, *, confirmed: bool =
     state['attempts'] = attempt
     state['artifact'] = None
     store.checkpoint(key, cp['task'], state, status='running', expected_revision=cp['revision'])
+    running_revision = cp['revision'] + 1
+
+    def current_authorized_checkpoint() -> dict:
+        current = store.get_checkpoint(key)
+        if (current is None or current['status'] != 'running'
+                or current['revision'] != running_revision):
+            raise ConversionError('Conversion authorization changed during execution')
+        return current
+
     from .finetune import _run_path
     adapter_path = _run_path(store, run_id) / 'adapter'
     try:
@@ -192,14 +201,22 @@ def execute_conversion(store: ExperienceStore, run_id: str, *, confirmed: bool =
                              'adapter_artifact_sha256': state['adapter_artifact_sha256'],
                              'converter_sha256': state['converter_sha256'],
                              'status': 'local-merge-claimed-not-gpu-verified'}
-        current = store.get_checkpoint(key)
+        current_authorized_checkpoint()
+        # Completion uses the revision observed at launch, not the latest
+        # revision: a concurrent pause or new owner run always wins the CAS.
         store.checkpoint(key, cp['task'], state, status='complete',
-                         expected_revision=current['revision'])
+                         expected_revision=running_revision)
     except BaseException:
+        # If the owner paused or another operation changed the checkpoint,
+        # do not overwrite that new decision, even when a stale worker fails.
         current = store.get_checkpoint(key)
-        if current is not None and current['status'] == 'running':
-            store.checkpoint(key, cp['task'], state, status='failed',
-                             expected_revision=current['revision'])
+        if (current is not None and current['status'] == 'running'
+                and current['revision'] == running_revision):
+            try:
+                store.checkpoint(key, current['task'], current['state'],
+                                 status='failed', expected_revision=running_revision)
+            except ValueError:
+                pass  # A newer owner decision won the concurrent CAS.
         raise
     return conversion_status(store, run_id)
 

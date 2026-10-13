@@ -364,3 +364,17 @@ owner profile data or unattended coding action implied by this milestone.
 - [ ] Full hosted Windows/Python 3.11 validation and actual owner-device
   restoration, encrypted transport, installed model lineage and independent
   acceptance remain separate from these synthetic tests.
+
+### 2026-10-13 — Scoped coding/runner privacy and conversion lifecycle
+
+- [x] Sanitize Git subprocess failure diagnostics before they reach local
+  worktree/desktop interfaces; reject unsafe Docker mount delimiters and
+  invalid timeout argument types.
+- [x] Share conservative sensitive filename/path exclusions across supervised
+  model code prompts and isolated Docker test snapshot copies, including
+  private SQLite, secret extensions and hard-linked local files.
+- [x] Enforce revision-fenced, owner-controllable completion and failure of
+  multi-hour local CPU PEFT/GGUF conversion. Older workers cannot override a
+  pause or superseding revision and never automatically promote a model.
+- [ ] Actual CPU merge and GGUF quality/lineage on supported owner hardware,
+  interactive Windows accessibility and safe model promotion remain unverified.

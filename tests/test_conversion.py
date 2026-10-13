@@ -104,6 +104,55 @@ class ConversionTests(unittest.TestCase):
         with self.assertRaisesRegex(ConversionError,'digest'):
             execute_conversion(self.store,self.run_id,confirmed=True,backend=self.fake_backend)
 
+    def test_owner_pause_during_conversion_discards_late_success(self):
+        self.prepare()
+        key = 'convert_' + self.run_id
+        def pause_while_merging(recipe, adapter, converter, destination):
+            produced = self.fake_backend(recipe, adapter, converter, destination)
+            current = self.store.get_checkpoint(key)
+            self.store.checkpoint(key, current['task'], current['state'],
+                                  status='paused', expected_revision=current['revision'])
+            return produced
+        with self.assertRaisesRegex(ConversionError, 'authorization changed'):
+            execute_conversion(self.store, self.run_id, confirmed=True,
+                               backend=pause_while_merging)
+        checkpoint = self.store.get_checkpoint(key)
+        self.assertEqual(checkpoint['status'], 'paused')
+        self.assertEqual(checkpoint['state']['attempts'], 1)
+        self.assertIsNone(checkpoint['state']['artifact'])
+        self.assertEqual(checkpoint['revision'], 3)
+
+    def test_late_failing_conversion_cannot_overwrite_newer_revision(self):
+        self.prepare()
+        key = 'convert_' + self.run_id
+        def newer_running_generation(*args):
+            current = self.store.get_checkpoint(key)
+            changed = dict(current['state'])
+            changed['new_owner_update'] = 'synthetic-only'
+            self.store.checkpoint(key, current['task'], changed,
+                                  status='running', expected_revision=current['revision'])
+            raise RuntimeError('synthetic old conversion failed')
+        with self.assertRaisesRegex(RuntimeError, 'old conversion'):
+            execute_conversion(self.store, self.run_id, confirmed=True,
+                               backend=newer_running_generation)
+        current = self.store.get_checkpoint(key)
+        self.assertEqual(current['status'], 'running')
+        self.assertEqual(current['state']['new_owner_update'], 'synthetic-only')
+        self.assertEqual(current['revision'], 3)
+
+    def test_pause_wins_over_late_converter_exception(self):
+        self.prepare()
+        key = 'convert_' + self.run_id
+        def pause_then_fail(*args):
+            current = self.store.get_checkpoint(key)
+            self.store.checkpoint(key, current['task'], current['state'],
+                                  status='paused', expected_revision=current['revision'])
+            raise RuntimeError('late converter error')
+        with self.assertRaisesRegex(RuntimeError, 'late converter'):
+            execute_conversion(self.store, self.run_id, confirmed=True,
+                               backend=pause_then_fail)
+        self.assertEqual(self.store.get_checkpoint(key)['status'], 'paused')
+
     def test_failed_attempt_requires_explicit_resume_without_overwrite(self):
         self.prepare()
         def fail(*a):

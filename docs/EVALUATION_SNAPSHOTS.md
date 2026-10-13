@@ -263,3 +263,15 @@ instead of discovering the leak after earlier cases have already been sent.
 The reference and selected-case fingerprints are rechecked before starting
 inference and still checked during and after each case. This extra local-only
 read work is deliberate and does not constitute semantic paraphrase detection.
+
+### CPU adapter merge/conversion checkpoint revision fencing
+
+The owner-approved local CPU PEFT/GGUF conversion attempt now pins the exact
+running checkpoint revision before invoking the optional long-running CPU
+backend. If the owner pauses or changes that revision during conversion, an
+old process may not report completion, install weights or overwrite the newer
+checkpoint with a failed status. Any finished output remains an untrusted,
+owner-reviewable attempt directory; it is not adopted as the active model.
+The failure path also uses compare-and-swap only on the original running
+revision. Re-arming after an interrupted conversion still requires explicit
+owner approval and cannot silently overwrite an earlier attempt.
