@@ -41,3 +41,8 @@ and completed small synthetic CUDA computation. It neither downloads nor
 trains any model, and cannot certify GPU memory headroom, WSL2 passthrough,
 quantized QLoRA training or inference speed. Hardware acceptance must still
 be performed by the owner on their intended machine.
+
+Driver discovery and optional PyTorch import failures are also sanitized.
+If CUDA availability itself raises an exception, AthenZ reports unavailable
+instead of incorrectly marking the runtime available. A later failure during
+an actual tensor operation is reported separately from discovery failure.

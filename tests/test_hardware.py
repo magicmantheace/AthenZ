@@ -104,6 +104,17 @@ class CudaComputeTests(unittest.TestCase):
         self.assertFalse(observed['training_validated'])
         self.assertNotIn('cuda:0', json.dumps(observed))
 
+    def test_cuda_availability_probe_exception_is_not_a_compute_success(self):
+        from types import SimpleNamespace
+        def raise_driver_error():
+            raise RuntimeError('PRIVATE-LOCAL-CUDA-PATH')
+        fake = SimpleNamespace(cuda=SimpleNamespace(is_available=raise_driver_error))
+        with patch.dict('sys.modules', {'torch': fake}):
+            info = cuda_compute_report(confirmed=True)
+        self.assertFalse(info['cuda_runtime_available'])
+        self.assertFalse(info['cuda_compute_observed'])
+        self.assertNotIn('PRIVATE', json.dumps(info))
+
     def test_failed_cuda_kernel_never_exposes_driver_diagnostics(self):
         from types import SimpleNamespace
         fake = SimpleNamespace(

@@ -65,11 +65,16 @@ def cuda_compute_report(*, confirmed: bool = False) -> dict:
             'downloaded_models': False, 'gpu_identity_collected': False}
     try:
         import torch  # optional; never required for routine startup
-    except (ImportError, OSError):
+    except Exception:
+        # Optional PyTorch may fail loading CUDA/native DLLs with diagnostics
+        # containing local paths. Always return a sanitized fixed status.
         return {**base, 'status': 'pytorch-unavailable'}
     try:
         if not torch.cuda.is_available() or torch.cuda.device_count() < 1:
             return base
+    except Exception:
+        return base
+    try:
         # Only one small public constant tensor. Torch may initialize a CUDA
         # context; do not perform this automatically or at app startup.
         first = torch.ones((256,), dtype=torch.float32, device='cuda:0')
