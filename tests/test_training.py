@@ -143,6 +143,32 @@ class TrainingDatasetTests(unittest.TestCase):
         report = inspect_dataset(self.store)
         self.assertEqual((report['included'], report['heldout_excluded']), (1, 1))
 
+    def test_near_duplicate_heldout_question_is_withheld_from_training(self):
+        self.pair(
+            'Would the owner authorize deployment after all automated validation checks pass today?',
+            'Private answer should not train')
+        self.pair('Independent instruction?', 'Safe response')
+        self.store.add_decision(
+            'Would the owner authorize deployment after all automated local validation checks pass today?',
+            'No', 'Private held-out rationale',
+            source='synthetic', options=['Yes', 'No'], split='test')
+        report = inspect_dataset(self.store)
+        self.assertEqual((report['included'], report['heldout_excluded']), (1, 1))
+        exported = build_dataset(self.store, confirmed=True)
+        self.assertNotIn('Private answer should not train', Path(exported['path']).read_text())
+
+    def test_new_near_duplicate_private_rationale_revokes_existing_export(self):
+        self.pair(
+            'Independent operation question?',
+            'Only approvals signed by two separate senior reviewers may authorize emergency deployment today')
+        export = build_dataset(self.store, confirmed=True)
+        self.store.add_decision(
+            'May the operator approve this exception?', 'Wait',
+            'Only approvals signed by two separate reviewers may authorize emergency deployment today',
+            source='synthetic', options=['Allow', 'Wait'], split='calibration')
+        with self.assertRaisesRegex(DatasetError, 'stale'):
+            verify_dataset(self.store, export['sha256'])
+
     def test_conflicting_approved_replies_block_export(self):
         self.pair('What is rule?', 'Always test first')
         self.pair(' WHAT IS RULE? ', 'Never run tests')

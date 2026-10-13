@@ -182,3 +182,14 @@ only a private generic error is returned. This detects small insertion,
 removal or reordered-word variants, not semantic synonyms. Shared introductory
 phrases below the threshold remain eligible. Near matches may reflect genuine
 separate choices; the owner must review and partition them before evaluation.
+
+### Strong lexical near-matches in SFT export
+
+A protected phrase index also screens approved training instructions and
+answers for strongly similar held-out scenario or rationale word sets:
+at least eight distinct words, 48 characters excluding spaces, and Jaccard
+similarity of 0.88 or higher. Near matches are withheld before private JSONL
+export and cause verification to reject old exports if new held-out evidence
+appears. The heuristic can reject legitimate close wording and cannot find
+conceptual paraphrases or claims memorized in weights; owner review remains
+necessary to establish benchmark independence.

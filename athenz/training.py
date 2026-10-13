@@ -59,6 +59,33 @@ def _distinctive_embedded(
     return False
 
 
+def _near_overlap_index(protected: set[str]) -> dict[str, set[frozenset[str]]]:
+    """Index long distinctive protected phrases for strong lexical similarity."""
+    by_token: dict[str, set[frozenset[str]]] = {}
+    for phrase in protected:
+        tokens = frozenset(phrase.split())
+        if len(tokens) < 8 or sum(map(len, tokens)) < 48:
+            continue
+        for token in tokens:
+            if len(token) >= 5:
+                by_token.setdefault(token, set()).add(tokens)
+    return by_token
+
+
+def _strong_near_overlap(text_words: str,
+                         protected: dict[str, set[frozenset[str]]]) -> bool:
+    """Conservative 88%-Jaccard near-match; never semantic inference."""
+    words = frozenset(text_words.split())
+    if len(words) < 8 or sum(map(len, words)) < 48:
+        return False
+    candidates: set[frozenset[str]] = set()
+    for word in words:
+        if len(word) >= 5:
+            candidates.update(protected.get(word, ()))
+    return any(100 * len(words & target) >= 88 * len(words | target)
+               for target in candidates)
+
+
 def _digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -89,6 +116,7 @@ def _read_approved(store: ExperienceStore) -> tuple[list[tuple[int, str, str]], 
     heldout_words = {_normalized_words(scenario) for scenario in scenarios}
     rationale_words = {_normalized_words(r['rationale']) for r in protected_rows}
     protected_index = _protected_phrase_index(heldout_words | rationale_words)
+    near_index = _near_overlap_index(heldout_words | rationale_words)
     rows = store.db.execute('''SELECT id,instruction,ideal_answer FROM train_pairs
                                WHERE status='approved' ORDER BY id''').fetchall()
     if len(rows) > 50_000:
@@ -105,7 +133,9 @@ def _read_approved(store: ExperienceStore) -> tuple[list[tuple[int, str, str]], 
         answer_words = _normalized_words(answer)
         if (key in heldout or instruction_words in heldout_words
                 or _distinctive_embedded(instruction_words, protected_index)
-                or _distinctive_embedded(answer_words, protected_index)):
+                or _distinctive_embedded(answer_words, protected_index)
+                or _strong_near_overlap(instruction_words, near_index)
+                or _strong_near_overlap(answer_words, near_index)):
             withheld += 1
             continue
         prior = by_instruction.get(key)
