@@ -87,9 +87,14 @@ class FullTaskTests(unittest.TestCase):
             if calls['n'] == 2:
                 raise OSError('PRIVATE-SOURCE-REPO-PATH')
             return fingerprint_snapshot(path)
+        original_run = subprocess.run
+        def docker_only(argv, *args, **kwargs):
+            if argv[0] == 'docker':
+                return subprocess.CompletedProcess(argv, 0, '', '')
+            return original_run(argv, *args, **kwargs)
         with mock.patch('athenz.verification.shutil.which', return_value='/usr/bin/docker'), \
              mock.patch('athenz.verification.subprocess.run',
-                        return_value=subprocess.CompletedProcess(['docker'], 0, '', '')), \
+                        side_effect=docker_only), \
              mock.patch('athenz.verification.fingerprint_snapshot',
                         side_effect=tampered_late):
             result = isolated_unittest(self.repo, image=IMAGE, home=self.store.home)
