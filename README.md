@@ -244,3 +244,33 @@ resolve the conflict automatically. See [docs/CONFLICT_REVIEW.md](docs/CONFLICT_
 ## Owner-confirmed local inference readiness (experimental)
 
 `athenz-inference-check --model qwen3.5:2b --confirm` issues one short, public, synthetic prompt to a previously installed Ollama model over loopback-only HTTP. It checks that text can actually be generated, without reading your profile or storing the response. The request is bounded, does not pull models, and can be given a 1–60-second timeout. No GPU, CUDA, WSL2, model quality, training, or deployment is certified. See [docs/INFERENCE_READINESS.md](docs/INFERENCE_READINESS.md).
+
+
+## Opt-in local CUDA and inference diagnostics (experimental)
+
+For a supervised hardware acceptance check on a machine with a trusted local
+CUDA-enabled PyTorch already installed, use:
+
+```powershell
+athenz-doctor --probe-gpu --confirm
+athenz-doctor --probe-cuda --confirm
+athenz-inference-check --model qwen3.5:2b --confirm
+athenz-release-readiness plan
+```
+
+These are **separate owner actions**. The VRAM query and small CUDA
+tensor-compute smoke do not train, download or select a model, and the
+inference check sends only a fixed synthetic prompt to a previously installed
+local Ollama model. That response now separately reports whether it followed
+the exact `READY` instruction; neither signal certifies model quality or
+GPU acceleration. Results are sanitized, without private memories, model
+replies or GPU identifiers. Release-acceptance observations require their own
+`record --confirm` step and remain owner-reported, never independently
+certified. Previous failed/blocked statuses are kept in a local observation
+history. See [hardware probe](docs/HARDWARE_PROBE.md),
+[inference readiness](docs/INFERENCE_READINESS.md) and
+[release acceptance](docs/RELEASE_READINESS.md).
+
+Hosted public GitHub Actions runs exercise synthetic tests and a packaged
+Windows application, not the actual owner machine. CUDA/WSL2/QLoRA
+compatibility still requires owner-supervised real-hardware testing.
