@@ -266,27 +266,51 @@ def execute_run(store: ExperienceStore, run_id: str, *, confirmed: bool = False,
         raise TrainingError('Adapter exists; never silently overwrite')
     state = dict(item['state'])
     state['started'] = True
-    store.checkpoint('train_' + run_id, item['task'], state, status='running',
+    key = 'train_' + run_id
+    store.checkpoint(key, item['task'], state, status='running',
                      expected_revision=item['revision'])
+    running_revision = item['revision'] + 1
+
+    def current_running_checkpoint() -> dict:
+        current = store.get_checkpoint(key)
+        if (current is None or current['revision'] != running_revision
+                or current['status'] != 'running'):
+            raise TrainingError('Training authorization checkpoint changed during execution')
+        return current
+
     data_path = _private_root(store) / ('sft-' + recipe['dataset_sha256'] + '.jsonl')
     try:
         result = (backend or _train_backend)(recipe, run_path, data_path, resume=resume)
         verify_run(store, run_id)  # consent and model may have changed during training
         if result.get('adapter_dir') != str(run_path / 'adapter'):
             raise TrainingError('Trainer returned an unexpected adapter destination')
-        if not (run_path / 'adapter' / 'adapter_model.safetensors').is_file():
-            raise TrainingError('Trainer produced no safetensors adapter')
+        weights = run_path / 'adapter' / 'adapter_model.safetensors'
+        if weights.is_symlink() or not weights.is_file():
+            raise TrainingError('Trainer produced no safe safetensors adapter')
+        if (type(result.get('examples_used')) is not int or
+                not 1 <= result['examples_used'] <= MAX_EXAMPLES):
+            raise TrainingError('Trainer returned an invalid number of examples')
+        # Recheck the exact launch authority after long-running GPU work.
+        current_running_checkpoint()
     except BaseException:
-        now = store.get_checkpoint('train_' + run_id)
-        store.checkpoint('train_' + run_id, now['task'], now['state'], status='failed',
-                         expected_revision=now['revision'])
+        # A concurrent owner pause/revision takes precedence; do not turn the
+        # owner's newer checkpoint into a failed or completed run.
+        now = store.get_checkpoint(key)
+        if (now is not None and now['revision'] == running_revision
+                and now['status'] == 'running'):
+            try:
+                store.checkpoint(key, now['task'], now['state'], status='failed',
+                                 expected_revision=running_revision)
+            except ValueError:
+                pass  # concurrent owner update won its compare-and-swap
         raise
-    now = store.get_checkpoint('train_' + run_id)
+    now = current_running_checkpoint()
     state = dict(now['state'])
-    state['adapter_sha256'] = file_sha256(run_path / 'adapter' / 'adapter_model.safetensors')
-    state['examples_used'] = int(result['examples_used'])
-    store.checkpoint('train_' + run_id, now['task'], state, status='complete',
-                     expected_revision=now['revision'])
+    state['adapter_sha256'] = file_sha256(weights)
+    state['examples_used'] = result['examples_used']
+    # Commit CAS detects a later pause even after the final authority check.
+    store.checkpoint(key, now['task'], state, status='complete',
+                     expected_revision=running_revision)
     return {'run_id': run_id, 'status': 'complete', 'adapter_sha256': state['adapter_sha256'],
             'examples_used': state['examples_used'], 'promotion': 'not-authorized'}
 

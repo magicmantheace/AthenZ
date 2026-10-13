@@ -139,6 +139,57 @@ class FinetuneTests(unittest.TestCase):
             execute_run(self.store, prepared['run_id'], confirmed=True, backend=consent_changed)
         self.assertEqual(self.store.get_checkpoint('train_' + prepared['run_id'])['status'], 'failed')
 
+    def test_owner_pause_during_training_cannot_be_overwritten(self):
+        prepared = self.prepare()
+        key = 'train_' + prepared['run_id']
+        def paused(recipe, folder, data_path, *, resume):
+            out = folder / 'adapter'
+            out.mkdir()
+            (out / 'adapter_model.safetensors').write_bytes(b'synthetic')
+            current = self.store.get_checkpoint(key)
+            self.store.checkpoint(key, current['task'], current['state'],
+                                  status='paused',
+                                  expected_revision=current['revision'])
+            return {'adapter_dir': str(out), 'examples_used': 1}
+        with self.assertRaisesRegex(TrainingError, 'authorization checkpoint changed'):
+            execute_run(self.store, prepared['run_id'], confirmed=True,
+                        backend=paused)
+        current = self.store.get_checkpoint(key)
+        self.assertEqual((current['status'], current['revision']), ('paused', 3))
+        self.assertNotIn('adapter_sha256', current['state'])
+
+    def test_newer_checkpoint_revision_remains_authoritative_on_failure(self):
+        prepared = self.prepare()
+        key = 'train_' + prepared['run_id']
+        def interruption(recipe, folder, path, *, resume):
+            current = self.store.get_checkpoint(key)
+            self.store.checkpoint(key, current['task'],
+                {**current['state'], 'owner_note': 'reviewed pause'},
+                status='paused', expected_revision=current['revision'])
+            raise TrainingError('Synthetic training interruption')
+        with self.assertRaisesRegex(TrainingError, 'Synthetic training interruption'):
+            execute_run(self.store, prepared['run_id'], confirmed=True,
+                        backend=interruption)
+        checkpoint = self.store.get_checkpoint(key)
+        self.assertEqual(checkpoint['status'], 'paused')
+        self.assertEqual(checkpoint['state']['owner_note'], 'reviewed pause')
+
+    def test_invalid_example_count_is_never_marked_complete(self):
+        for count in (0, -1, True, 50_001):
+            with self.subTest(count=count):
+                run = self.prepare()
+                def backend(recipe, folder, path, *, resume):
+                    out = folder / 'adapter'
+                    out.mkdir()
+                    (out / 'adapter_model.safetensors').write_bytes(b'synthetic')
+                    return {'adapter_dir': str(out), 'examples_used': count}
+                with self.assertRaisesRegex(TrainingError, 'invalid number'):
+                    execute_run(self.store, run['run_id'], confirmed=True,
+                                backend=backend)
+                self.assertEqual(
+                    self.store.get_checkpoint('train_' + run['run_id'])['status'],
+                    'failed')
+
     def test_completion_masking_and_size_gate(self):
         enc = encode_example(MockTokenizer(), 'prompt', 'answer', 16)
         self.assertEqual(enc['labels'], [-100,-100,31,32])

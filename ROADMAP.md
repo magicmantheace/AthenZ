@@ -194,3 +194,15 @@ hardware tests do not currently block further independent engineering.
 The score comparison is **not** an independent model certification. There is
 no automatic training, model switching, installer release, network access to
 owner profile data or unattended coding action implied by this milestone.
+
+### 2026-10-12 — LoRA task authority fencing
+
+- [x] Explicit local QLoRA execution now fences completion to the exact
+  running checkpoint revision established at launch. A newer pause or owner
+  state update is never overwritten by a late training completion or
+  error handler; another worker's CAS write wins.
+- [x] A trainer must report a bounded positive integer count of actually used
+  examples and provide a real, non-symlinked adapter weight file before the
+  run can be marked complete. Generated adapters are still NOT auto-deployed.
+- [ ] Real RTX 3060 CUDA and process interruption behavior needs an on-device
+  acceptance test; synthetic tests cannot certify training quality.
