@@ -56,6 +56,7 @@ athenz/inference_readiness.py
 athenz/profile_health.py
 athenz/profile_setup.py
 athenz/recovery_drill.py
+athenz/voice.py tests/test_voice.py
 tests/test_chat_cancel.py
 tests/test_chat_safety.py
 tests/test_conflict_panel.py

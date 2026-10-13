@@ -28,6 +28,7 @@ athenz-profile-health = "athenz.profile_health:main"
 athenz-rehearse-backup = "athenz.recovery_drill:main"
 athenz-conflicts = "athenz.conflict_review:main"
 athenz-inference-check = "athenz.inference_readiness:main"
+athenz-voice = "athenz.voice:main"
 
 [tool.setuptools.packages.find]
 include = ["athenz*"]

@@ -1,0 +1,182 @@
+"""Synthetic WAV and fake backend tests: never record, upload or import speech models."""
+from __future__ import annotations
+
+import io
+import json
+import os
+from pathlib import Path
+import tempfile
+import unittest
+from unittest import mock
+import wave
+
+from athenz.voice import VoiceError, inspect_wav, transcribe_wav, main
+
+
+class VoiceTests(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        self.wav = self.root / 'synthetic.wav'
+        self.model = self.root / 'offline-model'
+        self.model.mkdir()
+        (self.model / 'config.json').write_text('{"model":"synthetic"}')
+        (self.model / 'model.bin').write_bytes(b'fictional-private-weights')
+        with wave.open(str(self.wav), 'wb') as stream:
+            stream.setnchannels(1)
+            stream.setsampwidth(2)
+            stream.setframerate(16000)
+            stream.writeframes(b'\x00\x00' * 16000)
+
+    def fake_engine(self, *segments):
+        class Engine:
+            def transcribe(self, path, **kwargs):
+                self.calls = (path, kwargs)
+                return (iter(segments), {'language': 'en'})
+        return Engine()
+
+    def test_metadata_inspection_is_readonly_and_does_not_access_model(self):
+        from types import SimpleNamespace
+        with mock.patch('athenz.voice._load_engine',
+                        side_effect=AssertionError('No model should be loaded')):
+            report = inspect_wav(self.wav)
+        self.assertEqual(report['format'], 'pcm16-wav')
+        self.assertEqual(report['sample_rate_hz'], 16000)
+        self.assertEqual(report['duration_seconds'], 1)
+        self.assertFalse(report['microphone_accessed'])
+        self.assertFalse(report['transcription_started'])
+        self.assertNotIn(str(self.wav), json.dumps(report))
+        self.assertFalse((self.root / 'identity.sqlite3').exists())
+
+    def test_explicit_consent_precedes_any_private_audio_or_model_access(self):
+        with mock.patch('athenz.voice.inspect_wav',
+                        side_effect=AssertionError('Private audio accessed')):
+            with self.assertRaisesRegex(VoiceError, 'confirm'):
+                transcribe_wav(self.wav, self.model)
+        with self.assertRaisesRegex(VoiceError, 'cpu or cuda'):
+            transcribe_wav(self.wav, self.model, confirmed=True, device='gpu-auto')
+
+    def test_fake_local_engine_yields_owner_visible_nonpersisted_transcript(self):
+        from types import SimpleNamespace
+        engine = self.fake_engine(SimpleNamespace(text=' Hello '),
+                                  SimpleNamespace(text=' local world '))
+        before = sorted(str(p.relative_to(self.root)) for p in self.root.rglob('*'))
+        with mock.patch('athenz.voice._load_engine', return_value=engine) as load:
+            report = transcribe_wav(self.wav, self.model, confirmed=True)
+        load.assert_called_once_with(self.model.resolve(), device='cpu')
+        self.assertEqual(engine.calls[0], str(self.wav.resolve()))
+        self.assertEqual(engine.calls[1]['language'], 'en')
+        self.assertFalse(engine.calls[1]['word_timestamps'])
+        self.assertEqual(report['transcript'], 'Hello local world')
+        self.assertFalse(report['stored_in_profile'])
+        self.assertFalse(report['audio_uploaded'])
+        self.assertFalse(report['submitted_to_chat'])
+        self.assertFalse(report['training_authorized'])
+        self.assertTrue(report['private_text_in_output'])
+        self.assertEqual(sorted(str(p.relative_to(self.root))
+                                for p in self.root.rglob('*')), before)
+
+    def test_no_speech_is_not_automatically_stored(self):
+        from types import SimpleNamespace
+        with mock.patch('athenz.voice._load_engine',
+                        return_value=self.fake_engine(SimpleNamespace(text='  '))):
+            r = transcribe_wav(self.wav, self.model, confirmed=True, device='cuda')
+        self.assertEqual(r['status'], 'no-speech')
+        self.assertEqual(r['transcript'], '')
+        self.assertFalse(r['private_text_in_output'])
+        self.assertEqual(r['device_requested'], 'cuda')
+
+    def test_model_errors_cannot_expose_owner_audio_or_paths(self):
+        engine = self.fake_engine()
+        def fail(*args, **kwargs):
+            raise RuntimeError('PRIVATE-PROMPT-FROM-LOCAL-DRIVER')
+        engine.transcribe = fail
+        with mock.patch('athenz.voice._load_engine', return_value=engine):
+            with self.assertRaises(VoiceError) as caught:
+                transcribe_wav(self.wav, self.model, confirmed=True)
+        self.assertNotIn('PRIVATE-', str(caught.exception))
+        self.assertIn('offline speech transcription failed', str(caught.exception))
+        with mock.patch('athenz.voice._load_engine',
+                        side_effect=VoiceError('PRIVATE-LOW-LEVEL-OWNER-PATH')):
+            # An already categorized VoiceError raised by a mocked loader is
+            # intentionally not converted by the backend segment fence.
+            with self.assertRaises(VoiceError):
+                transcribe_wav(self.wav, self.model, confirmed=True)
+
+    def test_segment_count_and_transcript_size_bound(self):
+        from types import SimpleNamespace
+        long = SimpleNamespace(text='S' * 16001)
+        with mock.patch('athenz.voice._load_engine',
+                        return_value=self.fake_engine(long)):
+            with self.assertRaisesRegex(VoiceError, 'privacy bound'):
+                transcribe_wav(self.wav, self.model, confirmed=True)
+        many = [SimpleNamespace(text='x') for _ in range(501)]
+        with mock.patch('athenz.voice._load_engine',
+                        return_value=self.fake_engine(*many)):
+            with self.assertRaisesRegex(VoiceError, 'segment count'):
+                transcribe_wav(self.wav, self.model, confirmed=True)
+
+    def test_non_wav_and_malformed_pcm_are_refused_without_model_call(self):
+        fake = self.root / 'synthetic.mp3'
+        fake.write_bytes(b'not a WAV')
+        for file in (fake, self.root / 'missing.wav'):
+            with self.assertRaises(VoiceError):
+                inspect_wav(file)
+        not_pcm = self.root / 'bad.wav'
+        not_pcm.write_bytes(b'garbage')
+        with self.assertRaisesRegex(VoiceError, 'Invalid'):
+            inspect_wav(not_pcm)
+        stereo_bad = self.root / 'bad-format.wav'
+        with wave.open(str(stereo_bad), 'wb') as stream:
+            stream.setnchannels(1)
+            stream.setsampwidth(1)
+            stream.setframerate(16000)
+            stream.writeframes(b'\x00' * 16000)
+        with self.assertRaisesRegex(VoiceError, '16-bit PCM'):
+            inspect_wav(stereo_bad)
+
+    def test_audio_symlink_and_hardlink_cannot_be_processed(self):
+        link = self.root / 'linked.wav'
+        try:
+            link.symlink_to(self.wav)
+        except (OSError, NotImplementedError):
+            self.skipTest('No symbolic link privilege')
+        with self.assertRaises(VoiceError):
+            inspect_wav(link)
+        hard = self.root / 'hardlinked.wav'
+        try:
+            os.link(self.wav, hard)
+        except (OSError, NotImplementedError):
+            self.skipTest('No hardlink support')
+        with self.assertRaisesRegex(VoiceError, 'linked'):
+            inspect_wav(self.wav)
+
+    def test_model_must_be_existing_local_regular_files(self):
+        from types import SimpleNamespace
+        with mock.patch('athenz.voice._load_engine',
+                        side_effect=AssertionError('Unexpected model initialization')):
+            with self.assertRaisesRegex(VoiceError, 'directory'):
+                transcribe_wav(self.wav, self.root / 'missing', confirmed=True)
+            (self.model / 'model.bin').unlink()
+            with self.assertRaisesRegex(VoiceError, 'offline files'):
+                transcribe_wav(self.wav, self.model, confirmed=True)
+
+    def test_cli_explicit_inspect_and_transcribe_routes(self):
+        with mock.patch('builtins.print') as printed:
+            main(['inspect', str(self.wav)])
+        inspected = json.loads(printed.call_args.args[0])
+        self.assertFalse(inspected['private_audio_in_output'])
+        from types import SimpleNamespace
+        with mock.patch('athenz.voice._load_engine',
+                        return_value=self.fake_engine(SimpleNamespace(text='PRIVATE TEXT'))), \
+             mock.patch('builtins.print') as printed:
+            main(['transcribe', str(self.wav), '--model', str(self.model),
+                  '--confirm'])
+        report = json.loads(printed.call_args.args[0])
+        self.assertEqual(report['transcript'], 'PRIVATE TEXT')
+        self.assertFalse(report['stored_in_profile'])
+
+
+if __name__ == '__main__':
+    unittest.main()
