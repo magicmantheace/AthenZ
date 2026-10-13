@@ -92,7 +92,7 @@ inspection grants no authorization to create, restore or share it.
 ## Supervised full-profile recovery rehearsal
 
 ```sh
-athenz-recovery-drill <bundle-id> --bundle --confirm
+athenz-rehearse-backup <bundle-id> --bundle --confirm
 # Optional: --scratch /existing/private/scratch-directory
 ```
 
