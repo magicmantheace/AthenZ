@@ -101,6 +101,19 @@ def _consistent_comparison_metadata(report: dict) -> bool:
     if not all(present):
         return False
     baseline, candidate = report['baseline_correct'], report['candidate_correct']
+    base_rate, candidate_rate = report['baseline_accuracy'], report['candidate_accuracy']
+    gain = report.get('accuracy_gain')
+    if (type(baseline) is not int or type(candidate) is not int or
+            not 0 <= baseline <= count or not 0 <= candidate <= count or
+            type(base_rate) not in (int, float) or
+            type(candidate_rate) not in (int, float) or
+            not isfinite(base_rate) or not isfinite(candidate_rate) or
+            abs(base_rate - baseline / count) > 1e-9 or
+            abs(candidate_rate - candidate / count) > 1e-9 or
+            type(gain) not in (int, float) or not isfinite(gain) or
+            abs(gain - round((candidate - baseline) / count, 8)) > 1e-8 or
+            report.get('eligible_for_review') is not (candidate > baseline)):
+        return False
     for name, correct_count in (('baseline', baseline), ('candidate', candidate)):
         # These fields are descriptive only but must never misstate observed
         # failure counts or present a fabricated uncertainty interval.
@@ -117,19 +130,6 @@ def _consistent_comparison_metadata(report: dict) -> bool:
                     any(abs(actual - bound) > 1e-8
                         for actual, bound in zip(interval, expected))):
                 return False
-    base_rate, candidate_rate = report['baseline_accuracy'], report['candidate_accuracy']
-    gain = report.get('accuracy_gain')
-    if (type(baseline) is not int or type(candidate) is not int or
-            not 0 <= baseline <= count or not 0 <= candidate <= count or
-            type(base_rate) not in (int, float) or
-            type(candidate_rate) not in (int, float) or
-            not isfinite(base_rate) or not isfinite(candidate_rate) or
-            abs(base_rate - baseline / count) > 1e-9 or
-            abs(candidate_rate - candidate / count) > 1e-9 or
-            type(gain) not in (int, float) or not isfinite(gain) or
-            abs(gain - round((candidate - baseline) / count, 8)) > 1e-8 or
-            report.get('eligible_for_review') is not (candidate > baseline)):
-        return False
     paired = ('paired_improved', 'paired_regressed',
               'paired_unchanged', 'paired_one_sided_p_value')
     if any(name in report for name in paired):
