@@ -1,5 +1,6 @@
 """Synthetic acceptance status tests: no real hardware, model or network."""
 from __future__ import annotations
+from contextlib import closing
 import json
 from pathlib import Path
 import tempfile
@@ -56,7 +57,7 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertEqual(report['owner_observation_history_events'], 3)
         self.assertEqual(report['requirements'][0]['status'], 'passed')
         self.assertFalse(report['release_certified'])
-        with sqlite3.connect(self.home / 'release-acceptance.sqlite3') as db:
+        with closing(sqlite3.connect(self.home / 'release-acceptance.sqlite3')) as db:
             history = db.execute(
                 'SELECT status FROM observation_history WHERE check_id=? ORDER BY id',
                 (check,)).fetchall()
@@ -66,7 +67,7 @@ class ReleaseReadinessTests(unittest.TestCase):
         import sqlite3
         check = CHECKS[0][0]
         record(self.home, check, 'passed', confirmed=True)
-        with sqlite3.connect(self.home / 'release-acceptance.sqlite3') as db:
+        with closing(sqlite3.connect(self.home / 'release-acceptance.sqlite3')) as db, db:
             db.execute('UPDATE observations SET status=? WHERE check_id=?',
                        ('unverified-external-certification', check))
         with self.assertRaisesRegex(ReadinessError, 'observations are invalid'):
