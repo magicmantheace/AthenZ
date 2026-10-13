@@ -291,3 +291,24 @@ digests. Saved confidence intervals, invalid prediction counts and random
 chance baseline metadata must agree with the underlying aggregate evidence.
 This still cannot independently attest a model's origins or guarantee that
 future weights and owner data are free from semantic contamination.
+
+## Offline privacy preflights and held-out batch protection
+
+`athenz-training inspect-heldout --split calibration --limit 100 --min-cases 10`
+checks the selected approved batch with the *actual seeded Twin reference*
+assembler, without contacting the model or returning private prompt text.
+The evaluation now checks the entire selected batch before the first model
+request. A protected scenario or rationale in any case's approved profile,
+ambiguous options or stale approval snapshots refuses scoring.
+
+`athenz-profile inspect` is a separate read-only preview of counts and size
+of the explicitly selected **plaintext** bundle artifacts before running
+`athenz-profile create --confirm`. It never creates a profile or reads owner
+file contents. Ollama weights, worktrees, previous backups and separate
+release-acceptance observations are excluded. The archive remains unencrypted;
+keep it in owner-controlled private storage and do not put it in Git.
+
+Supervised proposal-queue failure reports now contain fixed non-sensitive
+categories, not raw driver/model exceptions that could reveal private
+prompts, filesystem paths or local environment details. These improvements
+do not authorize unattended code edits, automatic model training or promotion.

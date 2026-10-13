@@ -240,3 +240,20 @@ portable packaging and executable/GUI startup smoke. Native Windows full
 regression for the same commit runs separately in 38346880275; do not
 mistake a still-running job for a platform pass. No private owner profile,
 credentials or installed model weights were uploaded to the public CI runner.
+
+### Public hosted CI — complete batch preflight and recovery privacy increment
+
+The CI-only branches check out exact source SHA
+`59b594e3c00773ce7c96c97b79c338009f697463`; `main` remains unchanged.
+The full 492-test Linux Python 3.11/3.12/3.13 runs passed (four skips each),
+and the unsigned Windows portable ZIP, executable self-test and Tk GUI startup
+smoke passed. Evidence: [full Linux/Windows matrix
+38348235713](https://github.com/magicmantheace/AthenZ/actions/runs/38348235713)
+and [portable/compatibility matrix
+38348241604](https://github.com/magicmantheace/AthenZ/actions/runs/38348241604).
+Seven digest-pinned real Docker isolation tests passed in
+[38348270920](https://github.com/magicmantheace/AthenZ/actions/runs/38348270920).
+Windows Python 3.11's longer full-suite job belongs to the first run and
+must have a completed success conclusion before claiming that full platform
+regression passed. Hosted runners contain only synthetic profiles; actual
+RTX 3060 CUDA/WSL2/owner Ollama is still unverified.

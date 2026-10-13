@@ -306,3 +306,35 @@ owner profile data or unattended coding action implied by this milestone.
   and [38346862618](https://github.com/magicmantheace/AthenZ/actions/runs/38346862618).
 - [ ] Full Windows Python 3.11 suite and actual owner-device RTX 3060/WSL2
   training and inference require separate completed acceptance results.
+
+### 2026-10-12 — Held-out batch privacy, supervised errors and recovery preflight
+
+- [x] Shared deterministic protected prompt construction across actual held-out
+  scoring and read-only preflight; reject ambiguous answer labels, including
+  case/whitespace variants and malformed historical decision rows.
+- [x] Validate **every** selected held-out question/reference combination
+  locally before *any* Ollama generation, so contamination in a later case
+  does not unnecessarily expose earlier private held-out cases to the model.
+  Continue to fence changes between inference calls and final score evidence.
+- [x] Preflight returns only aggregate privacy/snapshot checks, never the
+  private assembled prompts, rationales or expected choices.
+- [x] Explicit private profile ZIP verification now fails closed on malformed
+  internal manifest roots, member paths, hashes and noninteger lengths.
+- [x] Read-only `athenz-profile inspect` previews selected plaintext archive
+  scope by counts/estimated sizes before confirmation, without creating files
+  or reading private contents. Release-acceptance history is intentionally
+  excluded from restored profiles to avoid stale device certification.
+- [x] Supervised queued coding proposals never return or store raw exception
+  messages, which may contain private prompts or file paths. Fixed failure
+  categories remain visible; jobs still pause without automatic retry.
+- [x] Source `59b594e3c00773ce7c96c97b79c338009f697463` passed Linux
+  Python 3.11/3.12/3.13: 492 tests per runtime (four skips each), zero
+  errors or failures; hosted Windows unsigned portable package and GUI smoke
+  passed. See public runs
+  [38348235713](https://github.com/magicmantheace/AthenZ/actions/runs/38348235713)
+  and [38348241604](https://github.com/magicmantheace/AthenZ/actions/runs/38348241604).
+- [x] Pinned Docker integration and sandbox threat suite: 7 passed, run
+  [38348270920](https://github.com/magicmantheace/AthenZ/actions/runs/38348270920).
+- [ ] Hosted Windows full Python 3.11 result for run 38348235713 must be
+  checked separately; native RTX 3060, WSL2, real local Ollama, assistive
+  technology and semantic paraphrase handling still need owner validation.
