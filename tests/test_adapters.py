@@ -118,6 +118,36 @@ class AdaptersTests(unittest.TestCase):
         with self.assertRaisesRegex(AdapterError, 'changed'):
             register_adapter(self.store,run,'candidate-a',confirmed=True)
 
+    def test_registry_metadata_tamper_fails_closed(self):
+        run = self.completed()
+        register_adapter(self.store, run, 'candidate-a', confirmed=True)
+        key = 'adapter_' + run
+        row = self.store.db.execute(
+            'SELECT state_json FROM checkpoints WHERE task_key=?', (key,)).fetchone()
+        original = json.loads(row['state_json'])
+        modifications = (
+            {'candidate_model': 'candidate-b'},
+            {'candidate_model': ''},
+            {'lineage': 'automatically-proven'},
+            {'deployment': 'activated'},
+            {'extra_authority': 'unreviewed'},
+            {'dataset_sha256': 'f' * 64},
+        )
+        for delta in modifications:
+            with self.subTest(modification=delta):
+                forged = {**original, **delta}
+                with self.store.db:
+                    self.store.db.execute(
+                        'UPDATE checkpoints SET state_json=? WHERE task_key=?',
+                        (json.dumps(forged), key))
+                with self.assertRaisesRegex(AdapterError, 'stale or tampered'):
+                    verified_registry_entry(self.store, run)
+        with self.store.db:
+            self.store.db.execute(
+                'UPDATE checkpoints SET state_json=? WHERE task_key=?',
+                (json.dumps(original), key))
+        self.assertEqual(verified_registry_entry(self.store, run), original)
+
     def test_report_approval_gate_and_revision_conflict(self):
         run=self.completed()
         register_adapter(self.store,run,'candidate-a',confirmed=True)

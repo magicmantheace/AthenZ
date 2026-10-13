@@ -137,3 +137,13 @@ therefore revokes stale review evidence even when the specific case fingerprint
 for the originally evaluated split has not changed. The checks refuse reports
 without exposing the private collided scenarios. Semantic paraphrase detection
 and independent model-execution attestations remain separate unsolved tasks.
+
+### Immutable adapter registration metadata
+
+An existing private adapter registry entry is now compared against the full
+expected immutable registration, including its explicitly owner-registered
+candidate tag, fixed unverified-lineage marker and no-deployment state. Earlier
+checks verified artifact fingerprints but did not reject every extra or changed
+non-weight field. This does not independently establish candidate lineage; it
+prevents unreviewed changes to registry fields from influencing later manual
+selection or runtime routing.

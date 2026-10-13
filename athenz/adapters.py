@@ -98,8 +98,18 @@ def verified_registry_entry(store: ExperienceStore, run_id: str) -> dict:
     if entry is None or entry['status'] != 'complete':
         raise AdapterError('Run is not registered')
     state = entry['state']
-    if {k: v for k,v in state.items() if k in ('run_id','adapter_sha256','config_sha256',
-         'base_fingerprint','dataset_sha256','artifact_sha256','promotion')} != inspect_adapter(store, run_id):
+    # Verify the ENTIRE immutable registration, not just the weight hashes.
+    # In particular the candidate label is authority-bearing metadata: later
+    # owner selection compares it to a local Ollama tag and report lineage.
+    if not isinstance(state, dict):
+        raise AdapterError('Registry entry is stale or tampered')
+    candidate = state.get('candidate_model')
+    if not isinstance(candidate, str) or not ALIAS.fullmatch(candidate):
+        raise AdapterError('Registry entry is stale or tampered')
+    expected = {**inspect_adapter(store, run_id),
+                'candidate_model': candidate,
+                'lineage': 'owner-label-unverified', 'deployment': 'none'}
+    if state != expected:
         raise AdapterError('Registry entry is stale or tampered')
     return state
 
