@@ -59,6 +59,38 @@ class DecisionEvaluationTests(unittest.TestCase):
         self.assertEqual(r1, r2)
         self.assertEqual(r1['chance_expected'], .5)
 
+    def test_approved_training_decision_overlap_blocks_heldout_scoring(self):
+        self.store.add_decision('Should we deploy code without verification?',
+            'No', 'A training reason', source='synthetic', approved=True)
+        self.store.add_decision('Should we deploy code without verification!',
+            'No', 'Held-out reason', source='synthetic',
+            options=['Yes', 'No'], split='test', approved=True)
+        model = Stub()
+        with self.assertRaisesRegex(ValueError, 'overlap evaluation splits'):
+            evaluate_decisions(self.store, model)
+        self.assertEqual(model.calls, [])
+
+    def test_calibration_case_duplicate_in_test_blocks_scoring(self):
+        self.store.add_decision('Does the owner require a rollback plan?',
+            'Yes', 'Synthetic calibration reason', source='synthetic',
+            options=['Yes', 'No'], split='calibration', approved=True)
+        self.store.add_decision('Does the owner require a rollback plan!',
+            'Yes', 'Private held-out reason', source='synthetic',
+            options=['Yes', 'No'], split='test', approved=True)
+        with self.assertRaisesRegex(ValueError, 'overlap evaluation splits'):
+            evaluate_decisions(self.store, Stub(), split='calibration')
+
+    def test_unapproved_overlapping_decision_does_not_block(self):
+        self.store.add_decision('Should we keep all test cases separate?',
+            'Yes', 'Pending, not yet approved', source='synthetic')
+        self.store.add_decision('Should we keep all test cases separate!',
+            'Yes', 'Private held-out answer', source='synthetic',
+            options=['Yes', 'No'], split='test', approved=True)
+        model = Stub()
+        result = evaluate_decisions(self.store, model)
+        self.assertEqual(result['total'], 1)
+        self.assertEqual(len(model.calls), 1)
+
     def test_duplicate_scenarios_and_bad_options_rejected(self):
         self.store.add_decision('One choice', 'X', 'Reason', source='owner')
         with self.assertRaises(ValueError):

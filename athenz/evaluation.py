@@ -49,6 +49,29 @@ def _normalized_overlap(phrase: str, reference: str) -> bool:
     return (' ' + ' '.join(needle) + ' ') in haystack
 
 
+def _scenario_split_key(text: str) -> str:
+    """Case/punctuation/Unicode-insensitive scenario key, never a model prompt."""
+    return ' '.join(re.findall(r'\w+', unicodedata.normalize('NFKC', text).casefold()))
+
+
+def _reject_overlapping_decision_splits(store: IdentityStore) -> None:
+    """Prevent trivial train/calibration/test answer contamination.
+
+    Only approved records count as visible training or scored references;
+    unapproved content is not model evidence. The check does not inspect
+    private model weights or find nonlexical paraphrases.
+    """
+    seen: dict[str, str] = {}
+    rows = store.db.execute(
+        "SELECT scenario,split FROM decisions WHERE status='approved' "
+        "AND split IN ('train','calibration','test') ORDER BY id")
+    for row in rows:
+        key = _scenario_split_key(row['scenario'])
+        prior = seen.setdefault(key, row['split'])
+        if key and prior != row['split']:
+            raise ValueError('Approved decision scenarios overlap evaluation splits')
+
+
 def _fingerprint(rows) -> str:
     """Digest deterministic private evidence without including its contents."""
     payload = json.dumps(rows, sort_keys=True, ensure_ascii=False,
@@ -85,6 +108,7 @@ def evaluate_decisions(store: IdentityStore, model, *, split: str = 'test',
             or not 1 <= limit <= 1000 or type(seed) is not int
             or not 0 <= seed <= 2**32 - 1):
         raise ValueError('Evaluate only held-out calibration/test splits with bounded settings')
+    _reject_overlapping_decision_splits(store)
     cases = _heldout_rows(store, split, limit)
     heldout_sha = _fingerprint(cases)
     reference_sha = _reference_fingerprint(store)
@@ -169,6 +193,8 @@ def evaluate_decisions(store: IdentityStore, model, *, split: str = 'test',
         chance += 1 / len(options)
         report['cases'].append({'id': case_id, 'predicted': prediction or None,
                                 'expected': gold, 'correct': correct})
+    # Do not approve results if cross-split duplicates were added midflight.
+    _reject_overlapping_decision_splits(store)
     if (_fingerprint(_heldout_rows(store, split, limit)) != heldout_sha or
             _reference_fingerprint(store) != reference_sha):
         raise ValueError('Approved evaluation evidence changed during inference')

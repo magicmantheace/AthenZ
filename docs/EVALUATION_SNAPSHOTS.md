@@ -117,3 +117,13 @@ are scanned by consecutive normalized tokens and full-phrase confirmation,
 not by repeatedly searching every held-out text in every training answer.
 This reduces incidental work for larger reviewed histories without widening
 semantic interpretation or changing ordinary short-expression handling.
+
+## Cross-split approved scenario independence
+
+Before and after held-out inference, AthenZ checks all approved decision
+scenarios in the training, calibration and test partitions. A Unicode,
+punctuation, whitespace or case-normalized duplicate crossing these splits
+invalidates the benchmark without transmitting its private text to a model.
+Unapproved records do not count as model training evidence. This prevents
+trivial cross-split reuse but cannot detect near-paraphrases or contamination
+of previously trained model weights, and does not prove independent test sets.
