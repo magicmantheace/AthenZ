@@ -13,7 +13,8 @@ from .finetune import create_run, describe_run, execute_run
 from .adapters import register_adapter, selection, select_for_review, rollback_selection
 from .runtime import status as runtime_status, activate as activate_runtime, rollback as rollback_runtime, checked_active_tag
 from .ollama_import import prepare_import, verify_import, import_local
-from .conversion import prepare_conversion, execute_conversion, conversion_status
+from .conversion import (prepare_conversion, execute_conversion,
+                         pause_conversion, conversion_status)
 
 
 def parser() -> argparse.ArgumentParser:
@@ -84,6 +85,9 @@ def parser() -> argparse.ArgumentParser:
     x.add_argument('run_id')
     x.add_argument('--resume', action='store_true', help='Start a new private attempt after interrupted/failed run')
     x.add_argument('--confirm', action='store_true')
+    x = sub.add_parser('pause-conversion', help='Revoke an in-flight or queued conversion checkpoint; CPU process may still run')
+    x.add_argument('run_id')
+    x.add_argument('--confirm', action='store_true')
     x = sub.add_parser('verify-conversion', help='Revalidate approved inputs, converter and complete GGUF artifact')
     x.add_argument('run_id')
     x = sub.add_parser('prepare-import', help='Prepare a full merged GGUF model import; NO Ollama change')
@@ -152,6 +156,8 @@ def main(argv: list[str] | None = None) -> None:
                                         resume=args.resume)
         elif args.command == 'verify-conversion':
             result = conversion_status(store, args.run_id)
+        elif args.command == 'pause-conversion':
+            result = pause_conversion(store, args.run_id, confirmed=args.confirm)
         elif args.command == 'prepare-import':
             result = prepare_import(store, args.run_id, args.gguf, candidate_tag=args.candidate,
                                     confirmed=args.confirm, acknowledge_merge=args.ack_merge)

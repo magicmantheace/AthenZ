@@ -275,3 +275,14 @@ owner-reviewable attempt directory; it is not adopted as the active model.
 The failure path also uses compare-and-swap only on the original running
 revision. Re-arming after an interrupted conversion still requires explicit
 owner approval and cannot silently overwrite an earlier attempt.
+
+To revoke the conversion checkpoint while an explicitly started CPU merge is
+running, use `athenz-training pause-conversion <run-id> --confirm`. The pause
+changes private checkpoint authority immediately and makes the original
+worker's eventual output ineligible for adoption; it **does not terminate**
+the underlying CPU process or delete its partial files. After inspecting and
+stopping that process when necessary, the owner can explicitly run
+`athenz-training run-conversion <run-id> --resume --confirm`, which reserves a
+new numbered attempt directory and never overwrites the old one. Pausing a
+completed/failed conversion is refused, and no Ollama model is automatically
+selected or imported.

@@ -150,6 +150,35 @@ def _backend(recipe: dict, adapter_path: Path, converter: Path, directory: Path)
     return target
 
 
+def pause_conversion(store: ExperienceStore, run_id: str, *,
+                     confirmed: bool = False) -> dict:
+    """Owner revokes conversion checkpoint authority without activating a model.
+
+    The CPU process may continue until the current backend returns. The old
+    worker's revision fence prevents its output from being adopted. Resuming
+    always creates a NEW attempt and requires a fresh explicit owner action.
+    """
+    if not confirmed:
+        raise ConversionError('Explicit --confirm required to pause conversion')
+    if not isinstance(run_id, str) or not RUN_ID.fullmatch(run_id):
+        raise ConversionError('Invalid private conversion run ID')
+    key = 'convert_' + run_id
+    item = store.get_checkpoint(key)
+    if item is None:
+        raise ConversionError('Unknown reviewed conversion')
+    if item['status'] in {'complete', 'failed'}:
+        raise ConversionError('Completed/failed conversion cannot be paused')
+    if item['status'] not in {'queued', 'running', 'paused'}:
+        raise ConversionError('Conversion cannot be paused in its current state')
+    if item['status'] != 'paused':
+        store.checkpoint(key, item['task'], item['state'], status='paused',
+                         expected_revision=item['revision'])
+    after = store.get_checkpoint(key)
+    return {'run_id': run_id, 'status': 'paused', 'revision': after['revision'],
+            'backend_interrupted': False, 'output_adopted': False,
+            'resume_requires_confirmation': True}
+
+
 def execute_conversion(store: ExperienceStore, run_id: str, *, confirmed: bool = False,
                        resume: bool = False, backend=None) -> dict:
     """One explicit attempt; failed or crashed attempts require explicit --resume.
@@ -163,7 +192,7 @@ def execute_conversion(store: ExperienceStore, run_id: str, *, confirmed: bool =
     cp = store.get_checkpoint(key)
     if cp is None:
         raise ConversionError('Prepare reviewed conversion first')
-    if cp['status'] not in ({'running','failed'} if resume else {'queued'}):
+    if cp['status'] not in ({'running','failed','paused'} if resume else {'queued'}):
         raise ConversionError('Conversion is not resumable in this state; inspect existing attempts')
     state = dict(cp['state'])
     if state['attempts'] >= MAX_ATTEMPTS:

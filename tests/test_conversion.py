@@ -11,7 +11,8 @@ from unittest import mock
 
 from athenz.adapters import register_adapter
 from athenz.conversion import (ConversionError, conversion_status, _backend,
-                               execute_conversion, prepare_conversion)
+                               execute_conversion, prepare_conversion,
+                               pause_conversion)
 from athenz.experience import ExperienceStore
 from athenz.finetune import create_run, execute_run
 from athenz.training import build_dataset
@@ -103,6 +104,45 @@ class ConversionTests(unittest.TestCase):
         self.converter.write_text('# different code, no longer trusted, synthetic mutation\n'+'pass\n')
         with self.assertRaisesRegex(ConversionError,'digest'):
             execute_conversion(self.store,self.run_id,confirmed=True,backend=self.fake_backend)
+
+    def test_pause_cli_revokes_conversion_and_requires_fresh_resume(self):
+        self.prepare()
+        with self.assertRaisesRegex(ConversionError, 'confirm'):
+            pause_conversion(self.store, self.run_id)
+        paused = pause_conversion(self.store, self.run_id, confirmed=True)
+        self.assertEqual(paused['status'], 'paused')
+        self.assertFalse(paused['backend_interrupted'])
+        self.assertFalse(paused['output_adopted'])
+        self.assertTrue(paused['resume_requires_confirmation'])
+        with self.assertRaisesRegex(ConversionError, 'resumable'):
+            execute_conversion(self.store, self.run_id, confirmed=True,
+                               backend=self.fake_backend)
+        completed = execute_conversion(self.store, self.run_id, confirmed=True,
+                                       resume=True, backend=self.fake_backend)
+        self.assertEqual(completed['status'], 'complete')
+        self.assertEqual(completed['attempts'], 1)
+        with self.assertRaisesRegex(ConversionError, 'cannot be paused'):
+            pause_conversion(self.store, self.run_id, confirmed=True)
+
+    def test_pause_inside_cpu_backend_discards_output_then_new_attempt(self):
+        self.prepare()
+        def owner_pauses(recipe, adapter, converter, destination):
+            result = self.fake_backend(recipe, adapter, converter, destination)
+            status = pause_conversion(self.store, self.run_id, confirmed=True)
+            self.assertEqual(status['status'], 'paused')
+            return result
+        with self.assertRaisesRegex(ConversionError, 'authorization changed'):
+            execute_conversion(self.store, self.run_id, confirmed=True,
+                               backend=owner_pauses)
+        checkpoint = self.store.get_checkpoint('convert_' + self.run_id)
+        self.assertEqual(checkpoint['status'], 'paused')
+        self.assertIsNone(checkpoint['state']['artifact'])
+        finished = execute_conversion(self.store, self.run_id, confirmed=True,
+                                      resume=True, backend=self.fake_backend)
+        self.assertEqual(finished['attempts'], 2)
+        self.assertIn('attempt-2', finished['artifact']['path'])
+        self.assertTrue((self.store.home/'conversions'/
+                         ('merge-'+self.run_id)/'attempt-1'/'merged-f16.gguf').exists())
 
     def test_owner_pause_during_conversion_discards_late_success(self):
         self.prepare()
