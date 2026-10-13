@@ -4,7 +4,7 @@ import subprocess
 import unittest
 from unittest.mock import patch
 
-from athenz.hardware import HardwareProbeError, gpu_report
+from athenz.hardware import HardwareProbeError, gpu_report, cuda_compute_report
 
 
 class HardwareTests(unittest.TestCase):
@@ -60,6 +60,67 @@ class HardwareTests(unittest.TestCase):
             self.assertEqual(info['status'], 'local-query-unavailable')
             self.assertNotIn('private', json.dumps(info))
 
+
+
+class CudaComputeTests(unittest.TestCase):
+    def test_no_torch_import_without_owner_confirmation(self):
+        with patch.dict('sys.modules', {'torch': None}):
+            with self.assertRaisesRegex(HardwareProbeError, 'confirm'):
+                cuda_compute_report()
+        with patch('athenz.hardware.cuda_compute_report',
+                   side_effect=AssertionError('unexpected CUDA request')):
+            from athenz.preflight import installation_report
+            report = installation_report()
+        self.assertFalse(any(x['name'] == 'cuda-small-compute' for x in report['checks']))
+
+    def test_missing_pytorch_has_sanitized_status(self):
+        with patch.dict('sys.modules', {'torch': None}):
+            result = cuda_compute_report(confirmed=True)
+        self.assertEqual(result['status'], 'pytorch-unavailable')
+        self.assertFalse(result['cuda_compute_observed'])
+        self.assertFalse(result['training_validated'])
+
+    def test_fake_cuda_tensor_calculation_and_doctor(self):
+        from types import SimpleNamespace
+        class Tensor:
+            def __init__(self, value): self.value = value
+            def __mul__(self, n): return Tensor(self.value * n)
+            def sum(self): return Tensor(self.value * 256)
+            def item(self): return self.value
+        fake = SimpleNamespace(
+            float32='float32',
+            cuda=SimpleNamespace(is_available=lambda: True,
+                                 device_count=lambda: 1,
+                                 synchronize=lambda **kwargs: None),
+            ones=lambda shape, **kw: Tensor(1))
+        with patch.dict('sys.modules', {'torch': fake}):
+            observed = cuda_compute_report(confirmed=True)
+            self.assertTrue(observed['cuda_compute_observed'])
+            from athenz.preflight import installation_report
+            doctor = installation_report(probe_cuda=True, confirmed=True)
+            self.assertTrue(next(x for x in doctor['checks']
+                                 if x['name'] == 'cuda-small-compute')['ok'])
+        self.assertFalse(doctor['hardware_validated'])
+        self.assertFalse(observed['training_validated'])
+        self.assertNotIn('cuda:0', json.dumps(observed))
+
+    def test_failed_cuda_kernel_never_exposes_driver_diagnostics(self):
+        from types import SimpleNamespace
+        fake = SimpleNamespace(
+            cuda=SimpleNamespace(is_available=lambda: True, device_count=lambda: 1),
+            float32='float32',
+            ones=lambda *args, **kwargs:
+                (_ for _ in ()).throw(RuntimeError('PRIVATE-NVIDIA-GPU-UUID')))
+        with patch.dict('sys.modules', {'torch': fake}):
+            result = cuda_compute_report(confirmed=True)
+        self.assertEqual(result['status'], 'cuda-compute-failed')
+        self.assertFalse(result['cuda_compute_observed'])
+        self.assertNotIn('PRIVATE', json.dumps(result))
+
+    def test_doctor_cuda_probe_is_separately_confirmed(self):
+        from athenz.preflight import installation_report
+        with self.assertRaisesRegex(HardwareProbeError, 'confirm'):
+            installation_report(probe_cuda=True)
 
 class HardwareCLITests(unittest.TestCase):
     def test_default_readiness_does_not_call_hardware_probe(self):

@@ -20,3 +20,24 @@ runtime, quantization dependencies, Docker GPU passthrough, Ollama, or the
 RTX 3060 QLoRA backend works. Actual model training, VRAM headroom and Windows
 11/WSL2 behavior still require a supervised hardware test. Nothing is
 installed, downloaded, trained, exported or sent over a network by this probe.
+
+## Optional CUDA runtime compute smoke (separate authorization)
+
+After installing a trusted local CUDA-enabled PyTorch distribution (AthenZ
+does not install it), the owner can test whether a tiny 256-element constant
+tensor calculation runs successfully on CUDA device 0:
+
+```powershell
+athenz-doctor --probe-cuda --confirm
+```
+
+This is **not** part of routine startup, the default doctor report or the
+`--probe-gpu` nvidia-smi inventory. The optional Torch import happens only
+after explicit confirmation. It may initialize a CUDA runtime, allocate a
+CUDA context and temporarily use GPU resources. Raw driver errors, GPU IDs,
+paths, model contents and exception messages are never included in the result.
+The report distinguishes missing PyTorch, unavailable CUDA, failed compute
+and completed small synthetic CUDA computation. It neither downloads nor
+trains any model, and cannot certify GPU memory headroom, WSL2 passthrough,
+quantized QLoRA training or inference speed. Hardware acceptance must still
+be performed by the owner on their intended machine.

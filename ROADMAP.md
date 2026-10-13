@@ -250,3 +250,11 @@ owner profile data or unattended coding action implied by this milestone.
   conclusion must be independently checked before calling that platform green.
 - This is a software acceptance increment, not proof of RTX 3060 performance,
   actual Windows 11 accessibility or independent model/adaptor lineage.
+
+### Owner-confirmed local CUDA compute smoke (2026-10-12 increment)
+
+- [x] Extend `athenz-doctor --probe-cuda --confirm` with a minimal, sanitized
+  synthetic CUDA tensor computation using optional installed PyTorch only.
+  No private profile access, model download, GPU IDs or automatic startup.
+- [ ] Actual owner-PC PyTorch CUDA, RTX 3060 and WSL2 results remain unobserved;
+  this opt-in diagnostic is not QLoRA readiness certification.

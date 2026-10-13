@@ -47,3 +47,41 @@ def gpu_report(*, confirmed: bool = False, timeout: int = 8) -> dict:
         return {**base, 'status': 'malformed-inventory'}
     return {**base, 'status': 'local-vram-observed', 'gpu_detected': True,
             'gpu_count': len(sizes), 'memory_mib': sizes}
+
+def cuda_compute_report(*, confirmed: bool = False) -> dict:
+    """Opt-in minimal local CUDA operation; never reads model/profile files.
+
+    Torch is imported only after an explicit owner confirmation. The smoke
+    performs a small GPU tensor computation, transfers one scalar to the
+    host, then discards it. Results contain no GPU name, ID, raw exception or
+    private context. It is not a VRAM capacity, QLoRA, or performance test.
+    """
+    if not confirmed:
+        raise HardwareProbeError('Explicit --confirm required for CUDA compute probe')
+    base = {'schema': 1, 'method': 'local-pytorch-cuda-synthetic-compute',
+            'status': 'cuda-unavailable', 'cuda_runtime_available': False,
+            'cuda_compute_observed': False, 'training_validated': False,
+            'model_inference_validated': False, 'private_data_collected': False,
+            'downloaded_models': False, 'gpu_identity_collected': False}
+    try:
+        import torch  # optional; never required for routine startup
+    except (ImportError, OSError):
+        return {**base, 'status': 'pytorch-unavailable'}
+    try:
+        if not torch.cuda.is_available() or torch.cuda.device_count() < 1:
+            return base
+        # Only one small public constant tensor. Torch may initialize a CUDA
+        # context; do not perform this automatically or at app startup.
+        first = torch.ones((256,), dtype=torch.float32, device='cuda:0')
+        answer = (first * 2).sum().item()
+        torch.cuda.synchronize(device=0)
+        if answer != 512:
+            return {**base, 'status': 'cuda-compute-failed',
+                    'cuda_runtime_available': True}
+    except Exception:
+        # Driver errors may include local paths, device identifiers or private
+        # diagnostics; never surface them in the public-safe report.
+        return {**base, 'status': 'cuda-compute-failed',
+                'cuda_runtime_available': True}
+    return {**base, 'status': 'cuda-small-compute-observed',
+            'cuda_runtime_available': True, 'cuda_compute_observed': True}
