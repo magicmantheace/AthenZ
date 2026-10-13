@@ -31,11 +31,11 @@ jobs:
       - name: Checkout reviewed archival AthenZ source
         uses: actions/checkout@v4
         with:
-          ref: a15d32836c9fecc0a52d2264865b2454a85a733b
+          ref: 6ad3ab4485e8690072d2df98ec732f39c89c4eec
           persist-credentials: false
       - name: Check exact tested commit
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "a15d32836c9fecc0a52d2264865b2454a85a733b"
+        run: test "$(git rev-parse HEAD)" = "6ad3ab4485e8690072d2df98ec732f39c89c4eec"
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
