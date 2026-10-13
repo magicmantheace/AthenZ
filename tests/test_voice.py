@@ -69,6 +69,7 @@ class VoiceTests(unittest.TestCase):
         self.assertEqual(engine.calls[1]['language'], 'en')
         self.assertFalse(engine.calls[1]['word_timestamps'])
         self.assertEqual(report['transcript'], 'Hello local world')
+        self.assertTrue(report['audio_fingerprint_stable'])
         self.assertFalse(report['stored_in_profile'])
         self.assertFalse(report['audio_uploaded'])
         self.assertFalse(report['submitted_to_chat'])
@@ -76,6 +77,23 @@ class VoiceTests(unittest.TestCase):
         self.assertTrue(report['private_text_in_output'])
         self.assertEqual(sorted(str(p.relative_to(self.root))
                                 for p in self.root.rglob('*')), before)
+
+    def test_changed_audio_during_transcription_refuses_private_result(self):
+        from types import SimpleNamespace
+        class MutatingEngine:
+            def transcribe(inner, audio, **kwargs):
+                # A concurrent editor changes the same PCM bytes after
+                # inference starts. No transcript may be emitted.
+                with wave.open(str(self.wav), 'wb') as writer:
+                    writer.setnchannels(1)
+                    writer.setsampwidth(2)
+                    writer.setframerate(16000)
+                    writer.writeframes(b'\\x01\\x00' * 16000)
+                return (iter([SimpleNamespace(text='PRIVATE-OLD-AUDIO')]), None)
+        with mock.patch('athenz.voice._load_engine', return_value=MutatingEngine()):
+            with self.assertRaisesRegex(VoiceError, 'audio changed') as error:
+                transcribe_wav(self.wav, self.model, confirmed=True)
+        self.assertNotIn('PRIVATE-OLD-AUDIO', str(error.exception))
 
     def test_no_speech_is_not_automatically_stored(self):
         from types import SimpleNamespace

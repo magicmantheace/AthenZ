@@ -47,3 +47,12 @@ has yet been performed. WAV metadata inspection is not an audio consent bypass:
 the file must still be deliberately selected. This experimental entry point
 does **not** provide microphone capture, wake words, real-time voice chat, a
 voice assistant, TTS, automatic action approval, or accessibility certification.
+
+### Selected audio stability
+
+During confirmed transcription AthenZ computes an in-memory SHA-256 digest of
+the local WAV before the model runs and rechecks the same selected bytes after
+inference. If the file was modified mid-run, AthenZ refuses to release the
+transcript. The digest is not printed, logged or stored; it is not a model
+provenance attestation and cannot protect against an actively malicious
+same-user process reverting the exact bytes between checks.

@@ -7,6 +7,7 @@ model is allowed and inference is never performed on startup.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -65,6 +66,18 @@ def inspect_wav(path: Path) -> dict:
             'transcription_started': False, 'file_modified': False}
 
 
+def _audio_fingerprint(path: Path) -> str:
+    """Private in-memory checksum only, never returned or persisted."""
+    try:
+        h = hashlib.sha256()
+        with path.open('rb') as stream:
+            for block in iter(lambda: stream.read(1024 * 1024), b''):
+                h.update(block)
+        return h.hexdigest()
+    except OSError:
+        raise VoiceError('Selected audio could not be rechecked') from None
+
+
 def _local_model_dir(path: Path) -> Path:
     model = Path(path).expanduser().absolute()
     if model.is_symlink() or not model.is_dir():
@@ -112,6 +125,7 @@ def transcribe_wav(path: Path, model_dir: Path, *,
     evidence = inspect_wav(path)
     model = _local_model_dir(model_dir)
     audio = Path(path).expanduser().absolute().resolve(strict=True)
+    before_audio = _audio_fingerprint(audio)
     engine = _load_engine(model, device=device)
     try:
         segments, _ = engine.transcribe(str(audio), language='en', beam_size=1,
@@ -137,8 +151,13 @@ def transcribe_wav(path: Path, model_dir: Path, *,
         # A model/backend exception may include owner speech, local paths or
         # CUDA identifiers. None may escape through a returned error message.
         raise VoiceError('Local offline speech transcription failed') from None
+    if _audio_fingerprint(audio) != before_audio:
+        # Do not return speech inferred from bytes that changed while the
+        # optional native decoder or model was reading the selected file.
+        raise VoiceError('Selected audio changed during local transcription')
     result = ' '.join(parts)
     return {'schema': 1, 'status': 'transcribed' if result else 'no-speech',
+            'audio_fingerprint_stable': True,
             'transcript': result, 'device_requested': device,
             'model_downloaded': False, 'audio_uploaded': False,
             'microphone_accessed': False, 'submitted_to_chat': False,
