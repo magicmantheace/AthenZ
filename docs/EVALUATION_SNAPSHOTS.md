@@ -127,3 +127,13 @@ invalidates the benchmark without transmitting its private text to a model.
 Unapproved records do not count as model training evidence. This prevents
 trivial cross-split reuse but cannot detect near-paraphrases or contamination
 of previously trained model weights, and does not prove independent test sets.
+
+### Split evidence revalidation after inference
+
+The same approved scenario cross-partition collision check is repeated at
+confirmed evaluation report persistence and when an existing report is read
+for adapter selection. A newly approved calibration/test or training duplicate
+therefore revokes stale review evidence even when the specific case fingerprint
+for the originally evaluated split has not changed. The checks refuse reports
+without exposing the private collided scenarios. Semantic paraphrase detection
+and independent model-execution attestations remain separate unsolved tasks.

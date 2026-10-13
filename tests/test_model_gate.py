@@ -162,6 +162,16 @@ class EvaluationGateTests(unittest.TestCase):
                 with self.assertRaisesRegex(BenchmarkError, 'inconsistent'):
                     save_report(self.store, modified, confirmed=True)
 
+    def test_new_cross_split_overlap_before_saving_requires_reevaluation(self):
+        with mock.patch('athenz.model_gate.evaluate_decisions',
+                        side_effect=self.observations()):
+            report = compare_models(self.store, Model('base'), Model('candidate'), self.sha)
+        self.store.add_decision('Synthetic held-out scenario 1!',
+            'yes', 'Private split contamination', source='synthetic',
+            options=['yes', 'no'], split='test', approved=True)
+        with self.assertRaisesRegex(BenchmarkError, 'partitions overlap'):
+            save_report(self.store, report, confirmed=True)
+
     def test_worse_candidate_not_ready(self):
         with mock.patch('athenz.model_gate.evaluate_decisions', side_effect=self.observations(10, 8)):
             r = compare_models(self.store, Model('base'), Model('candidate'), self.sha)

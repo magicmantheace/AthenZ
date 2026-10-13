@@ -11,7 +11,8 @@ import json
 from math import comb, isfinite
 from pathlib import Path
 
-from .evaluation import evaluate_decisions, _fingerprint, _heldout_rows, _reference_fingerprint
+from .evaluation import (evaluate_decisions, _fingerprint, _heldout_rows,
+                         _reference_fingerprint, _reject_overlapping_decision_splits)
 from .experience import ExperienceStore
 from .training import DatasetError, _private_root, _write_new, verify_dataset
 
@@ -240,6 +241,10 @@ def save_report(store: ExperienceStore, comparison: dict, *, confirmed: bool = F
     if (split not in {'calibration', 'test'} or type(count) is not int
             or not 2 <= count <= 1000):
         raise BenchmarkError('Invalid held-out comparison scope')
+    try:
+        _reject_overlapping_decision_splits(store)
+    except ValueError as exc:
+        raise BenchmarkError('Evaluation partitions overlap; re-evaluation required') from exc
     if (comparison.get('heldout_fingerprint') != _heldout_fingerprint(store, split, count)
             or comparison.get('reference_fingerprint') != _reference_fingerprint(store)):
         raise BenchmarkError('Evaluation evidence changed before saving; rerun comparison')

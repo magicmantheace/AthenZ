@@ -88,6 +88,15 @@ class AdaptersTests(unittest.TestCase):
         with self.assertRaisesRegex(AdapterError, 'metadata is inconsistent'):
             _read_review(self.store, sha)
 
+    def test_new_cross_split_overlap_blocks_existing_adapter_report(self):
+        report_sha = self.report()
+        self.store.add_decision('heldout 1!',
+            'yes', 'Different approved test partition reason',
+            source='synthetic', options=['yes', 'no'],
+            split='test', approved=True)
+        with self.assertRaisesRegex(AdapterError, 'partitions overlap'):
+            _read_review(self.store, report_sha)
+
     def test_completed_run_registration_requires_explicit_confirmation(self):
         run=self.completed()
         with self.assertRaisesRegex(AdapterError,'confirm'):

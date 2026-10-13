@@ -15,7 +15,7 @@ import re
 from .experience import ExperienceStore
 from .finetune import TrainingError, file_sha256, verify_run
 from .model_gate import _consistent_comparison_metadata, _heldout_fingerprint
-from .evaluation import _reference_fingerprint
+from .evaluation import _reference_fingerprint, _reject_overlapping_decision_splits
 from .training import DatasetError, _private_root
 
 SHA = re.compile(r'[a-f0-9]{64}\Z')
@@ -131,6 +131,10 @@ def _read_review(store: ExperienceStore, sha: str) -> dict:
         raise AdapterError('Evaluation report is not eligible for owner review')
     if not _consistent_comparison_metadata(report):
         raise AdapterError('Evaluation report metadata is inconsistent')
+    try:
+        _reject_overlapping_decision_splits(store)
+    except ValueError as exc:
+        raise AdapterError('Evaluation partitions overlap; new report required') from exc
     if _heldout_fingerprint(store, report['split'], report['cases']) != report.get('heldout_fingerprint'):
         raise AdapterError('Held-out evaluation evidence is stale')
     if report.get('reference_fingerprint') != _reference_fingerprint(store):
