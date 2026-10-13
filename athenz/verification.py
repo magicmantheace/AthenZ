@@ -39,7 +39,7 @@ def _verified_regular_bytes(path: Path, *, limit: int = MAX_SINGLE_FILE) -> byte
                     or not stat.S_ISREG(named.st_mode) or named.st_nlink != 1
                     or (opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino)
                     or opened.st_size > limit):
-                raise WorktreeError('Unsafe or oversized source file for Docker snapshot')
+                raise WorktreeError('Tracked hard-linked, irregular or oversized file cannot enter Docker snapshot')
             payload = stream.read(limit + 1)
             final = os.fstat(stream.fileno())
             if (len(payload) != opened.st_size or len(payload) > limit
