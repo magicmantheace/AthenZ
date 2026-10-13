@@ -59,3 +59,15 @@ permissions are only best-effort. Windows desktop/HiDPI, actual GPU training,
 Ollama weight conversion, and end-to-end target-PC disaster recovery remain
 unverified. Keep an independently encrypted backup in a secure location if
 you need protection from a stolen drive; AthenZ does not manage that encryption.
+
+### Malformed private bundle manifest handling
+
+Bundle verification validates the internal manifest's object structure and
+each listed path/hash type before case-insensitive collision checking.
+Invalid entry metadata, malformed root objects and non-integer byte lengths
+fail with a sanitized `BackupError` rather than an unexpected attribute or
+sort error. Synthetic tests deliberately modify an archive and update its
+*unsigned* outer sidecar checksum; they verify internal validation rather
+than treating a rehashed archive as trusted proof. Bundle integrity is still
+SHA-256 identity, not a signature, encryption or authentication against an
+attacker with full access to both archive and sidecar.

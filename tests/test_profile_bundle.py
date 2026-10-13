@@ -39,6 +39,44 @@ class ProfileBundleTests(unittest.TestCase):
             self.assertNotIn('worktrees/untrusted.py', zf.namelist())
             self.assertNotIn('backups/old-data', zf.namelist())
 
+    def test_malformed_signed_zip_manifest_fails_closed(self):
+        import hashlib
+        import json
+        import zipfile
+        b = create_bundle(self.home, confirmed=True)
+        path = self.home / 'bundles' / f"bundle-{b['id']}.zip"
+        sidecar = self.home / 'bundles' / f"bundle-{b['id']}.manifest.json"
+        with zipfile.ZipFile(path) as zf:
+            original = [(item.filename, zf.read(item)) for item in zf.infolist()]
+        original_manifest = json.loads(dict(original)['manifest.json'])
+        for manifest in (
+                [],
+                {**original_manifest, 'files': [
+                    {**original_manifest['files'][0], 'path': None},
+                    *original_manifest['files'][1:]]},
+                {**original_manifest, 'files': [
+                    {**original_manifest['files'][0], 'path': 123},
+                    *original_manifest['files'][1:]]},
+                {**original_manifest, 'files': [
+                    {**original_manifest['files'][0], 'bytes': True},
+                    *original_manifest['files'][1:]]},
+        ):
+            with self.subTest(malformed=str(manifest)[:50]):
+                scratch = path.with_suffix('.tmp')
+                with zipfile.ZipFile(scratch, 'w', compression=zipfile.ZIP_STORED) as zf:
+                    for filename, contents in original:
+                        zf.writestr(filename, (json.dumps(manifest).encode('utf-8')
+                                              if filename == 'manifest.json'
+                                              else contents))
+                scratch.replace(path)
+                data = path.read_bytes()
+                marker = {'schema': 1, 'id': b['id'],
+                          'sha256': hashlib.sha256(data).hexdigest(),
+                          'bytes': len(data), 'encrypted': False}
+                sidecar.write_text(json.dumps(marker))
+                with self.assertRaises(BackupError):
+                    verify_bundle(self.home, b['id'])
+
     def test_tamper_archive_detected(self):
         bundle = create_bundle(self.home, confirmed=True)
         path = self.home/'bundles'/f"bundle-{bundle['id']}.zip"

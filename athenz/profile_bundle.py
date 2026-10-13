@@ -214,13 +214,18 @@ def verify_bundle(home: Path | None, identifier: str) -> dict:
                 if manifest_info.file_size > 2 * 1024 * 1024:
                     raise BackupError('Bundle manifest too large')
                 manifest = json.loads(zf.read('manifest.json'))
-                if (manifest.get('schema') != 1 or manifest.get('type') != 'private-profile-selected-files'
+                if (not isinstance(manifest, dict) or
+                        manifest.get('schema') != 1 or manifest.get('type') != 'private-profile-selected-files'
                         or manifest.get('id') != identifier or manifest.get('encrypted') is not False
                         or not isinstance(manifest.get('files'), list)):
                     raise BackupError('Malformed internal bundle manifest')
                 rows = manifest['files']
-                paths = [row.get('path') for row in rows if isinstance(row, dict)]
-                if (len(rows) != len(paths) or len(rows) != len(info) - 1 or
+                if any(not isinstance(row, dict) or
+                       not isinstance(row.get('path'), str) or
+                       not isinstance(row.get('sha256'), str) for row in rows):
+                    raise BackupError('Malformed archive member metadata')
+                paths = [row['path'] for row in rows]
+                if (len(rows) != len(info) - 1 or
                         set(paths) != set(i.filename for i in info if i.filename != 'manifest.json') or
                         len(set(p.casefold() for p in paths)) != len(paths) or
                         'identity.sqlite3' not in paths):
@@ -232,7 +237,7 @@ def verify_bundle(home: Path | None, identifier: str) -> dict:
                         name = _secure_name(row['path'])
                         i = zf.getinfo(name)
                         size_expected = row.get('bytes')
-                        if (not isinstance(size_expected, int) or size_expected < 0 or size_expected > MAX_SINGLE
+                        if (type(size_expected) is not int or size_expected < 0 or size_expected > MAX_SINGLE
                                 or i.file_size != size_expected or i.is_dir() or
                                 ((i.external_attr >> 16) & 0o170000) == stat.S_IFLNK):
                             raise BackupError('Bundle entry is unsafe or oversized')
@@ -259,7 +264,8 @@ def verify_bundle(home: Path | None, identifier: str) -> dict:
                         version = db.execute('PRAGMA user_version').fetchone()[0]
                         if not 1 <= version <= 5:
                             raise BackupError('Bundle SQLite schema is unsupported')
-        except (zipfile.BadZipFile, KeyError, TypeError, ValueError, sqlite3.DatabaseError) as exc:
+        except (zipfile.BadZipFile, KeyError, TypeError, ValueError,
+                AttributeError, UnicodeError, OverflowError, sqlite3.DatabaseError) as exc:
             raise BackupError('Invalid or unreadable private profile archive') from exc
         return {'id': identifier, 'valid': True, 'sha256': sha, 'bytes': size,
                 'files': len(paths), 'encrypted': False}
