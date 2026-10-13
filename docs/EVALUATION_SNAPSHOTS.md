@@ -235,3 +235,12 @@ only the boolean `heldout_options_valid` without printing any option text or
 private answer. Malformed cases are reported as not ready before local model
 requests are made. This remains a limited preparatory check, not a promise
 that real model inference or the full contamination gate will succeed.
+
+### Exact protected held-out prompt construction
+
+Both real evaluation and the read-only benchmark preflight reuse one prompt
+assembler for the selected held-out scenario, seeded answer-option order and
+Twin reference profile. This avoids divergent leakage checks between preflight
+and inference. Ambiguous answer-choice lists (identical normalized choice
+labels, including whitespace/case variants) are rejected before any model
+request. Gold rationales remain excluded from model-visible prompts.

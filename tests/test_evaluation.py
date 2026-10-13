@@ -59,6 +59,27 @@ class DecisionEvaluationTests(unittest.TestCase):
         self.assertEqual(r1, r2)
         self.assertEqual(r1['chance_expected'], .5)
 
+    def test_repeated_answer_options_are_refused_before_model_call(self):
+        self.store.add_decision('Distinct synthetic decision about review gates?',
+            'Approve', 'Private scenario rationale', source='synthetic',
+            options=['Approve', 'APPROVE ', 'Reject'], split='test', approved=True)
+        model = Stub()
+        with self.assertRaisesRegex(ValueError, 'invalid held-out options'):
+            evaluate_decisions(self.store, model)
+        self.assertEqual(model.calls, [])
+
+    def test_protected_prompt_assembly_has_no_model_or_extra_owner_text(self):
+        from athenz.evaluation import _heldout_prompt_messages, _heldout_rows
+        self.store.add_decision('Should we use the isolated build?', 'Yes',
+            'Private gold rationale', source='synthetic', options=['Yes','No'],
+            split='test', approved=True)
+        item = _heldout_rows(self.store, 'test', 5)[0]
+        messages, shuffled = _heldout_prompt_messages(self.store, item, 42)
+        self.assertEqual(len(messages), 4)
+        self.assertEqual(sorted(shuffled), ['No', 'Yes'])
+        self.assertNotIn('Private gold rationale', str(messages))
+        self.assertEqual(messages[3]['role'], 'user')
+
     def test_approved_training_decision_overlap_blocks_heldout_scoring(self):
         self.store.add_decision('Should we deploy code without verification?',
             'No', 'A training reason', source='synthetic', approved=True)

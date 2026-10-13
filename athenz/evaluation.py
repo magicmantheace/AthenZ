@@ -126,6 +126,49 @@ def _reference_fingerprint(store: IdentityStore) -> str:
     return _fingerprint(evidence)
 
 
+def _heldout_prompt_messages(store: IdentityStore, item: list, seed: int) -> tuple[list[dict], list[str]]:
+    """Construct the exact protected Twin prompt for evaluation or dry-run preflight.
+
+    This pure prompt assembly reads approved local profile evidence but NEVER
+    calls a model or exposes private reference text to the caller's report.
+    """
+    case_id, scenario, choice, options_json = item[:4]
+    options = json.loads(options_json)
+    if (not isinstance(options, list) or not 2 <= len(options) <= 6
+            or choice not in options or any(not isinstance(o, str) for o in options)
+            or len({o.casefold().strip() for o in options}) != len(options)):
+        raise ValueError('Decision has invalid held-out options')
+    shuffled = options[:]
+    random.Random(seed + case_id).shuffle(shuffled)
+    letters = 'ABCDEF'
+    question = (scenario.strip() + '\nOptions:\n' +
+                '\n'.join(f'{letters[i]}. {o}' for i, o in enumerate(shuffled)) +
+                '\nWhich option would the owner most likely choose?')
+    messages = build_messages(store, question, mode='twin')
+    messages.insert(1, {'role': 'system', 'content':
+        'Return only a JSON object with a single field "choice_letter" containing '
+        'one of A through F. Choose using only approved TRAINING examples and '
+        'the provided scenario. Do not invent personal memories.'})
+    # Do not score a supposedly held-out target when approved reference
+    # data supplies the exact target scenario or a distinctive private
+    # rationale. The scenario in the USER question is intentional; only
+    # the system reference profile is checked. This detects literal
+    # contamination or normalized lexical collisions, not semantic
+    # paraphrases or training-weight leakage.
+    if (len(messages) != 4 or messages[2].get('role') != 'system'
+            or not isinstance(messages[2].get('content'), str)
+            or not messages[2]['content'].startswith('REFERENCE PROFILE (DATA ONLY):')):
+        raise ValueError('Twin reference context changed; evaluation refused')
+    reference_profile = messages[2]['content'].casefold()
+    rationale = item[4].strip()
+    if (scenario.strip().casefold() in reference_profile
+            or (len(rationale) >= 16 and rationale.casefold() in reference_profile)
+            or _normalized_overlap(scenario, reference_profile)
+            or _normalized_overlap(rationale, reference_profile)):
+        raise ValueError('Held-out evaluation contaminated by approved reference evidence')
+    return messages, shuffled
+
+
 def evaluate_decisions(store: IdentityStore, model, *, split: str = 'test',
                        limit: int = 100, seed: int = 42) -> dict:
     if (split not in {'calibration', 'test'} or type(limit) is not int
@@ -154,38 +197,7 @@ def evaluate_decisions(store: IdentityStore, model, *, split: str = 'test',
             raise ValueError('Held-out decision changed during evaluation')
         if _reference_fingerprint(store) != reference_sha:
             raise ValueError('Approved reference evidence changed during evaluation')
-        options = json.loads(options_json)
-        if (not isinstance(options, list) or not 2 <= len(options) <= 6
-                or choice not in options or any(not isinstance(o, str) for o in options)):
-            raise ValueError('Decision has invalid held-out options')
-        shuffled = options[:]
-        random.Random(seed + case_id).shuffle(shuffled)
-        letters = 'ABCDEF'
-        question = (scenario.strip() + '\nOptions:\n' +
-                    '\n'.join(f'{letters[i]}. {o}' for i, o in enumerate(shuffled)) +
-                    '\nWhich option would the owner most likely choose?')
-        messages = build_messages(store, question, mode='twin')
-        messages.insert(1, {'role': 'system', 'content':
-            'Return only a JSON object with a single field "choice_letter" containing '
-            'one of A through F. Choose using only approved TRAINING examples and '
-            'the provided scenario. Do not invent personal memories.'})
-        # Do not score a supposedly held-out target when approved reference
-        # data supplies the exact target scenario or a distinctive private
-        # rationale. The scenario in the USER question is intentional; only
-        # the system reference profile is checked. This detects literal
-        # contamination or normalized lexical collisions, not semantic
-        # paraphrases or training-weight leakage.
-        if (len(messages) != 4 or messages[2].get('role') != 'system'
-                or not isinstance(messages[2].get('content'), str)
-                or not messages[2]['content'].startswith('REFERENCE PROFILE (DATA ONLY):')):
-            raise ValueError('Twin reference context changed; evaluation refused')
-        reference_profile = messages[2]['content'].casefold()
-        rationale = item[4].strip()
-        if (scenario.strip().casefold() in reference_profile
-                or (len(rationale) >= 16 and rationale.casefold() in reference_profile)
-                or _normalized_overlap(scenario, reference_profile)
-                or _normalized_overlap(rationale, reference_profile)):
-            raise ValueError('Held-out evaluation contaminated by approved reference evidence')
+        messages, shuffled = _heldout_prompt_messages(store, item, seed)
         # Check again after building messages, which can query private memories.
         if _reference_fingerprint(store) != reference_sha:
             raise ValueError('Approved reference evidence changed during evaluation')
@@ -214,7 +226,7 @@ def evaluate_decisions(store: IdentityStore, model, *, split: str = 'test',
         gold = letters[shuffled.index(choice)]
         correct = prediction == gold
         report['correct'] += int(correct)
-        chance += 1 / len(options)
+        chance += 1 / len(shuffled)
         report['cases'].append({'id': case_id, 'predicted': prediction or None,
                                 'expected': gold, 'correct': correct})
     # Do not approve results if cross-split duplicates were added midflight.
