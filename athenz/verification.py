@@ -175,15 +175,22 @@ def isolated_unittest(repo: Path, *, image: str, home: Path, timeout: int = 120)
             except (OSError, subprocess.TimeoutExpired):
                 cleanup = 'cleanup UNCONFIRMED'
             output = f'Test timed out after {timeout}s; {cleanup}; container {container}'
-        # Re-hash the actual copied files after the Docker client exits. This
-        # refuses a passing result if a host process modified the bound tree.
+        # Re-hash the snapshot AND independently resnapshot the current
+        # source checkout. A green test of old copied bytes cannot verify
+        # a source tree the owner (or another process) changed mid-run.
+        source_stable = False
         try:
             if fingerprint_snapshot(snapshot) != metadata:
                 raise WorktreeError('Snapshot contents changed during execution')
+            with tempfile.TemporaryDirectory(prefix='recheck-', dir=base) as folder:
+                if snapshot_files(repo, Path(folder)) != metadata:
+                    raise WorktreeError('Source checkout changed during container execution')
+            source_stable = True
         except (WorktreeError, OSError):
             code = 125
-            output = 'Snapshot integrity FAILED after container execution'
+            output = 'Snapshot/source integrity FAILED after container execution'
         return {**metadata, 'image': image, 'returncode': code,
+                'source_snapshot_rechecked': source_stable,
                 'output': output[-8000:], 'output_sha256': hashlib.sha256(output.encode('utf-8')).hexdigest(),
                 'cleanup': cleanup, 'runner': 'docker-local-observation',
                 'container': container if cleanup == 'cleanup UNCONFIRMED' else None}

@@ -152,6 +152,24 @@ class FullTaskTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'Timeout'):
                 isolated_unittest(self.repo, image=IMAGE, home=self.root, timeout=True)
 
+    def test_container_pass_is_revoked_if_checkout_changes_after_snapshot(self):
+        from athenz.verification import isolated_unittest
+        actual = subprocess.run
+        def altered_source(argv, *args, **kwargs):
+            if argv[0] == 'docker':
+                (self.repo / 'calc.py').write_text('PRIVATE-CHANGED-AFTER-SNAPSHOT')
+                return subprocess.CompletedProcess(argv, 0, 'one synthetic test passed', '')
+            return actual(argv, *args, **kwargs)
+        with mock.patch('athenz.verification.shutil.which',
+                        return_value='/usr/bin/docker'), \
+             mock.patch('athenz.verification.subprocess.run',
+                        side_effect=altered_source):
+            result = isolated_unittest(self.repo, image=IMAGE, home=self.store.home)
+        self.assertEqual(result['returncode'], 125)
+        self.assertFalse(result['source_snapshot_rechecked'])
+        self.assertNotIn('PRIVATE-CHANGED', json.dumps(result))
+        self.assertIn('integrity FAILED', result['output'])
+
     def test_full_sequence_evidence_and_export(self):
         self.finish()
         with mock.patch('athenz.verification.shutil.which', return_value='/usr/bin/docker'), \

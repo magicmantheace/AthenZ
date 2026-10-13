@@ -243,13 +243,24 @@ class Worker:
         from .verification import isolated_unittest
         observed = isolated_unittest(workspace, image=image,
                                      home=self.store.home, timeout=timeout)
+        # Even with a stable copied tree, an owner could pause, revert or
+        # supersede this proposal while the Docker client is running.
+        # Never record a passed test on a superseded checkpoint/proposal.
+        latest = self.resume(key)
+        if (latest['revision'] != item['revision']
+                or latest['state']['proposal_id'] != pid
+                or self.store.get_proposal(pid)['status'] != 'applied'):
+            raise WorktreeError('Task or proposal changed during container validation')
         returncode = observed['returncode']
         output = observed['output']
         fingerprint = digest(''.join(x['path'] + x['after_sha256'] for x in changes))
         test_id = self.store.record_test(pid, 'docker:isolated unittest', returncode,
                                          output, fingerprint,
                                          'Container unit tests completed; inspect evidence')
-        return {'returncode': returncode, 'test_run_id': test_id, 'output': output}
+        return {'returncode': returncode, 'test_run_id': test_id, 'output': output,
+                'source_snapshot_sha256': observed['snapshot_sha256'],
+                'source_snapshot_rechecked': observed['source_snapshot_rechecked'],
+                'runner': observed['runner']}
 
     def cleanup(self, key: str, *, discard_changes: bool = False,
                 disposition: str = 'released') -> None:

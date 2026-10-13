@@ -139,3 +139,14 @@ with control characters or excessive length are refused before copying or
 reporting private names. This hardens common file-replacement races; a fully
 malicious process controlling ancestor directories or the same operating
 system account is **not** an independently isolated attacker model.
+
+### Evidence tied to the current source and owner checkpoint
+
+After Docker exits, the isolated runner hashes the copied snapshot and takes
+a second bounded, private tracked-file snapshot of the current checkout.
+If either the tested bytes or current source has changed, the result is
+`125` (integrity failure), never a passing test. Owner-invoked per-task
+verification also rechecks the checkpoint revision, proposal ID and applied
+status before recording test evidence. If the owner superseded the task during
+Docker execution, the late test result is discarded. This is not a defense
+against an adversary with the ability to edit the host between both checks.

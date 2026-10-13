@@ -135,6 +135,28 @@ class WorktreeTests(unittest.TestCase):
         self.assertIsInstance(review['test_run_id'], int)
         self.worker.cleanup('bundle2', discard_changes=True)
 
+    def test_owner_checkpoint_change_mid_test_refuses_stale_evidence(self):
+        self.worker.begin('revision-guard', self.repo, 'Check source')
+        self.worker.propose('revision-guard', StubModel(), ['calc.py','util.py'])
+        self.worker.apply('revision-guard')
+        real_run = subprocess.run
+        def change_owner_revision(argv, *args, **kwargs):
+            if argv[0] == 'docker':
+                cp = self.store.get_checkpoint('revision-guard')
+                self.store.checkpoint('revision-guard', cp['task'], cp['state'],
+                                      status='paused', expected_revision=cp['revision'])
+                return subprocess.CompletedProcess(argv, 0, 'synthetic success', '')
+            return real_run(argv, *args, **kwargs)
+        with mock.patch('athenz.worker.shutil.which',
+                        return_value='/usr/bin/docker'), \
+             mock.patch('athenz.worker.subprocess.run',
+                        side_effect=change_owner_revision):
+            with self.assertRaisesRegex(WorktreeError, 'changed during container'):
+                self.worker.container_tests('revision-guard',
+                    image='python@sha256:' + 'a'*64)
+        self.assertEqual(self.store.list_items('test_runs'), [])
+        self.worker.cleanup('revision-guard', discard_changes=True)
+
     def test_container_uses_snapshot_not_live_worktree_or_untracked_secrets(self):
         self.worker.begin('snapshot-safe', self.repo, 'Test isolated code')
         self.worker.propose('snapshot-safe', StubModel(), ['calc.py', 'util.py'])
