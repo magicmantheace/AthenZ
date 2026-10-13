@@ -150,6 +150,35 @@ class DecisionEvaluationTests(unittest.TestCase):
             evaluate_decisions(self.store, model)
         self.assertEqual(model.calls, [])
 
+    def test_punctuation_variant_of_heldout_scenario_blocks_evaluation(self):
+        scenario = 'Should the operator approve a patch without passing tests?'
+        self.store.add_decision(scenario, 'Wait', 'Private held-out reason',
+            source='synthetic', options=['Approve', 'Wait'],
+            split='test', approved=True)
+        # Neither the literal held-out sentence nor private gold rationale
+        # appears exactly in the approved profile.
+        self.store.propose('preference',
+            'Should the operator approve a patch WITHOUT-PASSING tests! '
+            'The reviewed choice was Wait.',
+            source='synthetic', approved=True)
+        model = Stub()
+        with self.assertRaisesRegex(ValueError, 'contaminated'):
+            evaluate_decisions(self.store, model)
+        self.assertEqual(model.calls, [])
+
+    def test_normalized_private_rationale_collision_blocks_evaluation(self):
+        reason = 'Review deployment after integration checks are green'
+        self.store.add_decision('Is there a safe time to deploy a patch?',
+            'Wait', reason, source='synthetic',
+            options=['Ship', 'Wait'], split='test', approved=True)
+        self.store.propose('preference',
+            'Review deployment AFTER integration-checks are green!',
+            source='synthetic', approved=True)
+        model = Stub()
+        with self.assertRaisesRegex(ValueError, 'contaminated'):
+            evaluate_decisions(self.store, model)
+        self.assertEqual(model.calls, [])
+
     def test_unapproved_episode_is_not_prompt_contamination(self):
         scenario = 'Should a candidate be promoted without evidence?'
         self.store.add_decision(scenario, 'No', 'Keep review gate', source='synthetic',

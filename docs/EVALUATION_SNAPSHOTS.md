@@ -50,3 +50,14 @@ strictly positive finite gain and excludes booleans, NaN, infinity and values
 above 1 even when an older on-disk report has a matching SHA-256 checksum.
 This guards malformed score metadata, but SHA-256 still proves byte identity
 only and does not independently attest benchmark execution or adapter lineage.
+
+## Normalized lexical held-out collision guard
+
+The evaluator now also rejects sufficiently distinctive held-out scenario or
+rationale phrases when an approved reference contains the same word sequence
+with different punctuation, spacing, case or Unicode compatibility forms.
+Short or generic phrases still receive the previous exact literal check to
+avoid claiming meaningful semantic similarity from a few shared words.
+The guard is deliberately conservative and cannot detect paraphrases,
+reorganized facts or memorization in model weights. No raw held-out content is
+included in the error message or exported comparison report.

@@ -139,6 +139,6 @@ hardware tests do not currently block further independent engineering.
   downloadable unsigned artifact. This does not establish portable desktop
   readiness on the owner's Windows 11 or with real Ollama/RTX 3060.
 - No private owner database, training corpus or personal context was uploaded.
-  The remaining native Windows 3.11 full regression status is tracked
-  separately in run 38331720210 and must be checked before a platform gate
-  is considered passed.
+  Hosted Windows Python 3.11 full regression also passed (run 38331720210):
+  413 tests, seven platform-dependent skips, zero errors and zero failures.
+  This is a hosted runner gate, not owner-device hardware acceptance.

@@ -9,6 +9,8 @@ from __future__ import annotations
 import hashlib
 import json
 import random
+import re
+import unicodedata
 from math import sqrt
 
 from .store import IdentityStore
@@ -26,6 +28,25 @@ def _wilson_interval(correct: int, total: int) -> list[float] | None:
     radius = z * sqrt(p * (1 - p) / total +
                       z * z / (4 * total * total)) / d
     return [max(0.0, center - radius), min(1.0, center + radius)]
+
+
+def _normalized_overlap(phrase: str, reference: str) -> bool:
+    """Conservative lexical collision check; NOT semantic similarity.
+
+    Normalize Unicode compatibility forms, case, whitespace and punctuation.
+    Require a sufficiently distinctive phrase before refusing evaluation;
+    short/generic phrases are still checked by the exact literal guard.
+    """
+    def words(text: str) -> list[str]:
+        # JSON-escaped line breaks may otherwise insert spurious 'n' tokens.
+        text = text.replace('\\n', ' ').replace('\\t', ' ')
+        return re.findall(r'\\w+', unicodedata.normalize('NFKC', text).casefold())
+
+    needle = words(phrase)
+    if len(needle) < 4 or sum(map(len, needle)) < 20:
+        return False
+    haystack = ' ' + ' '.join(words(reference)) + ' '
+    return (' ' + ' '.join(needle) + ' ') in haystack
 
 
 def _fingerprint(rows) -> str:
@@ -104,7 +125,8 @@ def evaluate_decisions(store: IdentityStore, model, *, split: str = 'test',
         # data supplies the exact target scenario or a distinctive private
         # rationale. The scenario in the USER question is intentional; only
         # the system reference profile is checked. This detects literal
-        # contamination, not semantic paraphrases or training-weight leakage.
+        # contamination or normalized lexical collisions, not semantic
+        # paraphrases or training-weight leakage.
         if (len(messages) != 4 or messages[2].get('role') != 'system'
                 or not isinstance(messages[2].get('content'), str)
                 or not messages[2]['content'].startswith('REFERENCE PROFILE (DATA ONLY):')):
@@ -112,7 +134,9 @@ def evaluate_decisions(store: IdentityStore, model, *, split: str = 'test',
         reference_profile = messages[2]['content'].casefold()
         rationale = item[4].strip()
         if (scenario.strip().casefold() in reference_profile
-                or (len(rationale) >= 16 and rationale.casefold() in reference_profile)):
+                or (len(rationale) >= 16 and rationale.casefold() in reference_profile)
+                or _normalized_overlap(scenario, reference_profile)
+                or _normalized_overlap(rationale, reference_profile)):
             raise ValueError('Held-out evaluation contaminated by approved reference evidence')
         # Check again after building messages, which can query private memories.
         if _reference_fingerprint(store) != reference_sha:
