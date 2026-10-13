@@ -207,6 +207,40 @@ class EvaluationGateTests(unittest.TestCase):
         with self.assertRaisesRegex(BenchmarkError, 'metadata is inconsistent'):
             save_report(self.store, malformed, confirmed=True)
 
+    def test_save_refuses_model_tag_replaced_after_evaluation(self):
+        with mock.patch('athenz.model_gate.evaluate_decisions',
+                        side_effect=self.observations()):
+            report = compare_models(self.store, Model('base'), Model('candidate'),
+                                    self.sha)
+        with mock.patch('athenz.runtime.model_digest',
+                        side_effect=lambda tag: 'a' * 64 if tag == 'base' else 'c' * 64):
+            with self.assertRaisesRegex(BenchmarkError, 'digest changed'):
+                save_report(self.store, report, confirmed=True)
+        self.assertFalse(list((self.store.home / 'datasets' / 'evaluations').glob(
+            'eval-*.json')) if (self.store.home / 'datasets' / 'evaluations').exists() else [])
+
+    def test_save_refuses_fabricated_intervals_and_invalid_counts(self):
+        from athenz.evaluation import _wilson_interval
+        with mock.patch('athenz.model_gate.evaluate_decisions',
+                        side_effect=self.observations()):
+            valid = compare_models(self.store, Model('base'), Model('candidate'),
+                                   self.sha)
+        valid = {**valid, 'baseline_accuracy_interval_95':
+                 _wilson_interval(valid['baseline_correct'], valid['cases']),
+                 'candidate_accuracy_interval_95':
+                 _wilson_interval(valid['candidate_correct'], valid['cases']),
+                 'baseline_invalid_predictions': 1}
+        self.assertTrue(save_report(self.store, valid, confirmed=True))
+        for changed in (
+            {'baseline_accuracy_interval_95': [0.0, 1.0]},
+            {'candidate_accuracy_interval_95': [float('nan'), 1.0]},
+            {'baseline_invalid_predictions': 12},
+            {'candidate_invalid_predictions': True},
+        ):
+            with self.subTest(changed=changed):
+                with self.assertRaisesRegex(BenchmarkError, 'metadata is inconsistent'):
+                    save_report(self.store, {**valid, **changed}, confirmed=True)
+
     def test_worse_candidate_not_ready(self):
         with mock.patch('athenz.model_gate.evaluate_decisions', side_effect=self.observations(10, 8)):
             r = compare_models(self.store, Model('base'), Model('candidate'), self.sha)

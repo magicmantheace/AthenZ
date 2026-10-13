@@ -12,7 +12,8 @@ from math import comb, isfinite
 from pathlib import Path
 
 from .evaluation import (evaluate_decisions, _fingerprint, _heldout_rows,
-                         _reference_fingerprint, _reject_overlapping_decision_splits)
+                         _reference_fingerprint, _reject_overlapping_decision_splits,
+                         _wilson_interval)
 from .experience import ExperienceStore
 from .training import DatasetError, _private_root, _write_new, verify_dataset
 
@@ -100,6 +101,22 @@ def _consistent_comparison_metadata(report: dict) -> bool:
     if not all(present):
         return False
     baseline, candidate = report['baseline_correct'], report['candidate_correct']
+    for name, correct_count in (('baseline', baseline), ('candidate', candidate)):
+        # These fields are descriptive only but must never misstate observed
+        # failure counts or present a fabricated uncertainty interval.
+        invalid = report.get(name + '_invalid_predictions')
+        if invalid is not None and (type(invalid) is not int or
+                                    not 0 <= invalid <= count - correct_count):
+            return False
+        interval = report.get(name + '_accuracy_interval_95')
+        if interval is not None:
+            expected = _wilson_interval(correct_count, count)
+            if (not isinstance(interval, list) or len(interval) != 2 or
+                    any(type(v) not in (int, float) or not isfinite(v)
+                        for v in interval) or
+                    any(abs(actual - bound) > 1e-8
+                        for actual, bound in zip(interval, expected))):
+                return False
     base_rate, candidate_rate = report['baseline_accuracy'], report['candidate_accuracy']
     gain = report.get('accuracy_gain')
     if (type(baseline) is not int or type(candidate) is not int or
@@ -263,6 +280,17 @@ def save_report(store: ExperienceStore, comparison: dict, *, confirmed: bool = F
     if (comparison.get('heldout_fingerprint') != _heldout_fingerprint(store, split, count)
             or comparison.get('reference_fingerprint') != _reference_fingerprint(store)):
         raise BenchmarkError('Evaluation evidence changed before saving; rerun comparison')
+    # The candidate can have been replaced in the Ollama daemon between
+    # evaluation and this explicit owner-confirmed report save. An observed
+    # score must never become review evidence for a different installed tag.
+    if 'baseline_digest' in comparison and 'candidate_digest' in comparison:
+        from .runtime import RoutingError, model_digest
+        try:
+            if (model_digest(comparison['baseline']) != comparison['baseline_digest']
+                    or model_digest(comparison['candidate']) != comparison['candidate_digest']):
+                raise BenchmarkError('Evaluated local model digest changed before saving')
+        except (RoutingError, TypeError, ValueError) as exc:
+            raise BenchmarkError('Evaluated local model inventory unavailable before saving') from exc
     root = _private_root(store) / 'evaluations'
     if root.is_symlink():
         raise DatasetError('Private evaluation directory may not be a symlink')

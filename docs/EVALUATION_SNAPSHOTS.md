@@ -193,3 +193,17 @@ export and cause verification to reject old exports if new held-out evidence
 appears. The heuristic can reject legitimate close wording and cannot find
 conceptual paraphrases or claims memorized in weights; owner review remains
 necessary to establish benchmark independence.
+
+## Owner-confirmed benchmark save requires current local model identity
+
+For modern comparison reports that include evaluated baseline and candidate
+Ollama SHA-256 digests, confirmed persistence rechecks both local tag digests
+before writing the private immutable report. A tag replaced since evaluation
+must be evaluated again, rather than persisting an apparently passing score
+for different weights. Optional aggregate invalid-prediction counts are
+bounded and any nonnull 95% Wilson accuracy intervals must agree with the
+reported correct/total counts; fabricated confidence bounds fail closed.
+Legacy reports without both model digests can still be inspected according
+to their older metadata contract, but cannot establish model lineage or
+independently attest candidate quality. Reports never initiate model pulling,
+training, tagging or switching.
