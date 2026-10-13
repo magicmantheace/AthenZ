@@ -108,3 +108,12 @@ is refused even when its byte checksum is valid. Historical aggregate-only
 reports that predate these fields remain readable but are not independently
 attested or statistically verified by these checks. A SHA-256 checksum guards
 byte identity, not provenance, independent model execution or lineage.
+
+### Bounded SFT inspection at scale
+
+The protected held-out scenarios and distinctive rationales are compiled once
+into a four-token-prefix index before SFT export inspection. Training pairs
+are scanned by consecutive normalized tokens and full-phrase confirmation,
+not by repeatedly searching every held-out text in every training answer.
+This reduces incidental work for larger reviewed histories without widening
+semantic interpretation or changing ordinary short-expression handling.

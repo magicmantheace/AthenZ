@@ -33,15 +33,30 @@ def _normalized_words(text: str) -> str:
     return ' '.join(re.findall(r'\w+', unicodedata.normalize('NFKC', text).casefold()))
 
 
-def _distinctive_embedded(text_words: str, protected: set[str]) -> bool:
-    """Detect verbatim word-sequence leaks with harmless surrounding prose.
+def _protected_phrase_index(phrases: set[str]) -> dict[tuple[str, ...], list[tuple[str, ...]]]:
+    """Compile distinctive held-out phrases once for linear-time export scans.
 
-    Require four words and at least 20 characters to avoid suppressing
-    generic short phrases. Equality is guarded separately even for short text.
+    A four-token prefix narrows candidates; the entire normalized phrase must
+    still match consecutively, so sharing a common beginning is insufficient.
     """
-    haystack = ' ' + text_words + ' '
-    return any(len(phrase.split()) >= 4 and len(phrase.replace(' ', '')) >= 20
-               and (' ' + phrase + ' ') in haystack for phrase in protected if phrase)
+    index: dict[tuple[str, ...], list[tuple[str, ...]]] = {}
+    for phrase in phrases:
+        words = tuple(phrase.split())
+        if len(words) >= 4 and sum(map(len, words)) >= 20:
+            index.setdefault(words[:4], []).append(words)
+    return index
+
+
+def _distinctive_embedded(
+        text_words: str,
+        protected: dict[tuple[str, ...], list[tuple[str, ...]]]) -> bool:
+    """Find exact normalized word-sequence overlaps without all-pairs scans."""
+    tokens = tuple(text_words.split())
+    for start in range(max(0, len(tokens) - 3)):
+        for phrase in protected.get(tokens[start:start + 4], ()):
+            if tokens[start:start + len(phrase)] == phrase:
+                return True
+    return False
 
 
 def _digest(data: bytes) -> str:
@@ -73,6 +88,7 @@ def _read_approved(store: ExperienceStore) -> tuple[list[tuple[int, str, str]], 
     heldout = {normalized(scenario) for scenario in scenarios}
     heldout_words = {_normalized_words(scenario) for scenario in scenarios}
     rationale_words = {_normalized_words(r['rationale']) for r in protected_rows}
+    protected_index = _protected_phrase_index(heldout_words | rationale_words)
     rows = store.db.execute('''SELECT id,instruction,ideal_answer FROM train_pairs
                                WHERE status='approved' ORDER BY id''').fetchall()
     if len(rows) > 50_000:
@@ -88,10 +104,8 @@ def _read_approved(store: ExperienceStore) -> tuple[list[tuple[int, str, str]], 
         instruction_words = _normalized_words(instruction)
         answer_words = _normalized_words(answer)
         if (key in heldout or instruction_words in heldout_words
-                or _distinctive_embedded(instruction_words, heldout_words)
-                or _distinctive_embedded(answer_words, heldout_words)
-                or _distinctive_embedded(instruction_words, rationale_words)
-                or _distinctive_embedded(answer_words, rationale_words)):
+                or _distinctive_embedded(instruction_words, protected_index)
+                or _distinctive_embedded(answer_words, protected_index)):
             withheld += 1
             continue
         prior = by_instruction.get(key)

@@ -120,6 +120,29 @@ class TrainingDatasetTests(unittest.TestCase):
         report = inspect_dataset(self.store)
         self.assertEqual((report['included'], report['heldout_excluded']), (1, 0))
 
+    def test_shared_prefix_without_full_protected_phrase_is_allowed(self):
+        self.pair('Should we bypass the validation checks before training?',
+                  'Do not alter actual evaluation cases')
+        self.store.add_decision('Should we bypass the validation checks before deploying?',
+            'No', 'Wait for the proper deployment gate',
+            source='synthetic', split='calibration', options=['Yes', 'No'])
+        report = inspect_dataset(self.store)
+        self.assertEqual((report['included'], report['heldout_excluded']), (1, 0))
+
+    def test_indexed_embedded_leak_with_multiple_protected_cases(self):
+        self.pair('Write a summary: Should the operator deploy without verification? Then explain.',
+                  'Not a safe training response')
+        self.pair('Safe distinct instruction?', 'Safe distinct response')
+        for number in range(30):
+            self.store.add_decision(f'Distinct unrelated scenario with tag {number}',
+                'No', f'Unrelated rationale for synthetic case number {number}',
+                source='synthetic', split='test', options=['Yes', 'No'])
+        self.store.add_decision('Should the operator deploy without verification?',
+            'No', 'Unique private holdout rationale requiring review',
+            source='synthetic', split='test', options=['Yes', 'No'])
+        report = inspect_dataset(self.store)
+        self.assertEqual((report['included'], report['heldout_excluded']), (1, 1))
+
     def test_conflicting_approved_replies_block_export(self):
         self.pair('What is rule?', 'Always test first')
         self.pair(' WHAT IS RULE? ', 'Never run tests')
