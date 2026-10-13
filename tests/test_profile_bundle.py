@@ -115,6 +115,23 @@ class ProfileBundleTests(unittest.TestCase):
         with self.assertRaisesRegex(BackupError, 'Symlinked'):
             inspect_bundle_scope(self.home)
 
+    def test_invalid_outer_bundle_sidecar_is_refused_without_private_output(self):
+        import json
+        b = create_bundle(self.home, confirmed=True)
+        sidecar = self.home/'bundles'/f"bundle-{b['id']}.manifest.json"
+        original = json.loads(sidecar.read_text())
+        for corrupt in ([], 'PRIVATE-SECRET', None,
+                        {**original, 'bytes': True},
+                        {**original, 'sha256': 12},
+                        {**original, 'schema': True}):
+            with self.subTest(malformed=repr(corrupt)[:50]):
+                sidecar.write_text(json.dumps(corrupt))
+                with self.assertRaises(BackupError) as caught:
+                    verify_bundle(self.home, b['id'])
+                self.assertNotIn('PRIVATE-SECRET', str(caught.exception))
+        sidecar.write_text(json.dumps(original))
+        self.assertTrue(verify_bundle(self.home, b['id'])['valid'])
+
     def test_tamper_archive_detected(self):
         bundle = create_bundle(self.home, confirmed=True)
         path = self.home/'bundles'/f"bundle-{bundle['id']}.zip"

@@ -58,6 +58,22 @@ class BackupTests(unittest.TestCase):
         finally:
             source.close()
 
+    def test_corrupt_outer_manifest_has_only_sanitized_backup_errors(self):
+        b = create_backup(self.home, confirmed=True)
+        manifest = self.home/'backups'/f"profile-{b['id']}.manifest.json"
+        original = json.loads(manifest.read_text())
+        for corrupt in ([], 'PRIVATE-SECRET', None, True,
+                        {**original, 'size': True},
+                        {**original, 'sqlite_schema': True},
+                        {**original, 'sha256': 123},
+                        {**original, 'schema': True}):
+            with self.subTest(case=repr(corrupt)[:50]):
+                manifest.write_text(json.dumps(corrupt))
+                with self.assertRaisesRegex(BackupError, 'manifest'):
+                    verify_backup(self.home, b['id'])
+        manifest.write_text(json.dumps(original))
+        self.assertTrue(verify_backup(self.home, b['id'])['valid'])
+
     def test_manifest_edit_and_invalid_id_rejected(self):
         b = create_backup(self.home, confirmed=True)
         manifest = self.home/'backups'/f"profile-{b['id']}.manifest.json"

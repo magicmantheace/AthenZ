@@ -247,8 +247,13 @@ def verify_bundle(home: Path | None, identifier: str) -> dict:
         except (OSError, UnicodeError, ValueError) as exc:
             raise BackupError('Invalid private profile bundle manifest') from exc
         sha, size = _checksum(data)
-        if (outer.get('schema') != 1 or outer.get('id') != identifier or outer.get('encrypted') is not False
-                or outer.get('sha256') != sha or outer.get('bytes') != size):
+        if (not isinstance(outer, dict) or
+                type(outer.get('schema')) is not int or outer['schema'] != 1 or
+                outer.get('id') != identifier or outer.get('encrypted') is not False or
+                type(outer.get('bytes')) is not int or outer['bytes'] <= 0 or
+                not isinstance(outer.get('sha256'), str) or
+                not re.fullmatch(r'[a-f0-9]{64}', outer['sha256']) or
+                outer['sha256'] != sha or outer['bytes'] != size):
             raise BackupError('Private profile bundle changed since it was created')
         try:
             with zipfile.ZipFile(data, mode='r') as zf:

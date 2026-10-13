@@ -125,10 +125,17 @@ def verify_backup(home: Path | None, identifier: str) -> dict:
             record = json.loads(meta.read_text('utf-8'))
         except (OSError, UnicodeError, ValueError) as exc:
             raise BackupError('Invalid private backup manifest') from exc
-        if (record.get('id') != identifier or record.get('schema') != 1 or
+        if (not isinstance(record, dict) or
+                record.get('id') != identifier or
+                type(record.get('schema')) is not int or record['schema'] != 1 or
                 record.get('type') != 'private-sqlite-only' or
                 record.get('encrypted') is not False or
-                record.get('restore_authorized') is not False):
+                record.get('restore_authorized') is not False or
+                type(record.get('size')) is not int or record['size'] <= 0 or
+                type(record.get('sqlite_schema')) is not int or
+                not 1 <= record['sqlite_schema'] <= 5 or
+                not isinstance(record.get('sha256'), str) or
+                not re.fullmatch(r'[a-f0-9]{64}', record['sha256'])):
             raise BackupError('Backup manifest is invalid')
         sha, size = _checksum(data)
         if sha != record.get('sha256') or size != record.get('size'):

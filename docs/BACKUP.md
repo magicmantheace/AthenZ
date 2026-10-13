@@ -90,3 +90,18 @@ The temporary data is **plaintext**; deletion is not secure erasure. The
 backend may touch source SQLite WAL/SHM state while reading the snapshot.
 This is *not* a complete profile-bundle or installed-model recovery test,
 Windows/RTX 3060 validation, or independent release certification.
+
+### Backup manifest input hardening
+
+Both SQLite-only and selected-profile bundle verification refuse malformed
+outer JSON types, boolean lengths/schema values and invalid SHA-256 fields
+before attempting to trust their recorded snapshot metadata. An unreadable,
+non-object or tampered manifest produces a sanitized local `BackupError`;
+raw attacker-controlled JSON, paths and private records are not returned in
+CLI errors. These structural checks add resilience against corruption; they
+are **not** signatures and cannot authenticate metadata rewritten by an
+attacker who controls the whole private directory.
+
+Selected-profile bundle restoration and the opt-in temporary rehearsal are
+documented in [Profile Bundles](PROFILE_BUNDLES.md). The older SQLite-only
+rehearsal remains supported and does not activate restored profiles.
