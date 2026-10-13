@@ -40,7 +40,7 @@ def _normalized_overlap(phrase: str, reference: str) -> bool:
     def words(text: str) -> list[str]:
         # JSON-escaped line breaks may otherwise insert spurious 'n' tokens.
         text = text.replace('\\n', ' ').replace('\\t', ' ')
-        return re.findall(r'\\w+', unicodedata.normalize('NFKC', text).casefold())
+        return re.findall(r'\w+', unicodedata.normalize('NFKC', text).casefold())
 
     needle = words(phrase)
     if len(needle) < 4 or sum(map(len, needle)) < 20:
