@@ -333,3 +333,26 @@ to the archived bytes. Scratch storage needs free space and temporarily holds
 unencrypted private material; cleanup is not secure erasure. No downloaded or
 installed Ollama models, Docker worktrees, or external adapters are activated.
 See [private profile bundles](docs/PROFILE_BUNDLES.md).
+
+## Supervised coding and CPU model-conversion safety (October 2026)
+
+AthenZ's explicitly owner-invoked per-task Docker unittest command no longer
+bind-mounts an active Git worktree. It runs against a disposable copy of only
+reviewed Git-tracked, regular source files. The copy excludes Git metadata,
+untracked files, obvious credential filenames, hard-linked files and common
+private database/key formats; its fingerprint is rechecked before and after
+execution. No Docker fallback runs test code directly on the host, and this
+is still not a perfect sandbox for adversarial software.
+
+A long-running, explicitly approved local PEFT/GGUF conversion can have its
+checkpoint authorization revoked using:
+
+```powershell
+athenz-training pause-conversion <run-id> --confirm
+athenz-training run-conversion <run-id> --resume --confirm
+```
+
+The pause **does not terminate a CPU merge already running**; it prevents
+that old worker from adopting its output. Resume requires deliberate owner
+review and allocates a new numbered attempt without overwriting prior output.
+No model is promoted or deployed by these commands.

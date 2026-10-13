@@ -378,3 +378,25 @@ owner profile data or unattended coding action implied by this milestone.
   pause or superseding revision and never automatically promote a model.
 - [ ] Actual CPU merge and GGUF quality/lineage on supported owner hardware,
   interactive Windows accessibility and safe model promotion remain unverified.
+
+### 2026-10-13 — Full supervised coding snapshot isolation and conversion pause
+
+- [x] Owner-triggered per-task Docker unittest now invokes the same
+  tracked-file-only, size-bounded snapshot runner used for full-task
+  verification. It never mounts the live Git worktree containing `.git`
+  or untracked files, and compares snapshot fingerprints before/after Docker.
+- [x] Git subprocess messages containing private paths are sanitized; Docker
+  argument limits and mount source syntax are checked before execution.
+- [x] Reject obvious secret-name variants and filesystem hardlink aliases in
+  both model-selected code inputs and Docker snapshot source files.
+- [x] Long-running PEFT-to-merged-GGUF conversion is owner-pausable via
+  `athenz-training pause-conversion`; revision-fenced workers cannot accept
+  stale completion/failure after owner intervention. Explicit `--resume`
+  starts a new numbered attempt; CPU process termination remains manual.
+- [x] Latest source `7d739ba3669b06466a9cc7e03609a53a3c2861e6`
+  passed 514 hosted Python regression tests on Linux 3.12 and 3.13, four
+  platform skips each, no errors/failures. Public compatible-build run:
+  [38417310918](https://github.com/magicmantheace/AthenZ/actions/runs/38417310918).
+- [ ] Latest full hosted Linux/Windows Python 3.11 and unsigned Windows
+  portable packaging conclusions, actual owner-machine Docker, RTX 3060 CUDA,
+  accessibility and independently attested model identity remain separate.

@@ -275,3 +275,18 @@ and real Docker sandbox run
 are independent evidence; their success must be checked rather than assumed.
 All hosted inputs are synthetic and contain no owner private records, models,
 archive material, passwords or environment identifiers.
+
+### 2026-10-13 — Isolated per-task Docker and owner conversion pause
+
+Development source commit `7d739ba3669b06466a9cc7e03609a53a3c2861e6`
+is checked out by standalone public hosted workflows rather than merging to
+`main`. Linux Python 3.12 and 3.13 in public Actions
+[38417310918](https://github.com/magicmantheace/AthenZ/actions/runs/38417310918)
+passed the 514-test suite, four skips per platform. The job also performs
+Windows unsigned portable executable and Tk startup tests. The separate
+full Linux Python 3.11/Windows Python 3.11 run is
+[38417320334](https://github.com/magicmantheace/AthenZ/actions/runs/38417320334).
+Always verify the hosted workflow's final conclusion before claiming a Windows
+full-suite or packaged-build pass. Actual owner-machine Docker and GGUF model
+conversion are not verified by these synthetic hosted tests. No private owner
+databases, code checkouts, or model weights are copied into the Git repository.
