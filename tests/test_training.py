@@ -56,6 +56,29 @@ class TrainingDatasetTests(unittest.TestCase):
         built = build_dataset(self.store, confirmed=True)
         self.assertNotIn('Ship without checking', Path(built['path']).read_text())
 
+    def test_punctuation_only_heldout_variant_is_not_exported(self):
+        self.pair('Should the operator deploy WITHOUT-checking?', 'Unsafe response')
+        self.pair('An unrelated instruction?', 'Reviewed response')
+        self.store.add_decision(
+            'Should the operator deploy without checking!',
+            'No', 'Run checks first', source='synthetic', split='test',
+            options=['Yes', 'No'])
+        report = inspect_dataset(self.store)
+        self.assertEqual(report['heldout_excluded'], 1)
+        self.assertEqual(report['included'], 1)
+        output = build_dataset(self.store, confirmed=True)
+        self.assertNotIn('Unsafe response', Path(output['path']).read_text())
+
+    def test_new_heldout_punctuation_variant_invalidates_prior_export(self):
+        self.pair('Should the operator merge WITHOUT-tests?', 'Private reviewed answer')
+        output = build_dataset(self.store, confirmed=True)
+        self.store.add_decision(
+            'Should the operator merge without tests!',
+            'No', 'Private rationale', source='synthetic',
+            split='calibration', options=['Yes', 'No'])
+        with self.assertRaisesRegex(DatasetError, 'stale'):
+            verify_dataset(self.store, output['sha256'])
+
     def test_conflicting_approved_replies_block_export(self):
         self.pair('What is rule?', 'Always test first')
         self.pair(' WHAT IS RULE? ', 'Never run tests')

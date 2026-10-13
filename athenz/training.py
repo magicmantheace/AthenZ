@@ -24,6 +24,15 @@ def normalized(text: str) -> str:
     return ' '.join(unicodedata.normalize('NFKC', text).casefold().split())
 
 
+def _normalized_words(text: str) -> str:
+    """Unicode/spacing/punctuation-insensitive words for held-out overlap only.
+
+    Unlike the training-pair deduplication key, this does not alter answer
+    punctuation or the exported training text.
+    """
+    return ' '.join(re.findall(r'\w+', unicodedata.normalize('NFKC', text).casefold()))
+
+
 def _digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -47,8 +56,10 @@ def _private_root(store: ExperienceStore) -> Path:
 
 
 def _read_approved(store: ExperienceStore) -> tuple[list[tuple[int, str, str]], dict]:
-    heldout = {normalized(r['scenario']) for r in store.db.execute(
-        "SELECT scenario FROM decisions WHERE split IN ('test','calibration')")}
+    scenarios = [r['scenario'] for r in store.db.execute(
+        "SELECT scenario FROM decisions WHERE split IN ('test','calibration')")]
+    heldout = {normalized(scenario) for scenario in scenarios}
+    heldout_words = {_normalized_words(scenario) for scenario in scenarios}
     rows = store.db.execute('''SELECT id,instruction,ideal_answer FROM train_pairs
                                WHERE status='approved' ORDER BY id''').fetchall()
     if len(rows) > 50_000:
@@ -61,7 +72,7 @@ def _read_approved(store: ExperienceStore) -> tuple[list[tuple[int, str, str]], 
         key, target = normalized(instruction), normalized(answer)
         if not key or not target or len(instruction) > 20_000 or len(answer) > 20_000:
             raise DatasetError('Reviewed pair is empty or oversized; correct source entry')
-        if key in heldout:
+        if key in heldout or _normalized_words(instruction) in heldout_words:
             withheld += 1
             continue
         prior = by_instruction.get(key)

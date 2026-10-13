@@ -61,3 +61,14 @@ avoid claiming meaningful semantic similarity from a few shared words.
 The guard is deliberately conservative and cannot detect paraphrases,
 reorganized facts or memorization in model weights. No raw held-out content is
 included in the error message or exported comparison report.
+
+## SFT held-out punctuation variants
+
+The private training dataset exporter also excludes approved instruction pairs
+whose normalized Unicode word sequence exactly matches a calibration/test
+scenario, even when spacing, punctuation, capitalization or hyphenation differ.
+This affects only the held-out exclusion check, not exported text or ordinary
+approved-pair conflict/deduplication semantics. Newly added held-out scenarios
+invalidate an already exported dataset when its reviewable source selection
+changes. The check is still lexical: true paraphrases and leaked facts in
+otherwise different answers remain a v0.7 benchmark-data quality risk.
