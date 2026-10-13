@@ -290,3 +290,21 @@ Always verify the hosted workflow's final conclusion before claiming a Windows
 full-suite or packaged-build pass. Actual owner-machine Docker and GGUF model
 conversion are not verified by these synthetic hosted tests. No private owner
 databases, code checkouts, or model weights are copied into the Git repository.
+
+### 2026-10-13 — No-follow source snapshots and checkpoint-fenced Docker tests
+
+Source `f98513308e66530528591c7ac80ef1fd80cf6a64` is tested by public
+pinned-source workflows, with `main` unchanged. Python 3.12 and 3.13 hosted
+Linux suites ran 520 synthetic unittests each (four skips, zero failures)
+and Windows unsigned portable package and GUI startup passed in
+[38421476754](https://github.com/magicmantheace/AthenZ/actions/runs/38421476754).
+
+Full Linux/Windows Python 3.11:
+[38421489833](https://github.com/magicmantheace/AthenZ/actions/runs/38421489833).
+Actual Docker isolation:
+[38421636859](https://github.com/magicmantheace/AthenZ/actions/runs/38421636859).
+These independent runs must be checked for a completed success conclusion;
+queued/in-progress jobs never establish acceptance. Tests contain synthetic
+Git repositories and deliberately fake owner profiles only. No credentials,
+private memories, model weights or owner documents are committed or copied
+to public runners.

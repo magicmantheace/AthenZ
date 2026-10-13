@@ -400,3 +400,27 @@ owner profile data or unattended coding action implied by this milestone.
 - [ ] Latest full hosted Linux/Windows Python 3.11 and unsigned Windows
   portable packaging conclusions, actual owner-machine Docker, RTX 3060 CUDA,
   accessibility and independently attested model identity remain separate.
+
+### 2026-10-13 — Source-stable Docker observation and exact Windows file hashes
+
+- [x] Use bounded no-follow source file handles with inode/link-count/mtime
+  checks for staging and rechecking Docker snapshots; refuse tracked names
+  with control characters without exposing private source filenames.
+- [x] After Docker returns, independently re-copy and compare the current
+  tracked checkout to the original tested snapshot. Never report successful
+  tests for changed working files; return fixed integrity error status 125.
+- [x] Require the owner checkpoint revision and applied proposal to match
+  when per-task Docker evidence is recorded; multi-stage verification also
+  rechecks the sequence state and revision before persisting evidence.
+- [x] Use raw-newline UTF-8 hashes for baseline and applied multi-stage code
+  review and syntax checks; synthetic CRLF cases preserve exact approved bytes
+  even on hosted Windows Git configurations.
+- [x] Public compatibility CI for source
+  `f98513308e66530528591c7ac80ef1fd80cf6a64`: Linux Python 3.12/3.13
+  passed **520 tests** each (four skipped each, no failures) and Windows
+  unsigned portable application executable/GUI smoke passed in
+  [38421476754](https://github.com/magicmantheace/AthenZ/actions/runs/38421476754).
+- [ ] The full Linux/Windows Python 3.11 regression, actual Docker isolation,
+  owner-device training/inference and adversarial same-user filesystem races
+  require separate evidence; source snapshot hashes are not cryptographic
+  independent attestation.

@@ -356,3 +356,21 @@ The pause **does not terminate a CPU merge already running**; it prevents
 that old worker from adopting its output. Resume requires deliberate owner
 review and allocates a new numbered attempt without overwriting prior output.
 No model is promoted or deployed by these commands.
+
+## Source-stable supervised Docker test evidence (October 2026)
+
+The owner-invoked Docker unittest runner now pins more than the checked-out
+commit. Its disposable, restricted snapshot reads regular files using bounded,
+no-follow file handles where supported and verifies inode, hard-link count,
+size and modification metadata both during copying and after testing. Tracked
+filenames containing control characters are rejected without echoing them.
+After Docker completes, AthenZ separately rechecks the **current** tracked
+source checkout against the previously tested snapshot, and refuses a green
+result if the source or copied bytes changed. A concurrent owner checkpoint
+revision also prevents old test evidence from being attached to a superseded
+coding task (both direct and multi-stage modes).
+
+The multi-stage code review also preserves literal CRLF/LF source bytes in its
+SHA-256 fingerprints, so Windows newline translation cannot silently turn a
+reviewed patch into different bytes. This does not turn Docker or a same-user
+filesystem into a trusted security boundary, and is not third-party attestation.
