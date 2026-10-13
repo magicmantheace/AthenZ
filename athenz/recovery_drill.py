@@ -63,9 +63,14 @@ def rehearse_sqlite_backup(home: Path | None, identifier: str, *,
         raise RecoveryDrillError('Backup exceeds the bounded rehearsal size')
 
     if scratch_root is not None:
-        parent = Path(scratch_root).expanduser().absolute()
-        if parent.is_symlink() or not parent.is_dir() or parent.resolve() != parent:
+        supplied = Path(scratch_root).expanduser().absolute()
+        if not supplied.is_dir() or any(
+                p.is_symlink() or getattr(p, 'is_junction', lambda: False)()
+                for p in (supplied, *supplied.parents)):
             raise RecoveryDrillError('Scratch parent must be a real existing directory')
+        # Windows short and long path spellings may reference the same
+        # directory; canonicalize before inspecting Git and profile ancestry.
+        parent = supplied.resolve(strict=True)
     else:
         parent = Path(tempfile.gettempdir()).resolve()
     # Avoid leaking snapshot contents into Git. Refuse the scratch ancestor if

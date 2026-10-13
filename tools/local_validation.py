@@ -77,6 +77,12 @@ def _select_focused_tests(root: Path, selected: tuple[str, ...]) -> tuple[str, .
     return tuple(selected)
 
 
+def _virtual_display_available(mode: str) -> bool:
+    """Check display support without mocking process-global os.name."""
+    return (mode == 'available' and os.name == 'posix' and
+            shutil.which('xvfb-run') is not None)
+
+
 def validate(root: Path, *, mode: str = 'policy', timeout: int = 180,
              tests: tuple[str, ...] = ()) -> dict:
     """Run explicitly selected local checks; return statuses, not source output."""
@@ -110,8 +116,7 @@ def validate(root: Path, *, mode: str = 'policy', timeout: int = 180,
     results = []
     # Provisional testing is NOT a release gate. Prefer a disposable Xvfb
     # display so GUI tests run even if DISPLAY points to a defunct server.
-    virtual_display = (mode == 'available' and os.name == 'posix' and
-                       shutil.which('xvfb-run') is not None)
+    virtual_display = _virtual_display_available(mode)
     with TemporaryDirectory(prefix='athenz-local-validate-') as tmp:
         private = Path(tmp) / 'private'
         private.mkdir()

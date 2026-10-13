@@ -152,9 +152,7 @@ class LocalValidationTests(unittest.TestCase):
     def test_available_mode_uses_xvfb_to_exercise_headless_gui(self):
         with patch('tools.source_inventory.inspect_sources', return_value={
                 'complete': False, 'missing': []}), \
-             patch('tools.local_validation.os.name', 'posix'), \
-             patch('tools.local_validation.os.environ', {'PATH': '/usr/bin'}), \
-             patch('tools.local_validation.shutil.which', return_value='/usr/bin/xvfb-run'), \
+             patch('tools.local_validation._virtual_display_available', return_value=True), \
              patch('tools.local_validation.subprocess.run',
                    return_value=subprocess.CompletedProcess([], 0)) as run:
             result = validate(self.root, mode='available')

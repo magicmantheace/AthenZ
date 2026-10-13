@@ -47,9 +47,21 @@ def inspect_adapter(store: ExperienceStore, run_id: str) -> dict:
         obj = json.loads(config.read_text('utf-8'))
     except (UnicodeError, ValueError) as exc:
         raise AdapterError('Invalid adapter JSON') from exc
-    if obj.get('peft_type') != 'LORA' or obj.get('base_model_name_or_path') not in (
-        recipe['base']['path'], None, ''):
+    config_base = obj.get('base_model_name_or_path')
+    if obj.get('peft_type') != 'LORA':
         raise AdapterError('Adapter configuration disagrees with reviewed LoRA base')
+    if config_base not in (None, ''):
+        # Windows may expose an existing directory through short (8.3) and
+        # long native spellings. Demand the SAME filesystem object, not
+        # matching lexical strings or weakened case-only comparisons.
+        if not isinstance(config_base, str):
+            raise AdapterError('Adapter configuration disagrees with reviewed LoRA base')
+        try:
+            same_base = Path(config_base).samefile(Path(recipe['base']['path']))
+        except (OSError, ValueError):
+            same_base = False
+        if not same_base:
+            raise AdapterError('Adapter configuration disagrees with reviewed LoRA base')
     weights_sha = file_sha256(weights)
     if weights_sha != run['state'].get('adapter_sha256'):
         raise AdapterError('Adapter weights changed since completed training run')
