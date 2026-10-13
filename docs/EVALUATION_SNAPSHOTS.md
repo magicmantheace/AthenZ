@@ -252,3 +252,14 @@ reference context, verifies all answer options are unambiguous, and rejects
 changed approval snapshots detected during inspection. Only boolean status
 flags are returned; the prompts, answers and reference evidence never leave
 the owner's private profile. This remains lexical rather than semantic proof.
+
+### Batch-wide held-out privacy and integrity preflight
+
+Before the first local model-generation call, decision evaluation now
+assembles and checks the entire selected held-out batch using the same exact
+private Twin prompt as real scoring. A leaked reference scenario, rationale
+or ambiguous choice found in any later item blocks **all** model requests,
+instead of discovering the leak after earlier cases have already been sent.
+The reference and selected-case fingerprints are rechecked before starting
+inference and still checked during and after each case. This extra local-only
+read work is deliberate and does not constitute semantic paraphrase detection.

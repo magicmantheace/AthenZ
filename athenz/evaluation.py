@@ -179,6 +179,16 @@ def evaluate_decisions(store: IdentityStore, model, *, split: str = 'test',
     cases = _heldout_rows(store, split, limit)
     heldout_sha = _fingerprint(cases)
     reference_sha = _reference_fingerprint(store)
+    # Batch-wide dry run: reject a leak or ambiguous option in any selected
+    # future case BEFORE the very first owner-held-out scenario is transmitted
+    # to a local model. No result or private prompt is persisted by this pass.
+    for item in cases:
+        _heldout_prompt_messages(store, item, seed)
+        if _reference_fingerprint(store) != reference_sha:
+            raise ValueError('Approved reference evidence changed during evaluation preflight')
+    if (_fingerprint(_heldout_rows(store, split, limit)) != heldout_sha or
+            _reference_fingerprint(store) != reference_sha):
+        raise ValueError('Approved evaluation evidence changed during preflight')
     report = {'split': split, 'seed': seed, 'model': getattr(model, 'model', 'unknown'),
               'total': len(cases), 'correct': 0, 'accuracy': None,
               'accuracy_interval_95': None, 'invalid_predictions': 0,

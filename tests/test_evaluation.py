@@ -80,6 +80,35 @@ class DecisionEvaluationTests(unittest.TestCase):
         self.assertNotIn('Private gold rationale', str(messages))
         self.assertEqual(messages[3]['role'], 'user')
 
+    def test_later_heldout_reference_leak_prevents_all_model_calls(self):
+        self.store.add_decision('Could we archive the reviewed sample?', 'Yes',
+            'Synthetic first rationale', source='synthetic', options=['Yes','No'],
+            split='test', approved=True)
+        self.store.add_decision('Should this second secret prompt remain private?', 'Yes',
+            'Synthetic private second rationale', source='synthetic', options=['Yes','No'],
+            split='test', approved=True)
+        self.store.propose('style', 'Should this second secret prompt remain private?',
+                           source='owner', approved=True)
+        model = Stub()
+        with self.assertRaisesRegex(ValueError, 'contaminated'):
+            evaluate_decisions(self.store, model, split='test')
+        self.assertEqual(model.calls, [])
+
+    def test_later_invalid_choices_prevent_earlier_model_calls(self):
+        first = self.store.add_decision('Could we safely rebuild the local sample?', 'Yes',
+            'Synthetic first reason', source='synthetic', options=['Yes','No'],
+            split='test', approved=True)
+        second = self.store.add_decision('Should a malformed question be evaluated?', 'Yes',
+            'Synthetic second reason', source='synthetic', options=['Yes','No'],
+            split='test', approved=True)
+        self.store.db.execute('UPDATE decisions SET options_json=? WHERE id=?',
+                              (json.dumps(['Yes','YES ', 'No']), second))
+        self.store.db.commit()
+        model = Stub()
+        with self.assertRaisesRegex(ValueError, 'invalid held-out options'):
+            evaluate_decisions(self.store, model, split='test')
+        self.assertEqual(model.calls, [])
+
     def test_approved_training_decision_overlap_blocks_heldout_scoring(self):
         self.store.add_decision('Should we deploy code without verification?',
             'No', 'A training reason', source='synthetic', approved=True)
