@@ -33,3 +33,15 @@ use system resources; AthenZ does not install or pull model weights and does
 not attempt to forcibly terminate a server computation at its timeout.
 The GPU readiness inventory and the local Ollama version probe remain
 separate user actions.
+
+## Synthetic instruction-following signal
+
+The probe reports `inference_observed` separately from
+`synthetic_instruction_followed`. The latter becomes true only when the
+assistant message is exactly `READY` after trimming whitespace. Other
+nonempty replies still demonstrate local text generation but do not pass
+this deliberately narrow fixed-instruction check. Ollama replies with an
+explicit error, an incomplete `done: false` marker, or a non-assistant
+role are treated as invalid rather than counting as successful inference.
+No reply text is logged or returned; an instruction-following success is
+not representative model-quality, safety, acceleration or identity proof.

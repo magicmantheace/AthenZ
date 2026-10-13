@@ -43,7 +43,8 @@ def check_inference(*, model: str, confirmed: bool = False, timeout_seconds: int
             'quality_validated': False, 'personal_data_collected': False,
             'conversation_saved': False, 'reply_returned': False,
             'prompts_are_synthetic': True, 'request_scope': 'loopback-only',
-            'model_downloaded': False, 'background_work_enabled': False}
+            'model_downloaded': False, 'background_work_enabled': False,
+            'synthetic_instruction_followed': False}
     payload = {
         'model': client.model,
         'messages': [{'role': 'user', 'content': _PROMPT}],
@@ -63,18 +64,23 @@ def check_inference(*, model: str, confirmed: bool = False, timeout_seconds: int
             data = json.loads(raw)
         except (ValueError, UnicodeDecodeError):
             return {**base, 'status': 'invalid-local-reply'}
-        if not isinstance(data, dict):
+        if not isinstance(data, dict) or data.get('error') or data.get('done') is False:
             return {**base, 'status': 'invalid-local-reply'}
         message = data.get('message')
         content = message.get('content') if isinstance(message, dict) else None
-        if not isinstance(content, str) or not 1 <= len(content.strip()) <= 4000:
+        if (not isinstance(content, str) or not 1 <= len(content.strip()) <= 4000
+                or (message.get('role') not in ('assistant', None))):
             return {**base, 'status': 'invalid-local-reply'}
+        # Instruction-following is an extra descriptive signal, NOT a quality
+        # or identity certification. Never expose the raw local model reply.
+        followed = content.strip() == 'READY'
         elapsed = max(0.0, time.monotonic() - started)
     except Exception:
         # Exceptions can contain model names, response bodies, local paths and
         # other diagnostics. No raw error reaches stdout or the caller.
         return base
     return {**base, 'status': 'local-text-generated', 'inference_observed': True,
+            'synthetic_instruction_followed': followed,
             'elapsed_bucket': ('under-5s' if elapsed < 5 else '5-20s' if elapsed < 20 else 'over-20s')}
 
 

@@ -67,6 +67,36 @@ class InferenceReadinessTests(TestCase):
             self.assertEqual(result['status'], 'invalid-local-reply')
             self.assertNotIn('X' * 8, json.dumps(result))
 
+    def test_synthetic_instruction_following_is_reported_separately(self):
+        for answer, expected in [('READY', True), ('I am ready!', False),
+                                 ('WRONG PRIVATE ANSWER', False)]:
+            with self.subTest(answer=answer):
+                payload = json.dumps({'done': True, 'message': {
+                    'role': 'assistant', 'content': answer}}).encode('utf-8')
+                with mock.patch('athenz.chat.safe_local_open',
+                                return_value=_Reply(payload)):
+                    report = check_inference(model='synthetic:1', confirmed=True)
+                self.assertTrue(report['inference_observed'])
+                self.assertEqual(report['synthetic_instruction_followed'], expected)
+                self.assertNotIn(answer, json.dumps(report))
+                self.assertFalse(report['quality_validated'])
+
+    def test_explicit_ollama_errors_or_incomplete_replies_refused(self):
+        bad = [
+            {'done': False, 'message': {'content': 'READY'}},
+            {'error': 'PRIVATE INTERNAL ERROR', 'message': {'content': 'READY'}},
+            {'done': True, 'message': {'role': 'user', 'content': 'READY'}},
+        ]
+        for body in bad:
+            with self.subTest(body=str(body)):
+                with mock.patch('athenz.chat.safe_local_open',
+                                return_value=_Reply(json.dumps(body).encode('utf-8'))):
+                    report = check_inference(model='synthetic:1', confirmed=True)
+                self.assertFalse(report['inference_observed'])
+                self.assertFalse(report['synthetic_instruction_followed'])
+                self.assertEqual(report['status'], 'invalid-local-reply')
+                self.assertNotIn('PRIVATE', json.dumps(report))
+
     def test_network_exception_is_not_exposed(self):
         with mock.patch('athenz.chat.safe_local_open', side_effect=URLError('SECRET-PATH-PRIVATE-TOKEN')):
             report = check_inference(model='synthetic:1', confirmed=True)
