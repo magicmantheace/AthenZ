@@ -235,39 +235,16 @@ class Worker:
         for change in changes:
             if digest(read_exact(allowed_file(workspace, change['path']))) != change['after_sha256']:
                 raise WorktreeError('Changed file no longer matches reviewed proposal')
-        # A stable, non-user-controlled Docker name permits forced cleanup even
-        # after Python kills a timed-out docker CLI process.
-        container_name = 'athenz-test-' + uuid.uuid4().hex[:20]
-        argv = ['docker', 'run', '--name', container_name, '--rm', '--pull', 'never',
-                '--network', 'none', '--ipc', 'none', '--cap-drop', 'ALL',
-                '--security-opt', 'no-new-privileges', '--read-only', '--pids-limit', '64',
-                '--memory', '512m', '--cpus', '1', '--user', '65534:65534',
-                '--mount', f'type=bind,src={workspace},dst=/src,readonly',
-                '--tmpfs', '/tmp:rw,noexec,nosuid,size=64m',
-                '--workdir', '/src', '--env', 'PYTHONDONTWRITEBYTECODE=1',
-                image, 'python', '-m', 'unittest', 'discover', '-s', 'tests', '-v']
-        try:
-            result = subprocess.run(argv, capture_output=True, text=True, check=False,
-                                    timeout=max(10, min(timeout, 180)))
-            returncode = result.returncode
-            output = (result.stdout + '\n' + result.stderr)[-8000:]
-        except subprocess.TimeoutExpired:
-            # A killed Docker *client* does not guarantee the daemon killed its
-            # container. Attempt a bounded forced removal by its random name.
-            # NEVER report test success if cleanup could not be confirmed.
-            returncode = 124
-            try:
-                removed = subprocess.run(['docker', 'rm', '-f', container_name],
-                                         capture_output=True, text=True, check=False,
-                                         timeout=20)
-                if removed.returncode == 0:
-                    output = 'Container test timed out; forced removal confirmed'
-                else:
-                    output = ('Container test timed out; Docker cleanup UNCONFIRMED. '
-                              'Inspect Docker manually for ' + container_name)
-            except (OSError, subprocess.TimeoutExpired):
-                output = ('Container test timed out; Docker cleanup UNCONFIRMED. '
-                          'Inspect Docker manually for ' + container_name)
+        # Never bind the live worktree (which contains Git metadata and can
+        # contain unrelated, untracked private files) into a test container.
+        # Use the same bounded, secret-filtered tracked-file snapshot runner as
+        # full-task verification. It checks the copied tree both before and
+        # after execution, and handles forced Docker cleanup on timeout.
+        from .verification import isolated_unittest
+        observed = isolated_unittest(workspace, image=image,
+                                     home=self.store.home, timeout=timeout)
+        returncode = observed['returncode']
+        output = observed['output']
         fingerprint = digest(''.join(x['path'] + x['after_sha256'] for x in changes))
         test_id = self.store.record_test(pid, 'docker:isolated unittest', returncode,
                                          output, fingerprint,

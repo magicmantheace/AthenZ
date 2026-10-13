@@ -116,3 +116,15 @@ file through a tracked or selected alias. These are only filename and local
 filesystem controls, **not** content scanners or proof that code cannot
 contain an embedded credential. No automatic tests, commits or pushes are
 unlocked by these checks.
+
+### Bounded copy instead of live worktree Docker mount
+
+Owner-triggered per-task container testing now reuses AthenZ's stricter,
+digest-pinned, snapshot-based Docker runner. It copies only Git-tracked,
+regular, non-hardlinked and non-sensitive source files into a disposable
+read-only snapshot, verifies the copied bytes before **and after** container
+execution, and then removes the snapshot. It never bind-mounts the live
+worktree, which could contain untracked private files and Git metadata.
+The test result remains a local observation rather than a cryptographic
+attestation; Docker and filesystem isolation require owner-device verification.
+The runner still uses a fixed unittest command with no host fallback.

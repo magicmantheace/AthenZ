@@ -135,6 +135,36 @@ class WorktreeTests(unittest.TestCase):
         self.assertIsInstance(review['test_run_id'], int)
         self.worker.cleanup('bundle2', discard_changes=True)
 
+    def test_container_uses_snapshot_not_live_worktree_or_untracked_secrets(self):
+        self.worker.begin('snapshot-safe', self.repo, 'Test isolated code')
+        self.worker.propose('snapshot-safe', StubModel(), ['calc.py', 'util.py'])
+        self.worker.apply('snapshot-safe')
+        worktree = Path(self.worker.resume('snapshot-safe')['state']['workspace'])
+        (worktree / 'private-untracked.txt').write_text('PRIVATE-NOT-FOR-DOCKER')
+        real_run = subprocess.run
+        inspected = {'calls': 0}
+        def docker_snapshot(argv, *args, **kwargs):
+            if argv[0] == 'docker':
+                inspected['calls'] += 1
+                mount = argv[argv.index('--mount') + 1]
+                source = Path(mount.split('src=')[1].split(',dst=')[0])
+                self.assertNotEqual(source, worktree)
+                self.assertFalse((source / '.git').exists())
+                self.assertFalse((source / 'private-untracked.txt').exists())
+                self.assertTrue((source / 'calc.py').is_file())
+                self.assertTrue((source / 'util.py').is_file())
+                return subprocess.CompletedProcess(argv, 0, 'Synthetic test passed', '')
+            return real_run(argv, *args, **kwargs)
+        with mock.patch('athenz.worker.shutil.which', return_value='/usr/bin/docker'), \
+             mock.patch('athenz.worker.subprocess.run', side_effect=docker_snapshot):
+            result = self.worker.container_tests('snapshot-safe',
+                image='python@sha256:' + 'a' * 64)
+        self.assertEqual(result['returncode'], 0)
+        self.assertEqual(inspected['calls'], 1)
+        self.assertNotIn('PRIVATE-NOT-FOR-DOCKER', result['output'])
+        (worktree / 'private-untracked.txt').unlink()
+        self.worker.cleanup('snapshot-safe', discard_changes=True)
+
     def test_container_timeout_attempts_forced_cleanup_and_never_reports_success(self):
         self.worker.begin('timeout', self.repo, 'Fix synthetic arithmetic')
         self.worker.propose('timeout', StubModel(), ['calc.py', 'util.py'])
