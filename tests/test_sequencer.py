@@ -64,6 +64,9 @@ class SequenceTests(unittest.TestCase):
 
     def test_crlf_source_and_crlf_patch_preserve_exact_review_hashes(self):
         self.controller.cancel('task')
+        # Force bytes to survive Git checkout even on Windows runners with
+        # a global core.autocrlf preference.
+        git(self.repo, 'config', 'core.autocrlf', 'false')
         (self.repo / 'calc.py').write_bytes(
             b'def add(a,b):\r\n    return a - b\r\n')
         git(self.repo, 'add', 'calc.py')
