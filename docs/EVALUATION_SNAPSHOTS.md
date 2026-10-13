@@ -228,3 +228,10 @@ text, expected choices or gold rationales are included in this report.
 It does not verify a specific training dataset, detect semantic paraphrases
 or attest to model accuracy. It is a preparation step only; `compare --confirm`
 and any later reviewed model change remain separate explicit user decisions.
+
+Readiness inspection now validates that each selected approved held-out case
+has a decodable 2–6-choice list containing the stored gold answer. It reports
+only the boolean `heldout_options_valid` without printing any option text or
+private answer. Malformed cases are reported as not ready before local model
+requests are made. This remains a limited preparatory check, not a promise
+that real model inference or the full contamination gate will succeed.

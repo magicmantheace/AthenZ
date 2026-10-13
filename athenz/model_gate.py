@@ -189,12 +189,25 @@ def inspect_heldout_readiness(store: ExperienceStore, *, split: str = 'calibrati
     # deliberately leaves actual semantic leakage and full model verification
     # for the protected evaluator at inference time.
     sufficient = len(rows) >= min_cases
+    options_valid = True
+    for row in rows:
+        try:
+            choices = json.loads(row[3])
+        except (ValueError, TypeError):
+            options_valid = False
+            break
+        if (not isinstance(choices, list) or not 2 <= len(choices) <= 6
+                or any(not isinstance(choice, str) for choice in choices)
+                or row[2] not in choices):
+            options_valid = False
+            break
     return {'schema': 1, 'split': split, 'limit': limit,
             'minimum_cases': min_cases, 'approved_cases': total,
             'selected_cases': len(rows),
             'split_independence_check': 'lexical-pass' if clean else 'lexical-overlap',
             'minimum_cases_met': sufficient,
-            'ready_for_owner_review': clean and sufficient,
+            'heldout_options_valid': options_valid,
+            'ready_for_owner_review': clean and sufficient and options_valid,
             'model_called': False, 'dataset_verified': False,
             'private_text_returned': False, 'promotion': 'not-authorized'}
 

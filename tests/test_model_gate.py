@@ -301,6 +301,33 @@ class EvaluationGateTests(unittest.TestCase):
         self.assertEqual((parsed.command, parsed.split, parsed.limit,
                           parsed.min_cases), ('inspect-heldout', 'test', 25, 5))
 
+    def test_readiness_refuses_malformed_choices_without_model_calls(self):
+        first_id = self.store.db.execute(
+            "SELECT id FROM decisions WHERE split='calibration' ORDER BY id LIMIT 1"
+        ).fetchone()[0]
+        self.store.db.execute(
+            'UPDATE decisions SET options_json=? WHERE id=?',
+            ('not-json', first_id))
+        self.store.db.commit()
+        report = inspect_heldout_readiness(self.store)
+        self.assertFalse(report['heldout_options_valid'])
+        self.assertFalse(report['ready_for_owner_review'])
+        self.assertNotIn('not-json', str(report))
+
+    def test_readiness_cli_prints_only_sanitized_counts(self):
+        from athenz.train_cli import main
+        with mock.patch('athenz.train_cli.OllamaClient',
+                        side_effect=AssertionError('should not open local model')), \
+             mock.patch('builtins.print') as display:
+            main(['--home', str(self.store.home), 'inspect-heldout',
+                  '--min-cases', '10'])
+        obj = json.loads(display.call_args.args[0])
+        self.assertEqual(obj['selected_cases'], 12)
+        self.assertTrue(obj['heldout_options_valid'])
+        self.assertFalse(obj['model_called'])
+        self.assertFalse(obj['private_text_returned'])
+        self.assertNotIn('synthetic held-out scenario', json.dumps(obj))
+
     def test_worse_candidate_not_ready(self):
         with mock.patch('athenz.model_gate.evaluate_decisions', side_effect=self.observations(10, 8)):
             r = compare_models(self.store, Model('base'), Model('candidate'), self.sha)
