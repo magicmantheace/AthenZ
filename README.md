@@ -374,3 +374,25 @@ The multi-stage code review also preserves literal CRLF/LF source bytes in its
 SHA-256 fingerprints, so Windows newline translation cannot silently turn a
 reviewed patch into different bytes. This does not turn Docker or a same-user
 filesystem into a trusted security boundary, and is not third-party attestation.
+
+## Experimental offline voice input (v0.8 foundation)
+
+For deliberate, local speech-to-text processing of an existing WAV file, the
+installed `athenz-voice` CLI supports these separate actions:
+
+```powershell
+athenz-voice inspect C:\\PrivateAudio\\note.wav
+athenz-voice transcribe C:\\PrivateAudio\\note.wav --model C:\\PrivateModels\\whisper-ct2 --confirm
+# Optional: --language fr|es|de (English is the default)
+# Optional: --device cuda (CPU is the default)
+```
+
+This is **not microphone capture, a voice assistant or continuous listening**.
+Transcription requires an already installed, trusted local faster-whisper
+CTranslate2 model and optional Python package; AthenZ never downloads it.
+It returns the private transcript only to the owner-invoked CLI, without
+creating memory, chat messages, training data or model-changing actions.
+The file is size/duration bounded, and its content hash is checked before
+and after inference so a changed recording invalidates the transcript.
+Supported input: 16-bit PCM WAV, up to 90 seconds. Never redirect transcript
+output into public logs. See [voice privacy and limitations](docs/VOICE.md).

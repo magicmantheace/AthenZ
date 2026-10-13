@@ -424,3 +424,23 @@ owner profile data or unattended coding action implied by this milestone.
   owner-device training/inference and adversarial same-user filesystem races
   require separate evidence; source snapshot hashes are not cryptographic
   independent attestation.
+
+### 2026-10-13 — Optional private voice input (v0.8 first implementation)
+
+- [x] New `athenz-voice inspect` returns only bounded metadata for a local
+  owner-selected 16-bit PCM WAV. It never loads inference packages, opens the
+  microphone, creates a background process or stores personal audio.
+- [x] New `athenz-voice transcribe --model <existing-local-ct2-dir> --confirm`
+  invokes optional faster-whisper with `local_files_only=True` and strict
+  absolute-directory validation; CPU default, explicit CUDA option and English,
+  French, Spanish, German language selection.
+- [x] Bound file size/duration, local model size, segment counts and transcript
+  output. Input WAV hashes are checked with bounded no-follow file handles
+  before/after inference, and raw model/backend exceptions are sanitized.
+- [x] The transcript is owner-visible output only, with no automatic storage,
+  Agent/Twin chat action, learning consent, wake word, audio upload or model
+  promotion. Synthetic WAV and fake speech-model tests exercise privacy gates.
+- [ ] Actual installed faster-whisper/CTranslate2 accuracy and CUDA acceleration
+  on the owner PC, native microphone/TTS UI, accessibility and connected
+  local voice workflow require separate explicit acceptance. These tests
+  are not a privacy or hardware audit of external model libraries.

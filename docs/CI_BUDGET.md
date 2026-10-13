@@ -308,3 +308,18 @@ queued/in-progress jobs never establish acceptance. Tests contain synthetic
 Git repositories and deliberately fake owner profiles only. No credentials,
 private memories, model weights or owner documents are committed or copied
 to public runners.
+
+### 2026-10-13 — Offline voice CLI acceptance
+
+Development source `72d64897f648fa73891cdf819c9c1827bdd9f55c` adds an
+entirely opt-in, file-based offline speech-to-text CLI and synthetic local
+speech tests. The optional native `faster-whisper` package is never imported
+in ordinary chat, desktop startup or model-readiness probes. Audio, model
+weights, transcribed words and owner profile files are not uploaded to public
+Actions. Public [Python 3.12/3.13 and Windows portable CI
+38439435495](https://github.com/magicmantheace/AthenZ/actions/runs/38439435495)
+and [full Linux/Windows Python 3.11 run
+38439447654](https://github.com/magicmantheace/AthenZ/actions/runs/38439447654)
+check the pinned source using synthetic generated PCM WAV and mocked model
+segments. Run conclusions must be verified independently; native hardware
+voice support and runtime package compatibility remain unverified.
