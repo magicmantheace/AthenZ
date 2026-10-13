@@ -289,7 +289,7 @@ def save_report(store: ExperienceStore, comparison: dict, *, confirmed: bool = F
             if (model_digest(comparison['baseline']) != comparison['baseline_digest']
                     or model_digest(comparison['candidate']) != comparison['candidate_digest']):
                 raise BenchmarkError('Evaluated local model digest changed before saving')
-        except (RoutingError, TypeError, ValueError) as exc:
+        except (RoutingError, TypeError, KeyError) as exc:
             raise BenchmarkError('Evaluated local model inventory unavailable before saving') from exc
     root = _private_root(store) / 'evaluations'
     if root.is_symlink():

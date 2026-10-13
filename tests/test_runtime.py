@@ -76,12 +76,12 @@ class RoutingTests(unittest.TestCase):
                   'case_ids_sha256': hashlib.sha256(json.dumps(ids).encode()).hexdigest(),
                   'heldout_fingerprint': _heldout_fingerprint(self.s, 'calibration', 12),
                   'reference_fingerprint': _reference_fingerprint(self.s)}
-        self.report_sha = save_report(self.s, report, confirmed=True)['sha256']
-        self.probe = FakeModel()
+        self.seen = {'base': BASE, 'candidate-a': CANDIDATE}
         self.digest_patcher = mock.patch('athenz.runtime.model_digest', side_effect=self._digest)
         self.digest_patcher.start()
         self.addCleanup(self.digest_patcher.stop)
-        self.seen = {'base': BASE, 'candidate-a': CANDIDATE}
+        self.report_sha = save_report(self.s, report, confirmed=True)['sha256']
+        self.probe = FakeModel()
 
     def _digest(self, tag, **kwargs):
         if tag not in self.seen:
