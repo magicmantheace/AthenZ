@@ -90,3 +90,14 @@ For databases without prior history events, the command returns an empty list
 without creating files. The status command remains the source of the current
 per-check owner observation; use history to review how those observations
 changed over time.
+
+### Current observation vs latest history consistency
+
+Status reads now reject a stored current release-acceptance outcome that
+contradicts the most recent locally recorded history outcome for that check.
+An older record that predates the optional history table remains readable;
+when a history event exists it must agree with the current owner report.
+These are local consistency checks, **not** signatures or proof against
+forgery by someone with full write access to the SQLite database. A genuine
+owner change requires the existing explicit `record --confirm` step and
+appends a new local event.

@@ -120,6 +120,18 @@ def status_report(home: Path | None) -> dict:
             if history_exists:
                 history_count = int(con.execute(
                     'SELECT COUNT(*) FROM observation_history').fetchone()[0])
+                # Older profiles can have unanchored observations from before
+                # local history was introduced. But after a history exists for
+                # a check, its latest owner-reported outcome must agree with
+                # the currently recorded value. A changed current row must not
+                # silently erase a previous failure from owner-visible status.
+                for check_id, state, _ in rows:
+                    latest = con.execute(
+                        'SELECT status,source FROM observation_history '
+                        'WHERE check_id=? ORDER BY id DESC LIMIT 1',
+                        (check_id,)).fetchone()
+                    if latest is not None and latest != (state, 'owner-reported'):
+                        raise ReadinessError('Private acceptance observation history disagrees with current status')
         except sqlite3.DatabaseError as exc:
             raise ReadinessError('Private acceptance database is invalid') from exc
         finally:

@@ -73,6 +73,31 @@ class ReleaseReadinessTests(unittest.TestCase):
         with self.assertRaisesRegex(ReadinessError, 'observations are invalid'):
             status_report(self.home)
 
+    def test_current_status_cannot_disagree_with_latest_owner_history(self):
+        import sqlite3
+        key = CHECKS[0][0]
+        record(self.home, key, 'failed', confirmed=True)
+        with closing(sqlite3.connect(self.home / 'release-acceptance.sqlite3')) as db, db:
+            db.execute('UPDATE observations SET status=? WHERE check_id=?',
+                       ('passed', key))
+        with self.assertRaisesRegex(ReadinessError, 'history disagrees'):
+            status_report(self.home)
+        # A subsequent explicit owner record becomes a new, reviewable event.
+        record(self.home, key, 'passed', confirmed=True)
+        report = status_report(self.home)
+        self.assertEqual(report['requirements'][0]['status'], 'passed')
+        self.assertEqual(report['owner_observation_history_events'], 2)
+
+    def test_legacy_unanchored_acceptance_row_remains_readable(self):
+        import sqlite3
+        key = CHECKS[0][0]
+        record(self.home, key, 'blocked', confirmed=True)
+        with closing(sqlite3.connect(self.home / 'release-acceptance.sqlite3')) as db, db:
+            db.execute('DELETE FROM observation_history WHERE check_id=?', (key,))
+        report = status_report(self.home)
+        self.assertEqual(report['requirements'][0]['status'], 'blocked')
+        self.assertEqual(report['owner_observation_history_events'], 0)
+
     def test_history_is_read_only_bounded_and_keeps_status_order(self):
         check = CHECKS[0][0]
         self.assertEqual(history_report(self.home), {
