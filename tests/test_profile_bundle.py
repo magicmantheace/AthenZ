@@ -5,7 +5,8 @@ import unittest
 
 from athenz.backup import BackupError
 from athenz.experience import ExperienceStore
-from athenz.profile_bundle import create_bundle, verify_bundle, _secure_name
+from athenz.profile_bundle import (create_bundle, verify_bundle,
+                                   inspect_bundle_scope, _secure_name)
 
 
 class ProfileBundleTests(unittest.TestCase):
@@ -76,6 +77,43 @@ class ProfileBundleTests(unittest.TestCase):
                 sidecar.write_text(json.dumps(marker))
                 with self.assertRaises(BackupError):
                     verify_bundle(self.home, b['id'])
+
+    def test_readonly_scope_inspection_reports_counts_not_private_names(self):
+        import json
+        report = inspect_bundle_scope(self.home)
+        self.assertTrue(report['profile_found'])
+        self.assertEqual(report['selected_artifact_count'], 2)
+        self.assertTrue(report['sqlite_present'])
+        self.assertTrue(report['plaintext_warning'])
+        self.assertFalse(report['reads_file_contents'])
+        self.assertFalse(report['creates_files'])
+        self.assertNotIn('synthetic.jsonl', json.dumps(report))
+        self.assertNotIn('untrusted.py', json.dumps(report))
+        self.assertIn('release-acceptance.sqlite3', report['excludes'])
+
+    def test_missing_profile_inspection_does_not_create_files(self):
+        missing = self.root / 'never-created-private-profile'
+        report = inspect_bundle_scope(missing)
+        self.assertFalse(report['profile_found'])
+        self.assertEqual(report['estimated_plaintext_total_bytes'], 0)
+        self.assertFalse(missing.exists())
+        import json
+        from unittest.mock import patch
+        from athenz.profile_bundle import main
+        with patch('builtins.print') as display:
+            main(['--home', str(missing), 'inspect'])
+        result = json.loads(display.call_args.args[0])
+        self.assertFalse(result['profile_found'])
+        self.assertFalse(missing.exists())
+
+    def test_scope_inspection_rejects_symlinked_selected_file(self):
+        path = self.home / 'datasets' / 'outside-link'
+        try:
+            path.symlink_to(self.home / 'identity.sqlite3')
+        except (OSError, NotImplementedError):
+            self.skipTest('No symlink privilege on runner')
+        with self.assertRaisesRegex(BackupError, 'Symlinked'):
+            inspect_bundle_scope(self.home)
 
     def test_tamper_archive_detected(self):
         bundle = create_bundle(self.home, confirmed=True)

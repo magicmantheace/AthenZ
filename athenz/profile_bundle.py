@@ -131,6 +131,53 @@ def _add(zf: zipfile.ZipFile, name: str, source: Path, known_size: int) -> dict:
     return {'path': name, 'sha256': sha.hexdigest(), 'bytes': length}
 
 
+def inspect_bundle_scope(home: Path | None = None) -> dict:
+    """Read-only plaintext backup preflight; zero private bytes returned."""
+    if home is None:
+        home = Path(os.environ.get('ATHENZ_HOME', str(Path.home() / '.athenz')))
+    candidate = Path(home).expanduser()
+    if candidate.is_symlink():
+        raise BackupError('Private profile root must not be a symlink')
+    root = candidate.resolve()
+    if any((parent / '.git').exists() or (parent / '.git').is_symlink()
+           for parent in (root, *root.parents)):
+        raise BackupError('Private bundles cannot be saved under a Git checkout')
+    report = {'schema': 1, 'profile_found': False, 'selected_artifact_count': 0,
+              'selected_artifact_bytes': 0, 'sqlite_present': False,
+              'sqlite_bytes_observed': 0, 'estimated_plaintext_total_bytes': 0,
+              'scope': 'sqlite-plus-selected-private-artifacts',
+              'excludes': ['worktrees', 'snapshots', 'backups', 'bundles',
+                           'ollama-installed-models', 'release-acceptance.sqlite3'],
+              'encrypted': False, 'plaintext_warning': True,
+              'reads_file_contents': False, 'creates_files': False}
+    if not root.exists():
+        return report
+    if not root.is_dir():
+        raise BackupError('Private profile root is not a directory')
+    if os.name != 'nt' and root.stat().st_mode & 0o077:
+        raise BackupError('Private profile must not be accessible to group or other users')
+    chosen = _collect(root)
+    db = root / 'identity.sqlite3'
+    if db.is_symlink() or (db.exists() and not db.is_file()):
+        raise BackupError('Unsafe private identity database')
+    size = 0
+    present = db.is_file()
+    if present:
+        st = db.stat()
+        if not stat.S_ISREG(st.st_mode) or st.st_nlink != 1:
+            raise BackupError('Unsafe private identity database')
+        size = st.st_size
+    artifacts = sum(row[2] for row in chosen)
+    if size > MAX_SINGLE or size + artifacts > MAX_TOTAL:
+        raise BackupError('Private profile exceeds bounded bundle limits')
+    return {**report, 'profile_found': True,
+            'selected_artifact_count': len(chosen),
+            'selected_artifact_bytes': artifacts,
+            'sqlite_present': present,
+            'sqlite_bytes_observed': size,
+            'estimated_plaintext_total_bytes': size + artifacts}
+
+
 def create_bundle(home: Path | None = None, *, confirmed: bool = False) -> dict:
     """Snapshot SQLite and explicitly allowed artifacts to a private ZIP (plaintext)."""
     if not confirmed:
@@ -393,6 +440,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument('--home', type=Path, default=None)
     subs = parser.add_subparsers(dest='command', required=True)
     x = subs.add_parser('create'); x.add_argument('--confirm', action='store_true')
+    subs.add_parser('inspect')
     subs.add_parser('list')
     x = subs.add_parser('verify'); x.add_argument('id')
     x = subs.add_parser('restore-new'); x.add_argument('id')
@@ -401,6 +449,8 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if args.command == 'create':
         result = create_bundle(args.home, confirmed=args.confirm)
+    elif args.command == 'inspect':
+        result = inspect_bundle_scope(args.home)
     elif args.command == 'verify':
         result = verify_bundle(args.home, args.id)
     elif args.command == 'list':

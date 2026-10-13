@@ -71,3 +71,20 @@ sort error. Synthetic tests deliberately modify an archive and update its
 than treating a rehashed archive as trusted proof. Bundle integrity is still
 SHA-256 identity, not a signature, encryption or authentication against an
 attacker with full access to both archive and sidecar.
+
+### Read-only plaintext backup scope inspection
+
+```powershell
+athenz-profile inspect
+```
+
+Without creating a database, archive or any file, this shows only aggregate
+counts and observed byte sizes of the explicit private artifact scope. It
+excludes worktrees, existing backups, releases, Ollama model files and the
+separate `release-acceptance.sqlite3` database (old hardware acceptance
+observations must not silently transfer to a new recovered installation).
+It refuses symlinked, hard-linked, unsafe or oversize selected files and
+unsafe private profile roots. The size is only an estimate: the eventual
+SQLite consistent snapshot and selected files may change before the user
+explicitly runs `create --confirm`. The ZIP remains **plaintext**; the
+inspection grants no authorization to create, restore or share it.
