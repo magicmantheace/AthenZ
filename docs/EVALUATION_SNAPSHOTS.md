@@ -98,3 +98,13 @@ sample, case-dependence and possible repeated evaluation invalidate automatic
 significance or promotion claims. Eligibility remains owner review only and
 still requires a strictly positive observed accuracy gain; model selection
 and training remain separate, explicitly approved operations.
+
+## Aggregate comparison persistence integrity
+
+New-format paired benchmark counts, rates, gains and exact paired statistics
+are rechecked at report persistence and adapter-review read time. A report
+with inconsistent, nonfinite, contradictory or partial aggregate metadata
+is refused even when its byte checksum is valid. Historical aggregate-only
+reports that predate these fields remain readable but are not independently
+attested or statistically verified by these checks. A SHA-256 checksum guards
+byte identity, not provenance, independent model execution or lineage.

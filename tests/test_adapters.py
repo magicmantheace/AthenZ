@@ -74,6 +74,20 @@ class AdaptersTests(unittest.TestCase):
                 with self.assertRaisesRegex(AdapterError, 'not eligible'):
                     _read_review(self.store, sha)
 
+    def test_old_report_with_tampered_aggregate_is_rejected(self):
+        legacy_sha = self.report()
+        directory = self.store.home / 'datasets' / 'evaluations'
+        original = json.loads((directory / ('eval-' + legacy_sha + '.json')).read_text())
+        manipulated = {**original, 'baseline_correct': 5,
+                       'candidate_correct': 9, 'baseline_accuracy': 0.8,
+                       'candidate_accuracy': 0.75}
+        payload = (json.dumps(manipulated, sort_keys=True,
+                              separators=(',', ':')) + '\n').encode()
+        sha = hashlib.sha256(payload).hexdigest()
+        (directory / ('eval-' + sha + '.json')).write_bytes(payload)
+        with self.assertRaisesRegex(AdapterError, 'metadata is inconsistent'):
+            _read_review(self.store, sha)
+
     def test_completed_run_registration_requires_explicit_confirmation(self):
         run=self.completed()
         with self.assertRaisesRegex(AdapterError,'confirm'):

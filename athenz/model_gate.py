@@ -69,6 +69,59 @@ def _paired_one_sided_probability(improvements: int, regressions: int) -> float:
     return sum(comb(n, k) for k in range(improvements, n + 1)) / (1 << n)
 
 
+def _consistent_comparison_metadata(report: dict) -> bool:
+    """Validate self-consistency of optional aggregate comparison evidence.
+
+    Legacy metadata-only reports predate per-model counts and are not
+    independently attested by this function. Newly produced comparisons
+    include all aggregate fields and are checked before persistence/review.
+    """
+    count = report.get('cases')
+    if type(count) is not int or count <= 0:
+        return False
+    names = ('baseline_correct', 'candidate_correct', 'baseline_accuracy',
+             'candidate_accuracy')
+    present = [key in report for key in names]
+    if not any(present):
+        # Older owner-reviewed records omit these statistics altogether.
+        return not any(key in report for key in (
+            'paired_improved', 'paired_regressed', 'paired_unchanged',
+            'paired_one_sided_p_value'))
+    if not all(present):
+        return False
+    baseline, candidate = report['baseline_correct'], report['candidate_correct']
+    base_rate, candidate_rate = report['baseline_accuracy'], report['candidate_accuracy']
+    gain = report.get('accuracy_gain')
+    if (type(baseline) is not int or type(candidate) is not int or
+            not 0 <= baseline <= count or not 0 <= candidate <= count or
+            type(base_rate) not in (int, float) or
+            type(candidate_rate) not in (int, float) or
+            not isfinite(base_rate) or not isfinite(candidate_rate) or
+            abs(base_rate - baseline / count) > 1e-9 or
+            abs(candidate_rate - candidate / count) > 1e-9 or
+            type(gain) not in (int, float) or not isfinite(gain) or
+            abs(gain - round((candidate - baseline) / count, 8)) > 1e-8 or
+            report.get('eligible_for_review') is not (candidate > baseline)):
+        return False
+    paired = ('paired_improved', 'paired_regressed',
+              'paired_unchanged', 'paired_one_sided_p_value')
+    if any(name in report for name in paired):
+        if not all(name in report for name in paired):
+            return False
+        improved, regressed, unchanged = [report[k] for k in paired[:3]]
+        p = report['paired_one_sided_p_value']
+        if (any(type(x) is not int or x < 0 for x in
+                (improved, regressed, unchanged)) or
+                improved + regressed + unchanged != count or
+                improved - regressed != candidate - baseline or
+                type(p) not in (int, float) or not isfinite(p) or
+                not 0 <= p <= 1 or
+                abs(p - round(_paired_one_sided_probability(
+                    improved, regressed), 10)) > 1e-9):
+            return False
+    return True
+
+
 def _heldout_fingerprint(store: ExperienceStore, split: str, limit: int) -> str:
     """Bound held-out case content and provenance for approval-gate checks.
 
@@ -179,6 +232,8 @@ def save_report(store: ExperienceStore, comparison: dict, *, confirmed: bool = F
     gain = comparison.get('accuracy_gain')
     if type(gain) not in (int, float) or not isfinite(gain) or not -1 <= gain <= 1:
         raise BenchmarkError('Invalid observed accuracy gain')
+    if not _consistent_comparison_metadata(comparison):
+        raise BenchmarkError('Evaluation comparison metadata is inconsistent')
     # The comparison is an earlier observation. Consent or model evidence may
     # change between evaluation and its owner-confirmed disk persistence.
     split, count = comparison.get('split'), comparison.get('cases')
@@ -194,7 +249,11 @@ def save_report(store: ExperienceStore, comparison: dict, *, confirmed: bool = F
     root.mkdir(mode=0o700, exist_ok=True)
     if root.resolve() != root:
         raise DatasetError('Unsafe evaluation directory')
-    payload = (json.dumps(comparison, sort_keys=True, separators=(',', ':')) + '\n').encode('utf-8')
+    try:
+        payload = (json.dumps(comparison, sort_keys=True, allow_nan=False,
+                              separators=(',', ':')) + '\n').encode('utf-8')
+    except (ValueError, TypeError) as exc:
+        raise BenchmarkError('Evaluation report must contain finite JSON data') from exc
     fingerprint = hashlib.sha256(payload).hexdigest()
     target = root / f'eval-{fingerprint}.json'
     if target.is_symlink():

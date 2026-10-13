@@ -145,6 +145,23 @@ class EvaluationGateTests(unittest.TestCase):
         self.assertEqual(report['paired_regressed'], 0)
         self.assertEqual(report['paired_one_sided_p_value'], 1.0)
 
+    def test_saved_comparison_rejects_inconsistent_calculated_evidence(self):
+        with mock.patch('athenz.model_gate.evaluate_decisions',
+                        side_effect=self.observations()):
+            valid = compare_models(self.store, Model('base'), Model('candidate'), self.sha)
+        cases = [
+            {**valid, 'baseline_correct': 11},
+            {**valid, 'candidate_accuracy': 0.999},
+            {**valid, 'accuracy_gain': 0.2},
+            {**valid, 'paired_regressed': valid['paired_regressed'] + 1},
+            {**valid, 'paired_one_sided_p_value': 0.000001},
+            {**valid, 'paired_unchanged': -1},
+        ]
+        for modified in cases:
+            with self.subTest(fields=[key for key in modified if modified[key] != valid.get(key)]):
+                with self.assertRaisesRegex(BenchmarkError, 'inconsistent'):
+                    save_report(self.store, modified, confirmed=True)
+
     def test_worse_candidate_not_ready(self):
         with mock.patch('athenz.model_gate.evaluate_decisions', side_effect=self.observations(10, 8)):
             r = compare_models(self.store, Model('base'), Model('candidate'), self.sha)

@@ -14,7 +14,7 @@ import re
 
 from .experience import ExperienceStore
 from .finetune import TrainingError, file_sha256, verify_run
-from .model_gate import _heldout_fingerprint
+from .model_gate import _consistent_comparison_metadata, _heldout_fingerprint
 from .evaluation import _reference_fingerprint
 from .training import DatasetError, _private_root
 
@@ -129,6 +129,8 @@ def _read_review(store: ExperienceStore, sha: str) -> dict:
             or not isfinite(report['accuracy_gain'])
             or not 0 < report['accuracy_gain'] <= 1):
         raise AdapterError('Evaluation report is not eligible for owner review')
+    if not _consistent_comparison_metadata(report):
+        raise AdapterError('Evaluation report metadata is inconsistent')
     if _heldout_fingerprint(store, report['split'], report['cases']) != report.get('heldout_fingerprint'):
         raise AdapterError('Held-out evaluation evidence is stale')
     if report.get('reference_fingerprint') != _reference_fingerprint(store):
