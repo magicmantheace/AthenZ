@@ -151,6 +151,17 @@ class HardwareCLITests(unittest.TestCase):
         self.assertIn('12288 MiB', details['note'])
         self.assertFalse(r['hardware_validated'])
 
+    def test_cli_wires_explicit_cuda_consent_without_running_probe(self):
+        from athenz.preflight import main
+        expected = {'schema': 1, 'checks': [], 'hardware_validated': False}
+        with patch('athenz.preflight.installation_report',
+                   return_value=expected) as report, \
+             patch('builtins.print') as display:
+            main(['--probe-cuda', '--confirm'])
+        report.assert_called_once_with(probe_ollama=False, probe_gpu=False,
+                                       probe_cuda=True, confirmed=True)
+        self.assertEqual(json.loads(display.call_args.args[0]), expected)
+
     def test_requires_confirmation_via_readiness_entrypoint(self):
         from athenz.preflight import installation_report
         with self.assertRaisesRegex(HardwareProbeError, 'confirm'):
