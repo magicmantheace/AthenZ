@@ -20,6 +20,7 @@ from .runtime import (status as runtime_status, activate as activate_runtime,
                       rollback as rollback_runtime, checked_active_tag,
                       inspect_rollback_readiness, rehearse_rollback)
 from .ollama_import import prepare_import, verify_import, import_local
+from .model_lineage import inspect_model_lineage
 from .conversion import (prepare_conversion, execute_conversion,
                          pause_conversion, conversion_status)
 
@@ -151,6 +152,11 @@ def parser() -> argparse.ArgumentParser:
     x.add_argument('--candidate', required=True, help='Registered candidate tag: athenz/name:tag')
     x.add_argument('--ack-merge', action='store_true', help='I independently merged the exact approved adapter and base')
     x.add_argument('--confirm', action='store_true')
+    x = sub.add_parser('lineage-audit',
+                       help='Read-only private evidence chain; optional Ollama inventory, never inference')
+    x.add_argument('run_id')
+    x.add_argument('--check-ollama', action='store_true',
+                   help='Verify candidate tag digest using fixed local loopback inventory')
     x = sub.add_parser('verify-import', help='Verify private GGUF/adapter lineage and optional Ollama tag')
     x.add_argument('run_id')
     x.add_argument('--check-ollama', action='store_true')
@@ -254,6 +260,9 @@ def main(argv: list[str] | None = None) -> None:
         elif args.command == 'prepare-import':
             result = prepare_import(store, args.run_id, args.gguf, candidate_tag=args.candidate,
                                     confirmed=args.confirm, acknowledge_merge=args.ack_merge)
+        elif args.command == 'lineage-audit':
+            result = inspect_model_lineage(
+                store, args.run_id, check_ollama=args.check_ollama)
         elif args.command == 'verify-import':
             result = verify_import(store, args.run_id, verify_ollama=args.check_ollama)
         elif args.command == 'import-local':
