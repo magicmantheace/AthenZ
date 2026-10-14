@@ -3,6 +3,7 @@ import hashlib
 import json
 from pathlib import Path
 import tempfile
+import traceback
 import unittest
 from unittest import mock
 
@@ -11,8 +12,8 @@ from athenz.evaluation import _reference_fingerprint
 from athenz.experience import ExperienceStore
 from athenz.finetune import create_run, execute_run
 from athenz.learning_session import (
-    LearningSessionError, start_session, session_status, link_completed_run,
-    link_comparison, close_session, cancel_session)
+    LearningSessionError, start_session, session_status, record_baseline,
+    link_completed_run, link_comparison, close_session, cancel_session)
 from athenz.model_gate import (
     _approved_heldout_population, _heldout_fingerprint, save_report)
 from athenz.training import build_dataset
@@ -46,7 +47,28 @@ class LearningSessionTests(unittest.TestCase):
     def begin(self):
         return start_session(self.store, self.dataset, limit=12, confirmed=True)
 
+    def baselined(self, session):
+        class LocalSyntheticModel:
+            model = 'base-local'
+            calls = []
+            def generate(self, messages, **kwargs):
+                self.calls.append((messages, kwargs))
+                return json.dumps({'choice_letter': 'A'})
+        model = LocalSyntheticModel()
+        with mock.patch('athenz.runtime.model_digest', return_value='a'*64):
+            result = record_baseline(
+                self.store, session['session_id'], model,
+                expected_revision=session['revision'], confirmed=True)
+        self.assertEqual(result['stage'], 'baselined')
+        self.assertTrue(result['baseline_observed'])
+        self.assertEqual(len(model.calls), 12)
+        self.assertFalse(result['baseline_model_installed_verified'])
+        self.baseline_count = self.store.get_checkpoint(
+            'learning_session_' + session['session_id'])['state']['baseline_correct']
+        return result
+
     def trained(self, session):
+        session = self.baselined(session)
         run = create_run(self.store, self.dataset, self.base, confirmed=True)
         def backend(recipe, folder, dataset, *, resume):
             adapter = folder / 'adapter'
@@ -65,7 +87,9 @@ class LearningSessionTests(unittest.TestCase):
         ids = [r[0] for r in self.store.db.execute(
             "SELECT id FROM decisions WHERE status='approved' AND split='calibration' ORDER BY id")]
         total, population = _approved_heldout_population(self.store, 'calibration')
-        base, cand = (5,9) if better else (9,5)
+        base = self.baseline_count
+        cand = base + 1 if better else base - 1
+        self.assertTrue(0 <= cand <= 12)
         report = {
             'schema':2, 'dataset_sha256':self.dataset, 'split':'calibration',
             'seed':42, 'cases':12, 'requested_case_limit':12,
@@ -75,10 +99,10 @@ class LearningSessionTests(unittest.TestCase):
             'baseline_correct':base, 'candidate_correct':cand,
             'baseline_accuracy':base/12, 'candidate_accuracy':cand/12,
             'accuracy_gain':round((cand-base)/12,8),
-            'paired_improved':4 if better else 0,
-            'paired_regressed':0 if better else 4,
-            'paired_unchanged':8,
-            'paired_one_sided_p_value':0.0625 if better else 1.0,
+            'paired_improved':1 if better else 0,
+            'paired_regressed':0 if better else 1,
+            'paired_unchanged':11,
+            'paired_one_sided_p_value':0.5 if better else 1.0,
             'chance_expected':0.5, 'eligible_for_review':better,
             'case_ids_sha256':hashlib.sha256(json.dumps(ids).encode()).hexdigest(),
             'heldout_fingerprint':_heldout_fingerprint(self.store, 'calibration', 12),
@@ -100,6 +124,123 @@ class LearningSessionTests(unittest.TestCase):
         self.assertNotIn(self.dataset, json.dumps(session))
         self.assertFalse(self.store.get_checkpoint('ollama_runtime'))
 
+    def test_training_link_requires_baseline_and_old_revision_cannot_replay(self):
+        session = self.begin()
+        with self.assertRaisesRegex(LearningSessionError, 'awaiting'):
+            link_completed_run(self.store, session['session_id'], '0'*24,
+                               expected_revision=session['revision'], confirmed=True)
+        baseline = self.baselined(session)
+        with self.assertRaisesRegex(LearningSessionError, 'revision changed'):
+            class Model:
+                model = 'base-local'
+            record_baseline(self.store, session['session_id'], Model(),
+                            expected_revision=session['revision'], confirmed=True)
+        self.assertEqual(baseline['revision'], 2)
+        self.assertEqual(session_status(self.store, session['session_id'])['stage'],
+                         'baselined')
+
+    def test_baseline_is_explicit_and_never_sends_protected_gold(self):
+        session = self.begin()
+        class Fake:
+            model = 'base-local'
+            def __init__(self):
+                self.calls = []
+            def generate(self, messages, **kwargs):
+                self.calls.append((messages, kwargs))
+                return json.dumps({'choice_letter':'A'})
+        model = Fake()
+        with mock.patch('athenz.runtime.model_digest', return_value='a'*64):
+            with self.assertRaisesRegex(LearningSessionError, 'confirm'):
+                record_baseline(self.store, session['session_id'], model,
+                                expected_revision=session['revision'])
+            self.assertEqual(model.calls, [])
+            result = record_baseline(self.store, session['session_id'], model,
+                                     expected_revision=session['revision'], confirmed=True)
+        self.assertTrue(result['evidence_current'])
+        self.assertFalse(result['training_started'])
+        self.assertFalse(result['promotion_authorized'])
+        self.assertEqual(len(model.calls), 12)
+        self.assertNotIn('SYNTHETIC GOLD', str(model.calls))
+        self.assertTrue(all(call[1].get('seed') == 42 and
+                            call[1].get('temperature') == 0.0
+                            for call in model.calls))
+        self.assertNotIn('base-local', json.dumps(result))
+
+    def test_backend_failure_never_prints_protected_case_in_traceback(self):
+        session = self.begin()
+        class FailingLocalModel:
+            model = 'base-local'
+            def generate(self, messages, **kwargs):
+                raise RuntimeError('PRIVATE_HELDOUT_PROMPT_DO_NOT_ECHO')
+        with mock.patch('athenz.runtime.model_digest', return_value='a'*64):
+            with self.assertRaisesRegex(LearningSessionError, 'Baseline evaluation failed') as caught:
+                record_baseline(self.store, session['session_id'], FailingLocalModel(),
+                                expected_revision=session['revision'], confirmed=True)
+        self.assertNotIn('PRIVATE_HELDOUT_PROMPT_DO_NOT_ECHO',
+                         ''.join(traceback.format_exception(caught.exception)))
+        self.assertEqual(session_status(self.store, session['session_id'])['stage'],
+                         'prepared')
+
+    def test_baseline_changed_model_digest_never_advances(self):
+        session = self.begin()
+        class Fake:
+            model = 'base-local'
+            def generate(self, messages, **kwargs):
+                return json.dumps({'choice_letter': 'A'})
+        with mock.patch('athenz.runtime.model_digest',
+                        side_effect=['a'*64, 'b'*64]):
+            with self.assertRaisesRegex(LearningSessionError, 'digest changed'):
+                record_baseline(self.store, session['session_id'], Fake(),
+                                expected_revision=session['revision'], confirmed=True)
+        self.assertEqual(session_status(self.store, session['session_id'])['stage'],
+                         'prepared')
+        self.assertEqual(session_status(self.store, session['session_id'])['revision'], 1)
+
+    def test_baseline_rejects_revocation_during_inference(self):
+        session = self.begin()
+        store = self.store
+        class Fake:
+            model = 'base-local'
+            def generate(self, messages, **kwargs):
+                store.set_review('train_pairs', self_pair, 'rejected')
+                return json.dumps({'choice_letter': 'A'})
+        self_pair = self.pair
+        with mock.patch('athenz.runtime.model_digest', return_value='a'*64):
+            with self.assertRaisesRegex(LearningSessionError, 'Baseline evaluation evidence changed'):
+                record_baseline(self.store, session['session_id'], Fake(),
+                                expected_revision=session['revision'], confirmed=True)
+        self.assertEqual(session_status(self.store, session['session_id'])['stage'],
+                         'prepared')
+
+    def test_saved_comparison_must_match_pretraining_baseline(self):
+        session = self.begin()
+        trained = self.trained(session)
+        digest = self.report()
+        path = self.store.home / 'datasets' / 'evaluations' / ('eval-' + digest + '.json')
+        evidence = json.loads(path.read_text())
+        with mock.patch('athenz.learning_session._saved_report',
+                        return_value={**evidence, 'baseline_correct':
+                                      evidence['baseline_correct'] + 1}):
+            with self.assertRaisesRegex(LearningSessionError,
+                                        'different or outdated model evidence'):
+                link_comparison(self.store, session['session_id'], digest,
+                                expected_revision=trained['revision'], confirmed=True)
+        self.assertEqual(session_status(self.store, session['session_id'])['stage'],
+                         'trained')
+
+    def test_baseline_state_is_offline_and_detects_heldout_mutation(self):
+        session = self.baselined(self.begin())
+        with mock.patch('athenz.runtime.model_digest',
+                        side_effect=AssertionError('No Ollama on status')):
+            self.assertTrue(session_status(self.store, session['session_id'])['evidence_current'])
+        row_id = self.store.db.execute(
+            "SELECT id FROM decisions WHERE split='calibration' ORDER BY id LIMIT 1").fetchone()[0]
+        with self.store.db:
+            self.store.db.execute(
+                'UPDATE decisions SET rationale=? WHERE id=?',
+                ('synthetically-changed-protected-evidence', row_id))
+        self.assertFalse(session_status(self.store, session['session_id'])['evidence_current'])
+
     def test_positive_and_negative_reports_both_recorded(self):
         for better in (True, False):
             session = self.begin()
@@ -118,6 +259,37 @@ class LearningSessionTests(unittest.TestCase):
             self.assertTrue(closed['evidence_current'])
             self.assertFalse(closed['promotion_authorized'])
             self.assertFalse(self.store.get_checkpoint('ollama_runtime'))
+
+    def test_schema_one_legacy_sessions_still_link_training_and_comparisons(self):
+        started = self.begin()
+        recent = self.trained(started)
+        key = 'learning_session_' + started['session_id']
+        checkpoint = self.store.get_checkpoint(key)
+        run_id = checkpoint['state']['run_id']
+        # Model a genuine historical schema-one prepared journal persisted
+        # before baseline observations were introduced.
+        old_state = {k: v for k, v in checkpoint['state'].items()
+                     if not k.startswith('baseline_') and k not in (
+                         'run_id', 'candidate_tag', 'adapter_sha256')}
+        old_state.update(schema=1, stage='prepared')
+        self.store.checkpoint(key, checkpoint['task'], old_state,
+                              expected_revision=checkpoint['revision'])
+        old_prepared = session_status(self.store, started['session_id'])
+        self.assertEqual(old_prepared['stage'], 'prepared')
+        self.assertFalse(old_prepared['baseline_observed'])
+        linked = link_completed_run(
+            self.store, started['session_id'], run_id,
+            expected_revision=old_prepared['revision'], confirmed=True)
+        self.assertEqual(linked['stage'], 'trained')
+        evaluated = link_comparison(
+            self.store, started['session_id'], self.report(),
+            expected_revision=linked['revision'], confirmed=True)
+        self.assertTrue(evaluated['evidence_current'])
+        closed = close_session(
+            self.store, started['session_id'],
+            expected_revision=evaluated['revision'], confirmed=True)
+        self.assertEqual(closed['stage'], 'closed')
+        self.assertTrue(closed['evidence_current'])
 
     def test_cancel_and_revision_fencing(self):
         session = self.begin()
@@ -138,16 +310,16 @@ class LearningSessionTests(unittest.TestCase):
                                expected_revision=cancelled['revision'], confirmed=True)
 
     def test_review_revocation_fences_training_link(self):
-        session = self.begin()
+        session = self.baselined(self.begin())
         self.store.set_review('train_pairs', self.pair, 'rejected')
         self.assertFalse(session_status(self.store, session['session_id'])['evidence_current'])
         with self.assertRaisesRegex(LearningSessionError, 'Source evidence changed'):
             link_completed_run(self.store, session['session_id'], '0'*24,
                                expected_revision=session['revision'], confirmed=True)
-        self.assertEqual(session_status(self.store, session['session_id'])['revision'], 1)
+        self.assertEqual(session_status(self.store, session['session_id'])['revision'], 2)
 
     def test_unregistered_run_cannot_be_attached(self):
-        session = self.begin()
+        session = self.baselined(self.begin())
         run = create_run(self.store, self.dataset, self.base, confirmed=True)
         with self.assertRaisesRegex(LearningSessionError, 'not verifiable'):
             link_completed_run(self.store, session['session_id'], run['run_id'],
