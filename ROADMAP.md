@@ -604,3 +604,16 @@ owner profile data or unattended coding action implied by this milestone.
   of candidate availability and without mutating model routing.
 - [ ] Validate this workflow against real owner-reviewed held-out examples
   and installed models on the target Windows/RTX 3060 environment.
+
+### 2026-10-14 — transactional local rollback rehearsal
+
+- [x] Owner-confirmed `runtime-rehearse-rollback` verifies pinned baseline
+  tag, performs harmless local smoke inference, checks model/revision drift,
+  and tests the **same** SQLite checkpoint CAS used by real rollback inside
+  a savepoint that is always reversed.
+- [x] Synthetic regressions check that active runtime pointer and events
+  remain unchanged, including failed staged writes, invalid baseline,
+  disappearing candidate and locally raised private inference errors.
+- [ ] Repeat rehearsal on the owner's PC against a genuinely installed local
+  baseline; CI only uses synthetic model responses and disposable SQLite
+  fixtures, not actual Windows/Ollama/GPU behavior.
