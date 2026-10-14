@@ -96,6 +96,50 @@ def _reject_overlapping_decision_splits(store: IdentityStore) -> None:
                 by_token.setdefault(token, set()).add(index)
 
 
+def _reject_repeated_heldout_scenarios(store: IdentityStore, split: str, limit: int) -> None:
+    """Refuse correlated held-out cases masquerading as independent trials.
+
+    Reviews can approve punctuation variants within one split. A benchmark
+    that scores those variants separately can exaggerate its sample size and
+    understate uncertainty. Exact normalized matches, plus long distinctive
+    >=88%-Jaccard token-set near-matches, are rejected before any inference.
+    Do not apply this to training records, where repetition is a separate
+    dataset-quality concern. This is lexical, not semantic deduplication.
+    """
+    if split not in ('calibration', 'test') or type(limit) is not int or not 1 <= limit <= 1000:
+        raise ValueError('Invalid held-out independence scope')
+    seen: set[str] = set()
+    prior: list[frozenset[str]] = []
+    by_token: dict[str, set[int]] = {}
+    rows = store.db.execute(
+        "SELECT scenario FROM decisions WHERE status='approved' AND split=? "
+        "ORDER BY id LIMIT ?", (split, limit))
+    for row in rows:
+        scenario = row['scenario']
+        if not isinstance(scenario, str):
+            raise ValueError('Held-out scenarios must be valid text')
+        key = _scenario_split_key(scenario)
+        if not key or key in seen:
+            raise ValueError('Repeated held-out decision scenarios require owner review')
+        seen.add(key)
+        tokens = frozenset(key.split())
+        if len(tokens) < 8 or sum(map(len, tokens)) < 48:
+            continue
+        candidates: set[int] = set()
+        for token in tokens:
+            if len(token) >= 5:
+                candidates.update(by_token.get(token, ()))
+        for candidate_id in candidates:
+            earlier = prior[candidate_id]
+            if 100 * len(tokens & earlier) >= 88 * len(tokens | earlier):
+                raise ValueError('Repeated held-out decision scenarios require owner review')
+        index = len(prior)
+        prior.append(tokens)
+        for token in tokens:
+            if len(token) >= 5:
+                by_token.setdefault(token, set()).add(index)
+
+
 def _fingerprint(rows) -> str:
     """Digest deterministic private evidence without including its contents."""
     payload = json.dumps(rows, sort_keys=True, ensure_ascii=False,
@@ -176,6 +220,7 @@ def evaluate_decisions(store: IdentityStore, model, *, split: str = 'test',
             or not 0 <= seed <= 2**32 - 1):
         raise ValueError('Evaluate only held-out calibration/test splits with bounded settings')
     _reject_overlapping_decision_splits(store)
+    _reject_repeated_heldout_scenarios(store, split, limit)
     cases = _heldout_rows(store, split, limit)
     heldout_sha = _fingerprint(cases)
     reference_sha = _reference_fingerprint(store)
@@ -240,8 +285,10 @@ def evaluate_decisions(store: IdentityStore, model, *, split: str = 'test',
         chance += 1 / len(shuffled)
         report['cases'].append({'id': case_id, 'predicted': prediction or None,
                                 'expected': gold, 'correct': correct})
-    # Do not approve results if cross-split duplicates were added midflight.
+    # Neither cross-split leaks nor newly approved within-split duplicate
+    # cases may turn a previously scored sample into biased evidence.
     _reject_overlapping_decision_splits(store)
+    _reject_repeated_heldout_scenarios(store, split, limit)
     if (_fingerprint(_heldout_rows(store, split, limit)) != heldout_sha or
             _reference_fingerprint(store) != reference_sha):
         raise ValueError('Approved evaluation evidence changed during inference')
