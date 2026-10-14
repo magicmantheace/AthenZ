@@ -359,6 +359,9 @@ def save_report(store: ExperienceStore, comparison: dict, *, confirmed: bool = F
         raise BenchmarkError('Invalid held-out comparison scope')
     try:
         _reject_overlapping_decision_splits(store)
+    except ValueError as exc:
+        raise BenchmarkError('Evaluation partitions overlap; re-evaluation required') from exc
+    try:
         _reject_repeated_heldout_scenarios(store, split, count)
     except ValueError as exc:
         raise BenchmarkError('Evaluation sample independence failed; re-evaluation required') from exc
