@@ -25,7 +25,9 @@ and stores only the check ID, `passed`/`failed`/`blocked`, the literal
 identity/chat database and is never used as a model-training source.
 
 The `record` action refuses locations inside a Git checkout and symlinked
-private homes/databases. It does not save logs, hardware identifiers, GPU
+private homes/databases, hardlinked or non-regular acceptance databases, and
+existing group/world-accessible acceptance files on POSIX. It does not save
+logs, hardware identifiers, GPU
 model information, conversation content, credentials, paths, or model output.
 Keep this private file on a trusted drive; like other local state, it is not
 encrypted by AthenZ.
@@ -93,8 +95,11 @@ changed over time.
 
 ### Current observation vs latest history consistency
 
-Status reads now reject a stored current release-acceptance outcome that
+Status reads reject a stored current release-acceptance outcome that
 contradicts the most recent locally recorded history outcome for that check.
+They also refuse a missing current row when that check has history, and
+validate **all** earlier history events for unknown checks, invalid states,
+sources and timestamps rather than silently overlooking corruption.
 An older record that predates the optional history table remains readable;
 when a history event exists it must agree with the current owner report.
 These are local consistency checks, **not** signatures or proof against
