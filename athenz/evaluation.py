@@ -165,12 +165,15 @@ def _reference_fingerprint(store: IdentityStore) -> str:
         ('identity', "status='approved'"),
         ('decisions', "status='approved' AND split='train'"),
         ('episodes', "status='approved'"),
-        ('writing_samples', "status='approved'"),
+        ('writing_samples', "status='approved' AND split='train'"),
         ('episode_disputes', "1=1"),
     ):
-        # Table names and predicates are constants here, never user input.
+        # Explicit v5 writing columns preserve historical approved-training
+        # evidence digests despite v6 adding a held-out split column.
+        columns = ("id,text,source,source_ref,created_at,status"
+                   if table == 'writing_samples' else '*')
         rows = [list(row) for row in store.db.execute(
-            f'SELECT * FROM {table} WHERE {predicate} ORDER BY id')]
+            f'SELECT {columns} FROM {table} WHERE {predicate} ORDER BY id')]
         if rows or table in {'identity', 'decisions', 'episodes'}:
             evidence.append([table, rows])
     return _fingerprint(evidence)
