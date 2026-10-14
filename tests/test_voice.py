@@ -40,7 +40,7 @@ class VoiceTests(unittest.TestCase):
     def test_invalid_reference_refuses_before_native_transcription(self):
         from athenz.voice import evaluate_wav
         malformed = self.root / 'broken-reference.txt'
-        malformed.write_bytes(b'\\xff\\xfe\\x00')
+        malformed.write_bytes(bytes([0xff, 0xfe, 0x00]))
         with mock.patch('athenz.voice.transcribe_wav',
                         side_effect=AssertionError('native inference must not start')):
             with self.assertRaisesRegex(VoiceError, 'reference'):
@@ -160,7 +160,7 @@ class VoiceTests(unittest.TestCase):
                                       'model_files_stable': True}):
             with self.assertRaises(VoiceError):
                 evaluate_wav(self.wav, self.model, link, confirmed=True)
-            private.write_bytes(b'\\xff\\xfe')
+            private.write_bytes(bytes([0xff, 0xfe]))
             with self.assertRaises(VoiceError) as exc:
                 evaluate_wav(self.wav, self.model, private, confirmed=True)
             self.assertNotIn(str(private), str(exc.exception))
