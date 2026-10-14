@@ -69,8 +69,13 @@ class SequenceTests(unittest.TestCase):
         git(self.repo, 'config', 'core.autocrlf', 'false')
         (self.repo / 'calc.py').write_bytes(
             b'def add(a,b):\r\n    return a - b\r\n')
-        git(self.repo, 'add', 'calc.py')
-        git(self.repo, 'commit', '-m', 'synthetic CRLF source')
+        # On Windows a prior Git autocrlf setting can leave util.py with
+        # checkout CRLF bytes that differ from its earlier committed LF blob.
+        # After opting out of autocrlf, re-stage the entire synthetic fixture
+        # so the owner-worktree cleanliness gate is exercised honestly.
+        git(self.repo, 'add', '--all')
+        git(self.repo, 'commit', '-m', 'synthetic CRLF source and clean fixture')
+        self.assertEqual(git(self.repo, 'status', '--porcelain=v1'), '')
         self.controller.start('crlf', self.repo, 'Correct CRLF arithmetic', [['calc.py']])
         class CrLfModel:
             def generate(self, messages, **kwargs):
