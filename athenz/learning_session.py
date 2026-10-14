@@ -296,9 +296,11 @@ def record_baseline(store: ExperienceStore, session_id: str, model, *,
             raise LearningSessionError('Baseline evaluation evidence changed or is incomplete')
     except LearningSessionError:
         raise
-    except Exception as exc:
+    except Exception:
         # Local model backends can include private prompts in exceptions.
-        raise LearningSessionError('Baseline evaluation failed; review local evidence') from exc
+        # Suppress chained tracebacks: CLI exceptions must never print that
+        # backend message or echo the held-out content it may contain.
+        raise LearningSessionError('Baseline evaluation failed; review local evidence') from None
     return _transition(store, session_id, expected_revision, 'baselined', {
         'baseline_tag': tag, 'baseline_digest': pinned_digest,
         'baseline_cases': len(cases), 'baseline_correct': observations['correct'],
