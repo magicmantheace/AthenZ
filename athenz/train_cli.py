@@ -9,8 +9,9 @@ from .experience import ExperienceStore
 from .training import build_dataset, delete_dataset, inspect_dataset, verify_dataset
 from .model_gate import compare_models, save_report, inspect_heldout_readiness
 from .learning_cycle import inspect_learning_cycle
-from .learning_session import (start_session, session_status, link_completed_run,
-                               link_comparison, close_session, cancel_session)
+from .learning_session import (start_session, session_status, record_baseline,
+                               link_completed_run, link_comparison, close_session,
+                               cancel_session)
 from .chat import OllamaClient
 from .finetune import create_run, describe_run, execute_run
 from .adapters import register_adapter, selection, select_for_review, rollback_selection
@@ -50,6 +51,11 @@ def parser() -> argparse.ArgumentParser:
     x.add_argument('--min-cases', type=int, default=10)
     x.add_argument('--seed', type=int, default=42)
     x.add_argument('--confirm', action='store_true')
+    x = sub.add_parser('session-baseline', help='Explicitly measure and pin pretraining held-out baseline (local inference)')
+    x.add_argument('session_id')
+    x.add_argument('--model', required=True, help='Existing installed baseline Ollama tag')
+    x.add_argument('--revision', type=int, required=True)
+    x.add_argument('--confirm', action='store_true', help='Explicit permission to send held-out prompts to local Ollama')
     x = sub.add_parser('session-status', help='Revalidate private experiment evidence without model calls')
     x.add_argument('session_id')
     x = sub.add_parser('session-link-run', help='Record a separately completed and registered QLoRA adapter')
@@ -163,6 +169,12 @@ def main(argv: list[str] | None = None) -> None:
             result = start_session(
                 store, args.dataset_sha256, split=args.split, limit=args.limit,
                 min_cases=args.min_cases, seed=args.seed, confirmed=args.confirm)
+        elif args.command == 'session-baseline':
+            if not args.confirm:
+                raise ValueError('--confirm required before local baseline inference')
+            result = record_baseline(
+                store, args.session_id, OllamaClient(model=args.model),
+                expected_revision=args.revision, confirmed=True)
         elif args.command == 'session-status':
             result = session_status(store, args.session_id)
         elif args.command == 'session-link-run':
