@@ -527,3 +527,18 @@ owner profile data or unattended coding action implied by this milestone.
 - [ ] Test semantic/paraphrase independence and real owner-chosen scenarios
   without contaminating train/calibration/test partitions; synthetic CI
   checks do not validate true independence or improved behavior.
+
+### 2026-10-14 — v0.7 learning-cycle readiness bridge
+
+- [x] Aggregate-only `athenz-training learning-plan`: evaluates consent-reviewed
+  training source counts, calibration/test lexical distinctness, protected
+  reference cleanliness and an optional existing immutable SFT snapshot.
+- [x] Detects in-process source drift and emits a bounded owner next-step
+  category without running a model, training, exporting data, changing
+  inference routing or authorizing deployment.
+- [x] Synthetic regression coverage for empty/clean/conflicting/revoked
+  training, incomplete or modified snapshot, held-out duplication, concurrent
+  source drift, input bounds and sensitive-text exclusion.
+- [ ] Complete a real baseline → owner-reviewed examples → CUDA training →
+  candidate → held-out evaluation → explicit rollback/promotion exercise on
+  the owner's target PC. Offline readiness is **not** evidence of learning.
