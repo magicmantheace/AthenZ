@@ -356,3 +356,55 @@ pre-baseline workflow; newly created schema-two sessions enforce the new
 baseline stage. **This is a local observation, not proof that external
 training never happened before it, or that the model's per-case predictions
 cannot vary.** Real training and deployment are separate opt-in steps.
+
+## v0.7 keyed baseline reproducibility (2026-10-14)
+
+**New learning sessions use schema three.** Before QLoRA training the owner
+explicitly records a deterministic baseline. The journal now also HMACs the
+*ordered per-case baseline prediction/answer outcomes*, not only the aggregate
+number correct. A random 256-bit per-session HMAC key stays inside the
+private SQLite checkpoint; neither the key nor predictions are printed or
+put in the saved comparison. The digest is local consistency evidence, not
+an independent authentication or statistical learning claim.
+
+For an experiment with a registered candidate, compare using the exact
+session and current revision so the evaluator can recompute the keyed
+baseline fingerprint. A changed prediction sequence is rejected **even
+if overall accuracy is identical**:
+
+```sh
+athenz-training compare <approved-dataset-sha256> \
+  --baseline <previously-recorded-base-tag> \
+  --candidate <registered-candidate-tag> \
+  --split calibration --limit 100 --seed 42 \
+  --session <session-id> --revision <current-session-revision> --confirm
+```
+
+The session must be in `trained` state and its exact model names, data
+snapshot, split, sample limit, seed, revision and consent must agree both
+before and after inference. The returned **private** report SHA can then
+be linked using `session-link-report`. An unkeyed standalone comparison
+may still be run manually but will not satisfy a new schema-three
+session. Schema-one and schema-two historical sessions remain readable,
+without retroactive per-case baseline attestations. Inference is local
+and explicitly confirmed; any model retraining or promotion remains a
+separate owner action.
+
+### Read-only rollback readiness
+
+```sh
+athenz-training runtime-rollback-readiness
+athenz-training runtime-rollback-readiness --check-ollama
+```
+
+The first command only validates locally stored routing metadata. It cannot
+claim rollback is ready because it has not checked installed model bytes.
+The optional second command reads the **pinned baseline** tag's digest
+using Ollama's loopback inventory, and returns an aggregate safe/not-ready
+decision with the current runtime revision. It does **not** run inference,
+mutate routing, install/uninstall weights, or execute rollback.
+The candidate model/adapter may be missing or revoked and is intentionally
+not consulted: restoration needs the original pinned baseline, not the
+failed candidate. `runtime-rollback --revision N --confirm` remains the
+separate explicit action; a successful inventory read alone does not prove
+future rollback can never fail.

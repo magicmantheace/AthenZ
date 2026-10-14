@@ -11,11 +11,14 @@ from .model_gate import compare_models, save_report, inspect_heldout_readiness
 from .learning_cycle import inspect_learning_cycle
 from .learning_session import (start_session, session_status, record_baseline,
                                link_completed_run, link_comparison, close_session,
-                               cancel_session)
+                               cancel_session, session_comparison_context,
+                               LearningSessionError)
 from .chat import OllamaClient
 from .finetune import create_run, describe_run, execute_run
 from .adapters import register_adapter, selection, select_for_review, rollback_selection
-from .runtime import status as runtime_status, activate as activate_runtime, rollback as rollback_runtime, checked_active_tag
+from .runtime import (status as runtime_status, activate as activate_runtime,
+                      rollback as rollback_runtime, checked_active_tag,
+                      inspect_rollback_readiness)
 from .ollama_import import prepare_import, verify_import, import_local
 from .conversion import (prepare_conversion, execute_conversion,
                          pause_conversion, conversion_status)
@@ -84,6 +87,8 @@ def parser() -> argparse.ArgumentParser:
     x.add_argument('--limit', type=int, default=100)
     x.add_argument('--min-cases', type=int, default=10)
     x.add_argument('--seed', type=int, default=42)
+    x.add_argument('--session', help='Optional schema-three session ID; binds exact per-case baseline outcomes')
+    x.add_argument('--revision', type=int, help='Required current revision with --session')
     x.add_argument('--confirm', action='store_true', help='Explicit permission for local Ollama inference and report')
     x = sub.add_parser('prepare-qlora', help='Create private, immutable QLoRA recipe; NO training')
     x.add_argument('sha256', help='Approved training dataset SHA-256')
@@ -110,6 +115,9 @@ def parser() -> argparse.ArgumentParser:
     x.add_argument('--ack-lineage', action='store_true', help='I manually verified candidate uses this adapter')
     x.add_argument('--confirm', action='store_true')
     sub.add_parser('runtime-status', help='Show current AthenZ Ollama tag routing (no Ollama mutation)')
+    x = sub.add_parser('runtime-rollback-readiness', help='Read-only rollback status; optional loopback inventory check')
+    x.add_argument('--check-ollama', action='store_true',
+                   help='Read existing pinned baseline digest from local Ollama; no inference or routing change')
     x = sub.add_parser('runtime-activate', help='Route future AthenZ chat to an already installed and reviewed candidate')
     x.add_argument('--baseline', required=True, help='Evaluated, locally installed baseline tag')
     x.add_argument('--revision', type=int, required=True)
@@ -216,6 +224,8 @@ def main(argv: list[str] | None = None) -> None:
                                        lineage_acknowledged=args.ack_lineage)
         elif args.command == 'runtime-status':
             result = runtime_status(store)
+        elif args.command == 'runtime-rollback-readiness':
+            result = inspect_rollback_readiness(store, check_ollama=args.check_ollama)
         elif args.command == 'runtime-activate':
             result = activate_runtime(store, expected_revision=args.revision,
                                       baseline_tag=args.baseline, confirmed=args.confirm)
@@ -246,10 +256,39 @@ def main(argv: list[str] | None = None) -> None:
         elif args.command == 'compare':
             if not args.confirm:
                 raise ValueError('--confirm required before running local model benchmarks')
-            report = compare_models(store, OllamaClient(model=args.baseline),
-                                    OllamaClient(model=args.candidate), args.sha256,
-                                    split=args.split, limit=args.limit, seed=args.seed,
-                                    min_cases=args.min_cases)
+            if args.session is None and args.revision is not None:
+                raise ValueError('--revision may only be used with --session')
+            key, expected = (None, None)
+            if args.session is not None:
+                key, expected = session_comparison_context(
+                    store, args.session, expected_revision=args.revision,
+                    baseline=args.baseline, candidate=args.candidate,
+                    dataset_sha256=args.sha256, split=args.split,
+                    limit=args.limit, seed=args.seed)
+            try:
+                report = compare_models(
+                    store, OllamaClient(model=args.baseline),
+                    OllamaClient(model=args.candidate), args.sha256,
+                    split=args.split, limit=args.limit, seed=args.seed,
+                    min_cases=args.min_cases, baseline_outcome_key=key)
+            except Exception:
+                if args.session is not None:
+                    # Private local backend errors may contain held-out text.
+                    raise LearningSessionError(
+                        'Session comparison inference failed; check local evidence') from None
+                raise
+            if args.session is not None:
+                # Recheck revisions and consent after potentially long inference
+                # and before writing any report to the private filesystem.
+                new_key, latest = session_comparison_context(
+                    store, args.session, expected_revision=args.revision,
+                    baseline=args.baseline, candidate=args.candidate,
+                    dataset_sha256=args.sha256, split=args.split,
+                    limit=args.limit, seed=args.seed)
+                if (new_key != key or latest != expected
+                        or report.get('baseline_outcome_sha256') != expected):
+                    raise LearningSessionError(
+                        'Baseline predictions changed; comparison not saved')
             result = {**report, 'report': save_report(store, report, confirmed=True)}
         else:
             result = {'deleted': delete_dataset(store, args.sha256, confirmed=args.confirm)}

@@ -7,6 +7,7 @@ Local observed scores are not independent/cryptographic attestations.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 from math import comb, isfinite
 from pathlib import Path
@@ -68,6 +69,33 @@ def _validated_case_outcomes(report: dict) -> list[dict]:
     return cases
 
 
+def _case_outcome_fingerprint(cases: list[dict], key: bytes) -> str:
+    """Keyed fingerprint of exact ordered per-case predictions, not just score.
+
+    HMAC prevents cheap brute-forcing of short A-F prediction sequences from
+    a saved digest. The 256-bit key remains in the private session checkpoint,
+    never in the report or CLI response. This is local consistency evidence,
+    not a cryptographically signed model attestation.
+    """
+    if type(key) is not bytes or len(key) != 32:
+        raise BenchmarkError('Invalid private outcome fingerprint key')
+    h = hmac.new(key, b'athenz-prediction-sequence-v1\n', hashlib.sha256)
+    for row in cases:
+        if (type(row) is not dict or type(row.get('id')) is not int
+                or type(row.get('correct')) is not bool
+                or type(row.get('expected')) is not str
+                or row['expected'] not in 'ABCDEF'
+                or (row.get('predicted') is not None and
+                    (type(row['predicted']) is not str
+                     or row['predicted'] not in 'ABCDEF'))):
+            raise BenchmarkError('Invalid per-case outcome evidence')
+        item = [row['id'], row['predicted'], row['expected'], row['correct']]
+        body = json.dumps(item, separators=(',', ':')).encode('ascii')
+        h.update(len(body).to_bytes(4, 'big'))
+        h.update(body)
+    return h.hexdigest()
+
+
 def _paired_one_sided_probability(improvements: int, regressions: int) -> float:
     """Exact paired sign-test tail under equal odds of improving/regressing."""
     n = improvements + regressions
@@ -110,6 +138,10 @@ def _consistent_comparison_metadata(report: dict) -> bool:
                 (type(population_sha) is not str or len(population_sha) != 64
                  or any(c not in '0123456789abcdef' for c in population_sha))):
             return False
+    outcome = report.get('baseline_outcome_sha256')
+    if outcome is not None and (type(outcome) is not str or len(outcome) != 64
+                                or any(c not in '0123456789abcdef' for c in outcome)):
+        return False
     chance = report.get('chance_expected')
     if chance is not None and (type(chance) not in (int, float) or
                                not isfinite(chance) or not 0 < chance <= 0.5):
@@ -296,13 +328,17 @@ def inspect_heldout_readiness(store: ExperienceStore, *, split: str = 'calibrati
 
 def compare_models(store: ExperienceStore, baseline_model, candidate_model,
                    dataset_sha256: str, *, split: str = 'calibration', limit: int = 100,
-                   seed: int = 42, min_cases: int = 10) -> dict:
-    """Evaluate only, without updating models or selection; return aggregate scores."""
+                   seed: int = 42, min_cases: int = 10,
+                   baseline_outcome_key: bytes | None = None) -> dict:
+    """Evaluate only; optionally bind baseline predictions to a private session key."""
     if (split not in {'calibration', 'test'} or type(limit) is not int
             or type(min_cases) is not int or type(seed) is not int
             or not 1 <= limit <= 1000 or not 2 <= min_cases <= limit
             or not 0 <= seed < 2**32):
         raise BenchmarkError('Select a valid held-out split, limit and minimum sample count')
+    if baseline_outcome_key is not None and (
+            type(baseline_outcome_key) is not bytes or len(baseline_outcome_key) != 32):
+        raise BenchmarkError('Invalid private outcome fingerprint key')
     baseline = getattr(baseline_model, 'model', None)
     candidate = getattr(candidate_model, 'model', None)
     if (not isinstance(baseline, str) or not isinstance(candidate, str)
@@ -392,6 +428,9 @@ def compare_models(store: ExperienceStore, baseline_model, candidate_model,
               'eligible_for_review': second['correct'] > first['correct'],
               'attestation': 'local-model-observation-only',
               'promotion': 'not-authorized'}
+    if baseline_outcome_key is not None:
+        result['baseline_outcome_sha256'] = _case_outcome_fingerprint(
+            baseline_cases, baseline_outcome_key)
     return result
 
 

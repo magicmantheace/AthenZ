@@ -13,9 +13,11 @@ from athenz.experience import ExperienceStore
 from athenz.finetune import create_run, execute_run
 from athenz.learning_session import (
     LearningSessionError, start_session, session_status, record_baseline,
-    link_completed_run, link_comparison, close_session, cancel_session)
+    link_completed_run, link_comparison, close_session, cancel_session,
+    session_comparison_context)
 from athenz.model_gate import (
-    _approved_heldout_population, _heldout_fingerprint, save_report)
+    _approved_heldout_population, _heldout_fingerprint, save_report,
+    _case_outcome_fingerprint, compare_models)
 from athenz.training import build_dataset
 
 
@@ -63,8 +65,13 @@ class LearningSessionTests(unittest.TestCase):
         self.assertTrue(result['baseline_observed'])
         self.assertEqual(len(model.calls), 12)
         self.assertFalse(result['baseline_model_installed_verified'])
-        self.baseline_count = self.store.get_checkpoint(
-            'learning_session_' + session['session_id'])['state']['baseline_correct']
+        state = self.store.get_checkpoint(
+            'learning_session_' + session['session_id'])['state']
+        self.baseline_count = state['baseline_correct']
+        self.baseline_outcome = state['baseline_outcome_sha256']
+        self.assertEqual(len(state['baseline_outcome_key']), 64)
+        self.assertTrue(result['baseline_outcomes_pinned'])
+        self.assertNotIn(state['baseline_outcome_key'], json.dumps(result))
         return result
 
     def trained(self, session):
@@ -96,6 +103,7 @@ class LearningSessionTests(unittest.TestCase):
             'approved_split_total':total, 'approved_split_sha256':population,
             'baseline':'base-local', 'candidate':'candidate-local',
             'baseline_digest':'a'*64, 'candidate_digest':'b'*64,
+            'baseline_outcome_sha256':self.baseline_outcome,
             'baseline_correct':base, 'candidate_correct':cand,
             'baseline_accuracy':base/12, 'candidate_accuracy':cand/12,
             'accuracy_gain':round((cand-base)/12,8),
@@ -290,6 +298,131 @@ class LearningSessionTests(unittest.TestCase):
             expected_revision=evaluated['revision'], confirmed=True)
         self.assertEqual(closed['stage'], 'closed')
         self.assertTrue(closed['evidence_current'])
+
+    def test_keyed_fingerprint_distinguishes_same_score_different_predictions(self):
+        key = bytes.fromhex('e5' * 32)
+        before = [
+            {'id':1, 'predicted':'A', 'expected':'A', 'correct':True},
+            {'id':2, 'predicted':'A', 'expected':'B', 'correct':False}]
+        after = [
+            {'id':1, 'predicted':'B', 'expected':'A', 'correct':False},
+            {'id':2, 'predicted':'B', 'expected':'B', 'correct':True}]
+        self.assertEqual(sum(x['correct'] for x in before),
+                         sum(x['correct'] for x in after))
+        self.assertNotEqual(_case_outcome_fingerprint(before, key),
+                            _case_outcome_fingerprint(after, key))
+        self.assertEqual(_case_outcome_fingerprint(before, key),
+                         _case_outcome_fingerprint(before, key))
+        with self.assertRaisesRegex(ValueError, 'key'):
+            _case_outcome_fingerprint(before, b'short')
+
+    def test_session_comparison_uses_original_prediction_sequence(self):
+        session = self.begin()
+        trained = self.trained(session)
+        key, expected = session_comparison_context(
+            self.store, session['session_id'], expected_revision=trained['revision'],
+            baseline='base-local', candidate='candidate-local',
+            dataset_sha256=self.dataset, split='calibration', limit=12, seed=42)
+        class Synthetic:
+            def __init__(self, name, choice):
+                self.model, self.choice = name, choice
+            def generate(self, messages, **kwargs):
+                return json.dumps({'choice_letter':self.choice})
+        with mock.patch('athenz.runtime.model_digest',
+                        side_effect=lambda name: 'a'*64 if name == 'base-local' else 'b'*64):
+            compared = compare_models(
+                self.store, Synthetic('base-local','A'), Synthetic('candidate-local','B'),
+                self.dataset, split='calibration', limit=12, min_cases=10,
+                seed=42, baseline_outcome_key=key)
+            self.assertEqual(compared['baseline_outcome_sha256'], expected)
+            saved = save_report(self.store, compared, confirmed=True)
+        linked = link_comparison(
+            self.store, session['session_id'], saved['sha256'],
+            expected_revision=trained['revision'], confirmed=True)
+        self.assertEqual(linked['stage'], 'evaluated')
+        self.assertTrue(linked['evidence_current'])
+
+    def test_unkeyed_comparison_cannot_link_to_keyed_session(self):
+        session = self.begin()
+        trained = self.trained(session)
+        digest = self.report()
+        path = self.store.home / 'datasets' / 'evaluations' / ('eval-' + digest + '.json')
+        unkeyed = json.loads(path.read_text())
+        unkeyed.pop('baseline_outcome_sha256')
+        raw = (json.dumps(unkeyed, sort_keys=True,
+                          separators=(',', ':')) + '\n').encode()
+        sha = hashlib.sha256(raw).hexdigest()
+        (path.parent / ('eval-' + sha + '.json')).write_bytes(raw)
+        with self.assertRaisesRegex(LearningSessionError, 'different or outdated'):
+            link_comparison(self.store, session['session_id'], sha,
+                            expected_revision=trained['revision'], confirmed=True)
+
+    def test_session_comparison_rejects_revision_and_consent_drift(self):
+        session = self.begin()
+        trained = self.trained(session)
+        settings = dict(
+            baseline='base-local', candidate='candidate-local',
+            dataset_sha256=self.dataset, split='calibration', limit=12, seed=42)
+        with self.assertRaisesRegex(LearningSessionError, 'revision changed'):
+            session_comparison_context(
+                self.store, session['session_id'],
+                expected_revision=trained['revision'] - 1, **settings)
+        with self.assertRaisesRegex(LearningSessionError, 'differs'):
+            session_comparison_context(
+                self.store, session['session_id'],
+                expected_revision=trained['revision'],
+                **{**settings, 'baseline':'different-local'})
+        self.store.set_review('train_pairs', self.pair, 'rejected')
+        with self.assertRaisesRegex(LearningSessionError, 'evidence changed'):
+            session_comparison_context(
+                self.store, session['session_id'],
+                expected_revision=trained['revision'], **settings)
+
+    def test_session_cli_refuses_equal_score_different_case_outcomes_before_save(self):
+        from athenz.evaluation import _heldout_rows, _heldout_prompt_messages
+        from athenz.train_cli import main
+        session = self.begin()
+        trained = self.trained(session)
+        cases = _heldout_rows(self.store, 'calibration', 12)
+        gold = []
+        for item in cases:
+            _, choices = _heldout_prompt_messages(self.store, item, 42)
+            gold.append('ABCDEF'[choices.index(item[2])])
+        correct_case = next(i for i, c in enumerate(gold) if c == 'A')
+        wrong_case = next(i for i, c in enumerate(gold) if c == 'B')
+        # Swap one previously correct and one previously wrong response: the
+        # total score is unchanged, while exactly which cases fail differs.
+        flips = {correct_case, wrong_case}
+        class ScriptedLocal:
+            def __init__(self, name):
+                self.model = name
+                self.index = 0
+            def generate(self, messages, **kwargs):
+                if self.model == 'base-local':
+                    choice = 'B' if self.index in flips else 'A'
+                else:
+                    choice = 'B'
+                self.index += 1
+                return json.dumps({'choice_letter': choice})
+        args = [
+            '--home', str(self.store.home), 'compare', self.dataset,
+            '--baseline', 'base-local', '--candidate', 'candidate-local',
+            '--session', session['session_id'],
+            '--revision', str(trained['revision']),
+            '--split', 'calibration', '--limit', '12', '--seed', '42',
+            '--confirm']
+        with mock.patch('athenz.train_cli.OllamaClient',
+                        side_effect=lambda **kw: ScriptedLocal(kw['model'])), \
+             mock.patch('athenz.runtime.model_digest',
+                        side_effect=lambda tag: 'a'*64 if tag == 'base-local' else 'b'*64), \
+             mock.patch('athenz.train_cli.save_report',
+                        side_effect=AssertionError('Do not save drifting predictions')):
+            with self.assertRaisesRegex(LearningSessionError,
+                                        'Baseline predictions changed'):
+                main(args)
+        self.assertEqual(session_status(self.store, session['session_id'])['stage'],
+                         'trained')
+        self.assertFalse((self.store.home / 'datasets' / 'evaluations').exists())
 
     def test_cancel_and_revision_fencing(self):
         session = self.begin()
