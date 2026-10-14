@@ -125,10 +125,15 @@ def _writing_excerpt(text: str, terms: set[str]) -> tuple[str, bool]:
     """
     start = 0
     if len(text) > 700 and terms:
+        best_position, best_length = None, 0
         for match in re.finditer(r"[a-z0-9][a-z0-9_-]{2,}", text.lower()):
-            if match.group() in terms:
-                start = min(max(0, match.start() - 140), len(text) - 700)
-                break
+            word = match.group()
+            if word in terms and len(word) > best_length:
+                # Prefer a distinctive topical term over a generic opening
+                # such as "style" or "write", even if it appears much later.
+                best_position, best_length = match.start(), len(word)
+        if best_position is not None:
+            start = min(max(0, best_position - 140), len(text) - 700)
     end = min(len(text), start + 700)
     return text[start:end], start > 0 or end < len(text)
 
