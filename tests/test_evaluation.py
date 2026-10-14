@@ -43,7 +43,7 @@ class DecisionEvaluationTests(unittest.TestCase):
         sent = str(stub.calls)
         self.assertIn('Should we ship', sent)
         self.assertNotIn('PRIVATE GOLD REASON', sent)
-        self.assertIn('Training scenario', sent)
+        self.assertNotIn('Training scenario', sent)  # unrelated training evidence is excluded
         self.assertEqual(stub.calls[0][1]['temperature'], 0.0)
         self.assertEqual(stub.calls[0][1]['seed'], 42)
 
