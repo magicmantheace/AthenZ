@@ -230,21 +230,104 @@ def inspect_rollback_readiness(store: ExperienceStore, *,
             'promotion_authorized': False, 'private_text_returned': False}
 
 
+def _restore_state(old: dict) -> dict:
+    """Shared projected baseline pointer for real and rehearsed rollback."""
+    baseline, digest = old.get('baseline_tag'), old.get('baseline_digest')
+    if (type(baseline) is not str or ALIAS.fullmatch(baseline) is None
+            or type(digest) is not str or SHA.fullmatch(digest) is None):
+        raise RoutingError('Pinned baseline routing record is malformed')
+    return {'active_tag': baseline, 'active_digest': digest,
+            'baseline_tag': baseline, 'baseline_digest': digest,
+            'active_run_id': None, 'evaluation_sha256': None}
+
+
+def rehearse_rollback(store: ExperienceStore, *, expected_revision: int,
+                      confirmed: bool = False, endpoint: str | None = None,
+                      smoke_model_factory=None) -> dict:
+    """Exercise baseline inference and SQLite rollback CAS without keeping a write.
+
+    This deliberately does NOT depend on candidate/model adapter lineage:
+    stale or revoked candidates must not prevent restoring the pinned baseline.
+    A SAVEPOINT exercises the actual checkpoint update and checked routing,
+    then ALWAYS reverses the projected state and its event-log write.
+    """
+    if not confirmed:
+        raise RoutingError('Explicit --confirm required for local rollback rehearsal')
+    if type(expected_revision) is not int or expected_revision < 1:
+        raise RoutingError('Provide the current runtime revision')
+    cp = _checkpoint(store)
+    if (cp is None or cp['revision'] != expected_revision
+            or cp['state'].get('active_run_id') is None):
+        raise RoutingError('No current candidate or runtime revision conflict')
+    projected = _restore_state(cp['state'])
+    baseline, expected_digest = projected['baseline_tag'], projected['baseline_digest']
+    if model_digest(baseline, endpoint=endpoint) != expected_digest:
+        raise RoutingError('Pinned baseline digest changed; rehearsal refused')
+    model = (smoke_model_factory(baseline) if smoke_model_factory is not None
+             else OllamaClient(endpoint=endpoint, model=baseline))
+    try:
+        reply = model.generate(
+            [{'role': 'user', 'content': 'Reply with a short greeting.'}],
+            timeout=30, temperature=0)
+    except Exception:
+        # Local-model exception messages can contain private operational data.
+        raise RoutingError('Baseline smoke inference failed; routing unchanged') from None
+    if not isinstance(reply, str) or not reply.strip():
+        raise RoutingError('Baseline smoke inference returned no text; routing unchanged')
+    if model_digest(baseline, endpoint=endpoint) != expected_digest:
+        raise RoutingError('Pinned baseline changed during rehearsal; routing unchanged')
+    observed = _checkpoint(store)
+    if (observed is None or observed['revision'] != expected_revision
+            or observed['state'] != cp['state']):
+        raise RoutingError('Runtime revision changed during rehearsal; routing unchanged')
+
+    # The current repository checkpoint API joins an existing transaction
+    # rather than committing inside it. SAVEPOINT therefore exercises its
+    # real compare-and-swap and event path without ever persisting the change.
+    # Verify the simulated restored tag, then roll back even on failure.
+    try:
+        store.db.execute('SAVEPOINT athenz_rollback_rehearsal')
+        try:
+            store.checkpoint(
+                CHECKPOINT, cp['task'], projected, status='paused',
+                expected_revision=expected_revision)
+            staged = _checkpoint(store)
+            if (staged is None or staged['revision'] != expected_revision + 1
+                    or staged['state'] != projected
+                    or checked_active_tag(store, endpoint=endpoint) != baseline):
+                raise RoutingError('Simulated baseline routing failed')
+        finally:
+            store.db.execute('ROLLBACK TO SAVEPOINT athenz_rollback_rehearsal')
+            store.db.execute('RELEASE SAVEPOINT athenz_rollback_rehearsal')
+    except Exception:
+        # No private backend/SQLite error details in the CLI traceback.
+        raise RoutingError('Rollback rehearsal failed; no routing change kept') from None
+    unchanged = _checkpoint(store)
+    if (unchanged is None or unchanged['revision'] != cp['revision']
+            or unchanged['state'] != cp['state']):
+        raise RoutingError('Rehearsal integrity check failed; inspect local routing')
+    return {'revision': expected_revision, 'baseline_smoke_passed': True,
+            'projected_checkpoint_tested': True,
+            'checkpoint_unchanged': True, 'ready_for_owner_rollback': True,
+            'model_called': True, 'routing_changed': False,
+            'training_started': False, 'promotion_authorized': False,
+            'private_text_returned': False,
+            'next_step': 'owner-may-confirm-runtime-rollback'}
+
+
 def rollback(store: ExperienceStore, *, expected_revision: int,
              confirmed: bool = False, endpoint: str | None = None) -> dict:
     """Restore pinned baseline even if adapter/candidate has been revoked or deleted."""
     if not confirmed:
         raise RoutingError('Explicit --confirm required for model routing rollback')
     cp = _checkpoint(store)
-    if cp is None or cp['revision'] != expected_revision or cp['state'].get('active_run_id') is None:
+    if (cp is None or type(expected_revision) is not int
+            or cp['revision'] != expected_revision
+            or cp['state'].get('active_run_id') is None):
         raise RoutingError('No current candidate or runtime revision conflict')
-    old = cp['state']
-    baseline = old['baseline_tag']
-    if model_digest(baseline, endpoint=endpoint) != old['baseline_digest']:
+    state = _restore_state(cp['state'])
+    if model_digest(state['baseline_tag'], endpoint=endpoint) != state['baseline_digest']:
         raise RoutingError('Pinned baseline digest changed; refusing unsafe rollback')
-    state = {'active_tag': baseline, 'active_digest': old['baseline_digest'],
-             'baseline_tag': baseline, 'baseline_digest': old['baseline_digest'],
-             'active_run_id': None, 'evaluation_sha256': None}
     store.checkpoint(CHECKPOINT, cp['task'], state, status='paused',
                      expected_revision=cp['revision'])
     return status(store)

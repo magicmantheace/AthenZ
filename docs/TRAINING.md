@@ -409,3 +409,35 @@ not consulted: restoration needs the original pinned baseline, not the
 failed candidate. `runtime-rollback --revision N --confirm` remains the
 separate explicit action; a successful inventory read alone does not prove
 future rollback can never fail.
+
+### Transactional rollback rehearsal (v0.7)
+
+To test the **actual SQLite routing rollback checkpoint path** without
+changing the active AthenZ model, first review the current routing revision:
+
+```sh
+athenz-training runtime-status
+athenz-training runtime-rollback-readiness --check-ollama
+athenz-training runtime-rehearse-rollback --revision <current-runtime-revision> --confirm
+```
+
+The rehearsal is an **explicit local action**: it checks the pinned baseline
+digest, runs a synthetic greeting against that installed baseline on loopback
+Ollama, rechecks the model digest and runtime revision, and temporarily stages
+the exact baseline routing checkpoint inside an SQLite savepoint. It verifies
+that the simulated route resolves to the baseline, then **always rolls back
+the savepoint**, including the simulated checkpoint event. The active model,
+revision and event history remain unchanged on successful rehearsal.
+No owner memory, held-out evaluation cases or personal transcript is sent to
+the model. No inference response text is returned in the CLI result.
+
+A revoked, removed or corrupted *candidate* adapter is deliberately not
+consulted: the owner must still be able to restore an independently available
+pinned baseline. Failure leaves the previous routing pointer untouched, and
+private model-backend error details are suppressed from displayed tracebacks.
+The rehearsal's `ready_for_owner_rollback` flag is temporary and does not
+authorize execution. Actual restoration is still separate and requires
+`athenz-training runtime-rollback --revision N --confirm`. A local test
+cannot prove that future model bytes, filesystem permissions or runtime
+availability will remain unchanged, and it is not a signed model-lineage
+attestation.
