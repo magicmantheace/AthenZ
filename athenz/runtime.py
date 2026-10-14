@@ -109,6 +109,10 @@ def _check_lineage(store: ExperienceStore, state: dict) -> None:
             state.get('active_tag') != entry['candidate_model']):
         raise RoutingError('Candidate/evaluation/adapter lineage no longer agrees')
     policy = state.get('lineage_policy')
+    routing_schema = state.get('routing_schema')
+    if (routing_schema not in (None, 2) or
+            (routing_schema == 2 and policy is None)):
+        raise RoutingError('Runtime provenance marker missing or invalid')
     if policy in (None, 'legacy-owner-attested'):
         # A missing policy denotes a historical checkpoint created before
         # this gate, which remains readable and rollback-capable. New legacy
@@ -132,7 +136,8 @@ def status(store: ExperienceStore) -> dict:
     state = cp['state']
     return {k: state.get(k) for k in ('active_tag', 'active_digest', 'baseline_tag',
                                       'baseline_digest', 'active_run_id', 'evaluation_sha256',
-                                      'lineage_policy', 'import_revision', 'gguf_sha256')} | {
+                                      'routing_schema', 'lineage_policy',
+                                      'import_revision', 'gguf_sha256')} | {
         'revision': cp['revision'], 'routing': 'explicit-local-tag-selection'}
 
 
@@ -214,17 +219,20 @@ def activate(store: ExperienceStore, *, expected_revision: int, baseline_tag: st
     try:
         reply = model.generate([{'role': 'user', 'content': 'Reply with a short greeting.'}],
                                timeout=30, temperature=0)
-    except (LocalModelError, OSError, TimeoutError) as exc:
-        raise RoutingError('Candidate local inference failed; runtime unchanged') from exc
+    except Exception:
+        # Backend exceptions may include prompts or sensitive local paths.
+        raise RoutingError('Candidate local inference failed; runtime unchanged') from None
     if not isinstance(reply, str) or not reply.strip():
         raise RoutingError('Candidate returned no text; runtime unchanged')
     if model_digest(candidate, endpoint=endpoint) != candidate_sha:
         raise RoutingError('Candidate tag changed during smoke test')
+    if model_digest(baseline_tag, endpoint=endpoint) != baseline_sha:
+        raise RoutingError('Baseline tag changed during candidate smoke test')
     # Source approval may be revoked during the smoke inference.
     checked_state = {'active_run_id': run_id, 'evaluation_sha256': report_sha,
                      'baseline_tag': baseline_tag, 'active_tag': candidate,
                      'baseline_digest': baseline_sha, 'active_digest': candidate_sha,
-                     **lineage}
+                     'routing_schema': 2, **lineage}
     _check_lineage(store, checked_state)
     state = checked_state
     store.checkpoint(CHECKPOINT, 'Owner-approved local Ollama tag routing', state,
