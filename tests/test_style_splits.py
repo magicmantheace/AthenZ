@@ -96,6 +96,24 @@ class StyleSplitTests(unittest.TestCase):
         self.assertFalse(result["pilot_evaluation_sufficient"])
         self.assertNotIn("autumn", json.dumps(result).lower())
 
+    def test_owner_review_rejects_normalized_duplicate_across_splits(self):
+        train = self.store.add_sample(
+            "My personal Synthetic Autumn Story!", source="synthetic",
+            split="train")
+        heldout = self.store.add_sample(
+            "MY personal synthetic autumn story", source="synthetic",
+            split="test")
+        self.store.set_review("writing_samples", train, "approved")
+        with self.assertRaisesRegex(ValueError, "Duplicate writing sample"):
+            self.store.set_review("writing_samples", heldout, "approved")
+        row = self.store.db.execute(
+            "SELECT status FROM writing_samples WHERE id=?", (heldout,)).fetchone()
+        self.assertEqual(row["status"], "pending")
+        self.store.set_review("writing_samples", train, "rejected")
+        self.assertTrue(self.store.set_review(
+            "writing_samples", heldout, "approved"))
+        self.assertEqual(style_readiness(self.store)["cross_split_normalized_duplicates"], 0)
+
     def test_unapproved_sources_never_count_as_ready(self):
         self.sample("Pending heldout sample", "test", "pending")
         self.sample("Rejected training sample", "train", "rejected")
