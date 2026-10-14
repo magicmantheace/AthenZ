@@ -15,7 +15,7 @@ import re
 from .experience import ExperienceStore
 from .finetune import TrainingError, file_sha256, verify_run
 from .model_gate import (_consistent_comparison_metadata, _heldout_fingerprint,
-                         _approved_heldout_total)
+                         _approved_heldout_population)
 from .evaluation import (_reference_fingerprint, _reject_overlapping_decision_splits,
                          _reject_repeated_heldout_scenarios)
 from .training import DatasetError, _private_root
@@ -178,7 +178,8 @@ def _read_review(store: ExperienceStore, sha: str) -> dict:
     if report['schema'] == 2:
         # A new out-of-window approved choice or a newly duplicated scored
         # case must also invalidate an already persisted review artifact.
-        if _approved_heldout_total(store, report['split']) != report['approved_split_total']:
+        if _approved_heldout_population(store, report['split']) != (
+                report['approved_split_total'], report['approved_split_sha256']):
             raise AdapterError('Held-out population changed; fresh evaluation required')
         try:
             _reject_repeated_heldout_scenarios(
