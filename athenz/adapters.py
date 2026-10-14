@@ -14,8 +14,10 @@ import re
 
 from .experience import ExperienceStore
 from .finetune import TrainingError, file_sha256, verify_run
-from .model_gate import _consistent_comparison_metadata, _heldout_fingerprint
-from .evaluation import _reference_fingerprint, _reject_overlapping_decision_splits
+from .model_gate import (_consistent_comparison_metadata, _heldout_fingerprint,
+                         _approved_heldout_total)
+from .evaluation import (_reference_fingerprint, _reject_overlapping_decision_splits,
+                         _reject_repeated_heldout_scenarios)
 from .training import DatasetError, _private_root
 
 SHA = re.compile(r'[a-f0-9]{64}\Z')
@@ -161,7 +163,8 @@ def _read_review(store: ExperienceStore, sha: str) -> dict:
         report = json.loads(raw)
     except ValueError as exc:
         raise AdapterError('Invalid evaluation report') from exc
-    if (report.get('schema') != 1 or report.get('attestation') != 'local-model-observation-only'
+    if (type(report.get('schema')) is not int or report['schema'] not in (1, 2)
+            or report.get('attestation') != 'local-model-observation-only'
             or report.get('promotion') != 'not-authorized'
             or report.get('split') not in {'calibration', 'test'}
             or not isinstance(report.get('cases'), int) or not 10 <= report['cases'] <= 1000
@@ -172,6 +175,16 @@ def _read_review(store: ExperienceStore, sha: str) -> dict:
         raise AdapterError('Evaluation report is not eligible for owner review')
     if not _consistent_comparison_metadata(report):
         raise AdapterError('Evaluation report metadata is inconsistent')
+    if report['schema'] == 2:
+        # A new out-of-window approved choice or a newly duplicated scored
+        # case must also invalidate an already persisted review artifact.
+        if _approved_heldout_total(store, report['split']) != report['approved_split_total']:
+            raise AdapterError('Held-out population changed; fresh evaluation required')
+        try:
+            _reject_repeated_heldout_scenarios(
+                store, report['split'], report['requested_case_limit'])
+        except ValueError as exc:
+            raise AdapterError('Held-out sample independence changed; new report required') from exc
     try:
         _reject_overlapping_decision_splits(store)
     except ValueError as exc:
