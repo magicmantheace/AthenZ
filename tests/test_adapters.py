@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from athenz.adapters import (AdapterError, _read_review, inspect_adapter, register_adapter,
                             verified_registry_entry, selection, select_for_review,
@@ -11,7 +12,7 @@ from athenz.adapters import (AdapterError, _read_review, inspect_adapter, regist
 from athenz.experience import ExperienceStore
 from athenz.finetune import create_run, execute_run
 from athenz.training import build_dataset
-from athenz.model_gate import save_report, _heldout_fingerprint
+from athenz.model_gate import save_report, _heldout_fingerprint, _approved_heldout_population
 from athenz.evaluation import _reference_fingerprint
 
 
@@ -50,7 +51,8 @@ class AdaptersTests(unittest.TestCase):
         return run['run_id']
 
     def report(self, model='candidate-a',gain=0.2, eligible=True):
-        ids = [r[0] for r in self.store.db.execute('SELECT id FROM decisions ORDER BY id')]
+        ids = [r[0] for r in self.store.db.execute(
+            'SELECT id FROM decisions ORDER BY id LIMIT 12')]
         obj={'schema':1,'dataset_sha256':self.dataset,'split':'calibration',
              'candidate':model,'baseline':'base','cases':12,
              'eligible_for_review':eligible,'accuracy_gain':gain,
@@ -59,6 +61,75 @@ class AdaptersTests(unittest.TestCase):
              'heldout_fingerprint':_heldout_fingerprint(self.store,'calibration',12),
              'reference_fingerprint':_reference_fingerprint(self.store)}
         return save_report(self.store,obj,confirmed=True)['sha256']
+
+    def schema_two_report(self):
+        """Build synthetic new-schema evidence without contacting Ollama."""
+        old_sha = self.report()
+        folder = self.store.home / 'datasets' / 'evaluations'
+        old = json.loads((folder / ('eval-' + old_sha + '.json')).read_text())
+        total, population_sha = _approved_heldout_population(self.store, 'calibration')
+        new = {**old, 'schema': 2,
+               'requested_case_limit': 12, 'approved_split_total': total,
+               'approved_split_sha256': population_sha,
+               'baseline_digest': 'a' * 64, 'candidate_digest': 'b' * 64,
+               'baseline_correct': 5, 'candidate_correct': 9,
+               'baseline_accuracy': 5 / 12, 'candidate_accuracy': 9 / 12,
+               'accuracy_gain': round(4 / 12, 8), 'chance_expected': 0.5,
+               'paired_improved': 4, 'paired_regressed': 0,
+               'paired_unchanged': 8, 'paired_one_sided_p_value': 0.0625}
+        with mock.patch('athenz.runtime.model_digest',
+                        side_effect=lambda tag: 'a' * 64 if tag == 'base' else 'b' * 64):
+            return save_report(self.store, new, confirmed=True)['sha256']
+
+    def test_new_schema_report_survives_review_only_while_population_matches(self):
+        sha = self.schema_two_report()
+        original = _read_review(self.store, sha)
+        self.assertEqual(original['schema'], 2)
+        self.assertEqual(original['approved_split_total'], 12)
+        self.store.add_decision(
+            'Would the owner approve a completely different synthetic task?',
+            'yes', 'PRIVATE NEW CASE', source='synthetic',
+            split='calibration', options=['yes', 'no'], approved=True)
+        with self.assertRaisesRegex(AdapterError, 'population changed'):
+            _read_review(self.store, sha)
+
+    def test_new_schema_detects_out_of_window_case_content_edits(self):
+        extra_id = self.store.add_decision(
+            'Would an owner perform an entirely new optional synthetic audit?',
+            'yes', 'PRIVATE EVIDENCE BEYOND TWELVE',
+            source='synthetic', split='calibration',
+            options=['yes', 'no'], approved=True)
+        sha = self.schema_two_report()
+        report = _read_review(self.store, sha)
+        self.assertEqual(report['cases'], 12)
+        self.assertEqual(report['approved_split_total'], 13)
+        with self.store.db:
+            self.store.db.execute(
+                'UPDATE decisions SET rationale=? WHERE id=?',
+                ('CHANGED PRIVATE EVIDENCE BEYOND TWELVE', extra_id))
+        with self.assertRaisesRegex(AdapterError, 'population changed'):
+            _read_review(self.store, sha)
+
+    def test_new_schema_review_rejects_tampered_population_fields(self):
+        sha = self.schema_two_report()
+        directory = self.store.home / 'datasets' / 'evaluations'
+        original = json.loads((directory / ('eval-' + sha + '.json')).read_text())
+        for drop in ('approved_split_total', 'approved_split_sha256',
+                     'requested_case_limit', 'baseline_correct', 'paired_improved'):
+            with self.subTest(drop=drop):
+                altered = {k: v for k, v in original.items() if k != drop}
+                body = (json.dumps(altered, sort_keys=True,
+                                   separators=(',', ':')) + '\n').encode()
+                tampered_sha = hashlib.sha256(body).hexdigest()
+                (directory / ('eval-' + tampered_sha + '.json')).write_bytes(body)
+                with self.assertRaisesRegex(AdapterError, 'metadata is inconsistent'):
+                    _read_review(self.store, tampered_sha)
+
+    def test_schema_one_legacy_review_still_readable_without_claiming_new_freshness(self):
+        sha = self.report()
+        legacy = _read_review(self.store, sha)
+        self.assertEqual(legacy['schema'], 1)
+        self.assertNotIn('approved_split_total', legacy)
 
     def test_existing_nonfinite_review_reports_are_never_eligible(self):
         valid_sha = self.report()

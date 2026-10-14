@@ -527,3 +527,39 @@ owner profile data or unattended coding action implied by this milestone.
 - [ ] Test semantic/paraphrase independence and real owner-chosen scenarios
   without contaminating train/calibration/test partitions; synthetic CI
   checks do not validate true independence or improved behavior.
+
+### 2026-10-14 — v0.7 learning-cycle readiness bridge
+
+- [x] Aggregate-only `athenz-training learning-plan`: evaluates consent-reviewed
+  training source counts, calibration/test lexical distinctness, protected
+  reference cleanliness and an optional existing immutable SFT snapshot.
+- [x] Detects in-process source drift and emits a bounded owner next-step
+  category without running a model, training, exporting data, changing
+  inference routing or authorizing deployment.
+- [x] Synthetic regression coverage for empty/clean/conflicting/revoked
+  training, incomplete or modified snapshot, held-out duplication, concurrent
+  source drift, input bounds and sensitive-text exclusion.
+- [ ] Complete a real baseline → owner-reviewed examples → CUDA training →
+  candidate → held-out evaluation → explicit rollback/promotion exercise on
+  the owner's target PC. Offline readiness is **not** evidence of learning.
+
+### 2026-10-14 — Held-out population freshness (increment)
+
+- [x] Compare and review-save stages bind new reports to the original
+  requested case limit **and entire approved calibration/test population**,
+  catching new evidence outside the scored window.
+- [x] Keep previous report schemas readable but do not misrepresent legacy
+  evidence as newly population-verified; synthetic forgery and midflight
+  mutation tests added.
+- [ ] Measure model improvements with a real, owner-reviewed distribution of
+  independently sampled decisions and an explicit rollback benchmark.
+
+### 2026-10-14 — Immutable schema-two evaluation lineage
+
+- [x] Newly generated comparison reports require schema-two complete paired
+  metrics and full held-out population; stripping fields cannot downgrade the
+  evidence contract without explicit historical schema-one handling.
+- [x] Downstream adapter selection and runtime review invalidate schema-two
+  evaluation reports when additional held-out cases are approved.
+- [x] Legacy schema-one report reading remains compatible, but cannot claim
+  the new full-population freshness guarantee.

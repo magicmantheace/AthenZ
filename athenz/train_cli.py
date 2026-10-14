@@ -8,6 +8,7 @@ from pathlib import Path
 from .experience import ExperienceStore
 from .training import build_dataset, delete_dataset, inspect_dataset, verify_dataset
 from .model_gate import compare_models, save_report, inspect_heldout_readiness
+from .learning_cycle import inspect_learning_cycle
 from .chat import OllamaClient
 from .finetune import create_run, describe_run, execute_run
 from .adapters import register_adapter, selection, select_for_review, rollback_selection
@@ -34,6 +35,12 @@ def parser() -> argparse.ArgumentParser:
     x.add_argument('--limit', type=int, default=100)
     x.add_argument('--min-cases', type=int, default=10)
     x.add_argument('--seed', type=int, default=42)
+    x = sub.add_parser('learning-plan', help='Inspect a complete reviewed learning cycle offline, without inference or training')
+    x.add_argument('--split', choices=['calibration', 'test'], default='calibration')
+    x.add_argument('--limit', type=int, default=100)
+    x.add_argument('--min-cases', type=int, default=10)
+    x.add_argument('--seed', type=int, default=42)
+    x.add_argument('--dataset-sha256', default=None, help='Optional previously exported local reviewed dataset fingerprint')
     x = sub.add_parser('compare', help='Compare two local models on the SAME held-out decision cases')
     x.add_argument('sha256', help='Previously approved private dataset hash')
     x.add_argument('--baseline', required=True)
@@ -118,6 +125,11 @@ def main(argv: list[str] | None = None) -> None:
             result = inspect_heldout_readiness(
                 store, split=args.split, limit=args.limit,
                 min_cases=args.min_cases, seed=args.seed)
+        elif args.command == 'learning-plan':
+            result = inspect_learning_cycle(
+                store, split=args.split, limit=args.limit,
+                min_cases=args.min_cases, seed=args.seed,
+                dataset_sha256=args.dataset_sha256)
         elif args.command == 'build':
             result = build_dataset(store, confirmed=args.confirm)
         elif args.command == 'verify':

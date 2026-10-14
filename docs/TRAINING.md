@@ -238,3 +238,37 @@ OS-level model sandbox, external lineage attestation, adapter merger, actual
 CUDA fine-tune or Windows/WSL2 conversion/inference test is claimed here.
 
 Official import docs: https://docs.ollama.com/import
+
+## v0.7 offline learning-cycle preflight (2026-10-14)
+
+Use the new **non-inferential** training command to inspect whether an
+owner-controlled learning experiment has enough reviewed training examples,
+a distinct and clean set of held-out decisions, and (optionally) a currently
+verified immutable SFT snapshot:
+
+```sh
+athenz-training learning-plan --split calibration --min-cases 10
+# After separately reviewing/approving samples, opt in to exporting:
+athenz-training build --confirm
+# Pass the SHA-256 printed by the export command:
+athenz-training learning-plan --dataset-sha256 <reviewed-dataset-sha256> --split calibration
+```
+
+`learning-plan` does **not** create/export a dataset, call Ollama, inspect
+installed models, launch GPU training, select a candidate, deploy an adapter
+or authorize model promotion. It returns aggregate counts, a verified/stale/
+not-selected snapshot status, held-out contamination/independence flags, a
+stable-source observation, and one suggested manual next step without printing
+private prompt text, answers, rationales, file paths, training samples or
+dataset identifiers. A selected invalid/missing snapshot is a blocker, not
+an instruction to silently rebuild data.
+
+When `ready_for_manual_model_comparison` is true, it means only that
+**preflight source conditions** passed at that instant. It is not evidence
+of improved behavior or model quality; the existing explicit local
+`athenz-training compare ... --confirm` still requires separately installed
+baseline/candidate tags, owner permission, repeated evidence checks, and
+manual score/lineage review. Snapshot-read operations do not attest model
+weights or protect against hostile same-user filesystem races. A running
+AthenZ profile is SQLite-backed and may still create SQLite sidecar files;
+the preflight does not create a new dataset or model artifact.

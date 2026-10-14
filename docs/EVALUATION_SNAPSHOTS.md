@@ -312,3 +312,52 @@ Scores produced on duplicated previous samples should be rerun after owner
 review and a distinct case set. The conventional Wilson interval assumes
 independent observations and can be overconfident even after this lexical
 guard passes.
+
+## Held-out population freshness on owner-reviewed model comparisons (2026-10-14)
+
+New comparisons record both the requested evaluation case limit and the
+**entire approved split population** at the time of evaluation. The validator
+rechecks that full count after the two model calls and before owner-confirmed
+report persistence, including when the new case is outside the selected
+limited sample. A newly approved, unscored decision no longer silently
+preserves stale evaluation evidence. Both fields are aggregate numbers,
+never scenario text or answer labels.
+
+Historical reports without this metadata remain recognizable for compatibility
+and do not gain retrospective full-population attestation. Rerun comparison
+on a current independent held-out set when the approved evaluation population
+changes. This adds freshness checks, not statistically independent evaluation
+or permission to deploy models.
+
+### Versioned learning evidence and downstream adapter validity
+
+New paired `compare` outputs use report **schema 2**, requiring a complete
+baseline/candidate aggregate, paired improvement counts/probability, pinned
+installed-model digests, requested case limit and full approved split count.
+A new schema-two report cannot silently discard these fields and still pass
+owner review. Adapter review and routed runtime model validation also reject
+a schema-two report if the approved held-out population changes later, even
+when the new case lies beyond the originally scored limit.
+
+Historical **schema 1** reports remain readable for continuity, but are not
+retroactively claimed to be bound to the full approved population. Their
+earlier consent, score, selected-case fingerprint and reference checks remain
+in force. A new training/promotion decision should use a fresh schema-two
+comparison rather than relying on an older report.
+
+### Full-population private fingerprint
+
+Count-only freshness is insufficient if someone edits a previously approved
+but unscored held-out case. Schema-two reports therefore also retain an
+in-memory-generated SHA-256 fingerprint of **all** approved cases in that
+split, including source provenance, scenario, options, gold answer, rationale,
+exceptions and record creation metadata. The private rows are length-delimited
+and streamed in stable ID order; the report contains a digest, not those rows.
+Comparison completion, report saving and subsequent adapter/runtime review
+recompute this fingerprint. A changed out-of-window record invalidates the
+previously approved benchmark without exposing its text.
+
+This is tamper detection against accidental/stale owner changes, not a
+cryptographic signature of who authored an observation or proof of independent
+training lineage. Schema-one historical evidence is not retroactively
+population-fingerprinted.

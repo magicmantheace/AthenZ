@@ -83,9 +83,33 @@ def _consistent_comparison_metadata(report: dict) -> bool:
     independently attested by this function. Newly produced comparisons
     include all aggregate fields and are checked before persistence/review.
     """
+    if type(report.get('schema')) is not int or report['schema'] not in (1, 2):
+        return False
     count = report.get('cases')
     if type(count) is not int or not 0 < count <= 1000:
         return False
+    # Current reports retain the requested sampling limit AND the full
+    # approved population. A new out-of-window case must invalidate a saved
+    # comparison rather than silently preserving stale approval evidence.
+    population_fields = ('requested_case_limit', 'approved_split_total',
+                         'approved_split_sha256')
+    present_population = [field in report for field in population_fields]
+    if report['schema'] == 2 and not all(present_population):
+        return False
+    if any(present_population):
+        if not all(present_population):
+            return False
+        requested, total = (report['requested_case_limit'],
+                            report['approved_split_total'])
+        population_sha = report.get('approved_split_sha256')
+        if (type(requested) is not int or type(total) is not int
+                or not 1 <= requested <= 1000 or total < 1
+                or count != min(requested, total)):
+            return False
+        if (report['schema'] == 2 and
+                (type(population_sha) is not str or len(population_sha) != 64
+                 or any(c not in '0123456789abcdef' for c in population_sha))):
+            return False
     chance = report.get('chance_expected')
     if chance is not None and (type(chance) not in (int, float) or
                                not isfinite(chance) or not 0 < chance <= 0.5):
@@ -102,8 +126,15 @@ def _consistent_comparison_metadata(report: dict) -> bool:
                 any(letter not in '0123456789abcdef' for letter in value)
                 for value in values) or values[0] == values[1]):
             return False
+    if report['schema'] == 2:
+        if not all(present) or not all(key in report for key in digests):
+            return False
+        if not all(key in report for key in (
+                'paired_improved', 'paired_regressed', 'paired_unchanged',
+                'paired_one_sided_p_value')):
+            return False
     if not any(present):
-        # Older owner-reviewed records omit these statistics altogether.
+        # Historical schema 1 owner-reviewed reports omitted these statistics.
         return not any(key in report for key in (
             'paired_improved', 'paired_regressed', 'paired_unchanged',
             'paired_one_sided_p_value'))
@@ -156,6 +187,28 @@ def _consistent_comparison_metadata(report: dict) -> bool:
                     improved, regressed), 10)) > 1e-9):
             return False
     return True
+
+
+def _approved_heldout_population(store: ExperienceStore, split: str) -> tuple[int, str]:
+    """Fingerprint ALL approved cases, streaming content privately through SHA-256.
+
+    A count by itself cannot detect changed source/answer/provenance outside
+    the scored window. The digest is never a disclosure of the examples or an
+    independently signed attestation. Length-prefix each JSON row to remove
+    concatenation ambiguity, with a domain-specific header.
+    """
+    h = hashlib.sha256(b'athenz-approved-heldout-population-v1\n')
+    total = 0
+    for row in store.db.execute(
+            'SELECT id,scenario,choice,options_json,rationale,exception,'
+            'source,source_ref,created_at FROM decisions '
+            "WHERE status='approved' AND split=? ORDER BY id", (split,)):
+        data = json.dumps(list(row), ensure_ascii=False,
+                          separators=(',', ':')).encode('utf-8')
+        h.update(len(data).to_bytes(8, 'big'))
+        h.update(data)
+        total += 1
+    return total, h.hexdigest()
 
 
 def _heldout_fingerprint(store: ExperienceStore, split: str, limit: int) -> str:
@@ -258,6 +311,7 @@ def compare_models(store: ExperienceStore, baseline_model, candidate_model,
     # Refuse biased held-out samples before contacting local model services.
     _reject_overlapping_decision_splits(store)
     _reject_repeated_heldout_scenarios(store, split, limit)
+    approved_total, approved_population_sha = _approved_heldout_population(store, split)
     from .runtime import model_digest
     initial_baseline_digest = model_digest(baseline)
     initial_candidate_digest = model_digest(candidate)
@@ -299,6 +353,9 @@ def compare_models(store: ExperienceStore, baseline_model, candidate_model,
         ('approved', split, limit)).fetchall()]
     if ids_a != current_ids or _heldout_fingerprint(store, split, limit) != initial_cases_sha:
         raise BenchmarkError('Evaluation decisions changed while comparing models')
+    if _approved_heldout_population(store, split) != (
+            approved_total, approved_population_sha):
+        raise BenchmarkError('Held-out population changed during model comparison')
     _reject_overlapping_decision_splits(store)
     _reject_repeated_heldout_scenarios(store, split, limit)
     if _reference_fingerprint(store) != initial_reference_sha:
@@ -311,8 +368,10 @@ def compare_models(store: ExperienceStore, baseline_model, candidate_model,
             second.get('reference_sha256') != initial_reference_sha):
         raise BenchmarkError('Evaluations used unequal or stale evidence snapshots')
     # Do not embed scenarios, gold answers or model predictions in the report.
-    result = {'schema': 1, 'dataset_sha256': dataset_sha256, 'split': split,
+    result = {'schema': 2, 'dataset_sha256': dataset_sha256, 'split': split,
               'seed': seed, 'cases': len(ids_a),
+              'requested_case_limit': limit, 'approved_split_total': approved_total,
+              'approved_split_sha256': approved_population_sha,
               'case_ids_sha256': hashlib.sha256(json.dumps(ids_a).encode()).hexdigest(),
               'heldout_fingerprint': initial_cases_sha,
               'reference_fingerprint': initial_reference_sha,
@@ -374,6 +433,14 @@ def save_report(store: ExperienceStore, comparison: dict, *, confirmed: bool = F
     if (comparison.get('heldout_fingerprint') != _heldout_fingerprint(store, split, count)
             or comparison.get('reference_fingerprint') != _reference_fingerprint(store)):
         raise BenchmarkError('Evaluation evidence changed before saving; rerun comparison')
+    # Preserve precise legacy diagnostics for scored-case edits/duplicates.
+    # The full-population check then also detects changes beyond the
+    # originally evaluated window that the selected-case hash cannot see.
+    if ('requested_case_limit' in comparison and
+            _approved_heldout_population(store, split) != (
+                comparison['approved_split_total'],
+                comparison.get('approved_split_sha256'))):
+        raise BenchmarkError('Held-out population changed before saving; re-evaluation required')
     # The candidate can have been replaced in the Ollama daemon between
     # evaluation and this explicit owner-confirmed report save. An observed
     # score must never become review evidence for a different installed tag.
