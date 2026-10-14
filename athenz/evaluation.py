@@ -172,6 +172,31 @@ def _reference_fingerprint(store: IdentityStore) -> str:
     return _fingerprint(evidence)
 
 
+def _collides_with_approved_reference(store: IdentityStore, scenario: str,
+                                     rationale: str) -> bool:
+    """Check ALL approved source records, including ones pruned by retrieval.
+
+    Relevance-ranking must not create a loophole in train/held-out separation:
+    evidence may be hidden by one topical query but exposed by another later.
+    """
+    for sql in (
+        "SELECT text FROM identity WHERE status='approved'",
+        "SELECT text FROM writing_samples WHERE status='approved'",
+        "SELECT topic || ' ' || detail FROM episodes WHERE status='approved'",
+        "SELECT scenario || ' ' || rationale FROM decisions "
+        "WHERE status='approved' AND split='train'",
+    ):
+        for row in store.db.execute(sql):
+            reference = row[0].casefold()
+            if (scenario.strip().casefold() in reference
+                    or (len(rationale.strip()) >= 16
+                        and rationale.strip().casefold() in reference)
+                    or _normalized_overlap(scenario, reference)
+                    or _normalized_overlap(rationale, reference)):
+                return True
+    return False
+
+
 def _heldout_prompt_messages(store: IdentityStore, item: list, seed: int) -> tuple[list[dict], list[str]]:
     """Construct the exact protected Twin prompt for evaluation or dry-run preflight.
 
@@ -207,7 +232,8 @@ def _heldout_prompt_messages(store: IdentityStore, item: list, seed: int) -> tup
         raise ValueError('Twin reference context changed; evaluation refused')
     reference_profile = messages[2]['content'].casefold()
     rationale = item[4].strip()
-    if (scenario.strip().casefold() in reference_profile
+    if (_collides_with_approved_reference(store, scenario, rationale)
+            or scenario.strip().casefold() in reference_profile
             or (len(rationale) >= 16 and rationale.casefold() in reference_profile)
             or _normalized_overlap(scenario, reference_profile)
             or _normalized_overlap(rationale, reference_profile)):
