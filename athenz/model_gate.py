@@ -86,6 +86,20 @@ def _consistent_comparison_metadata(report: dict) -> bool:
     count = report.get('cases')
     if type(count) is not int or not 0 < count <= 1000:
         return False
+    # Current reports retain the requested sampling limit AND the full
+    # approved population. A new out-of-window case must invalidate a saved
+    # comparison rather than silently preserving stale approval evidence.
+    population_fields = ('requested_case_limit', 'approved_split_total')
+    present_population = [field in report for field in population_fields]
+    if any(present_population):
+        if not all(present_population):
+            return False
+        requested, total = (report['requested_case_limit'],
+                            report['approved_split_total'])
+        if (type(requested) is not int or type(total) is not int
+                or not 1 <= requested <= 1000 or total < 1
+                or count != min(requested, total)):
+            return False
     chance = report.get('chance_expected')
     if chance is not None and (type(chance) not in (int, float) or
                                not isfinite(chance) or not 0 < chance <= 0.5):
@@ -156,6 +170,13 @@ def _consistent_comparison_metadata(report: dict) -> bool:
                     improved, regressed), 10)) > 1e-9):
             return False
     return True
+
+
+def _approved_heldout_total(store: ExperienceStore, split: str) -> int:
+    """Full approved split population (not just the scored subset)."""
+    return int(store.db.execute(
+        "SELECT COUNT(*) FROM decisions WHERE status='approved' AND split=?",
+        (split,)).fetchone()[0])
 
 
 def _heldout_fingerprint(store: ExperienceStore, split: str, limit: int) -> str:
@@ -258,6 +279,7 @@ def compare_models(store: ExperienceStore, baseline_model, candidate_model,
     # Refuse biased held-out samples before contacting local model services.
     _reject_overlapping_decision_splits(store)
     _reject_repeated_heldout_scenarios(store, split, limit)
+    approved_total = _approved_heldout_total(store, split)
     from .runtime import model_digest
     initial_baseline_digest = model_digest(baseline)
     initial_candidate_digest = model_digest(candidate)
@@ -299,6 +321,8 @@ def compare_models(store: ExperienceStore, baseline_model, candidate_model,
         ('approved', split, limit)).fetchall()]
     if ids_a != current_ids or _heldout_fingerprint(store, split, limit) != initial_cases_sha:
         raise BenchmarkError('Evaluation decisions changed while comparing models')
+    if _approved_heldout_total(store, split) != approved_total:
+        raise BenchmarkError('Held-out population changed during model comparison')
     _reject_overlapping_decision_splits(store)
     _reject_repeated_heldout_scenarios(store, split, limit)
     if _reference_fingerprint(store) != initial_reference_sha:
@@ -313,6 +337,7 @@ def compare_models(store: ExperienceStore, baseline_model, candidate_model,
     # Do not embed scenarios, gold answers or model predictions in the report.
     result = {'schema': 1, 'dataset_sha256': dataset_sha256, 'split': split,
               'seed': seed, 'cases': len(ids_a),
+              'requested_case_limit': limit, 'approved_split_total': approved_total,
               'case_ids_sha256': hashlib.sha256(json.dumps(ids_a).encode()).hexdigest(),
               'heldout_fingerprint': initial_cases_sha,
               'reference_fingerprint': initial_reference_sha,
@@ -357,6 +382,9 @@ def save_report(store: ExperienceStore, comparison: dict, *, confirmed: bool = F
     if (split not in {'calibration', 'test'} or type(count) is not int
             or not 2 <= count <= 1000):
         raise BenchmarkError('Invalid held-out comparison scope')
+    if ('requested_case_limit' in comparison and
+            _approved_heldout_total(store, split) != comparison['approved_split_total']):
+        raise BenchmarkError('Held-out population changed before saving; re-evaluation required')
     try:
         _reject_overlapping_decision_splits(store)
     except ValueError as exc:
