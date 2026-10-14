@@ -173,6 +173,54 @@ class ReleaseReadinessTests(unittest.TestCase):
             record(self.home, CHECKS[0][0], 'passed', confirmed=True)
         self.assertEqual(out.read_bytes(), b'secret')
 
+
+    def test_deleted_current_row_cannot_hide_prior_failed_acceptance(self):
+        import sqlite3
+        key = CHECKS[0][0]
+        record(self.home, key, 'failed', confirmed=True)
+        with closing(sqlite3.connect(self.home / 'release-acceptance.sqlite3')) as db, db:
+            db.execute('DELETE FROM observations WHERE check_id=?', (key,))
+        with self.assertRaisesRegex(ReadinessError, 'history disagrees'):
+            status_report(self.home)
+
+    def test_corrupted_older_history_is_not_ignored_when_latest_is_valid(self):
+        import sqlite3
+        key = CHECKS[0][0]
+        record(self.home, key, 'failed', confirmed=True)
+        record(self.home, key, 'passed', confirmed=True)
+        with closing(sqlite3.connect(self.home / 'release-acceptance.sqlite3')) as db, db:
+            db.execute("UPDATE observation_history SET source='synthetic-forgery' "
+                       "WHERE id=(SELECT MIN(id) FROM observation_history)")
+        with self.assertRaisesRegex(ReadinessError, 'history is invalid'):
+            status_report(self.home)
+
+    def test_rejects_hardlinked_acceptance_database_without_modifying_source(self):
+        import os
+        if os.name == 'nt':
+            self.skipTest('Hardlink fixture depends on POSIX filesystem semantics')
+        self.home.mkdir(mode=0o700)
+        external = self.home.parent / 'other-database'
+        external.write_bytes(b'private-fixture-contents')
+        external.chmod(0o600)
+        os.link(external, self.home / 'release-acceptance.sqlite3')
+        with self.assertRaisesRegex(ReadinessError, 'Unsafe private acceptance database'):
+            status_report(self.home)
+        with self.assertRaisesRegex(ReadinessError, 'Unsafe private acceptance database'):
+            record(self.home, CHECKS[0][0], 'passed', confirmed=True)
+        self.assertEqual(external.read_bytes(), b'private-fixture-contents')
+
+    def test_rejects_existing_world_readable_acceptance_database_on_posix(self):
+        import os
+        if os.name == 'nt':
+            self.skipTest('POSIX permission modes')
+        self.home.mkdir(mode=0o700)
+        unsafe = self.home / 'release-acceptance.sqlite3'
+        unsafe.write_bytes(b'synthetic')
+        unsafe.chmod(0o644)
+        with self.assertRaisesRegex(ReadinessError, 'Unsafe private acceptance database'):
+            status_report(self.home)
+        self.assertEqual(unsafe.read_bytes(), b'synthetic')
+
     def test_cli_plan_does_not_probe_communicate_or_create_files(self):
         with patch('athenz.release_readiness.sqlite3.connect', side_effect=AssertionError('no database calls')), \
              patch('athenz.release_readiness.os.system', side_effect=AssertionError('no shell')):
