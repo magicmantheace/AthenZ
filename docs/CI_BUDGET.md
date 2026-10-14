@@ -355,3 +355,16 @@ is distinct and must have a completed success conclusion before being
 reported green. Hosted tests have fake model output and synthetic text, not
 actual owner voice/audio or NVIDIA hardware; no private transcript or model
 weights were committed.
+
+### Voice scoring edge-case acceptance — 2026-10-13
+
+Public source SHA `1ede7cad603b95fa5fd2c859c07d3ebb082c35e3`
+passed 551 synthetic unit tests on both hosted Linux Python 3.12 and 3.13
+(four skipped each) and passed the Windows unsigned portable app and GUI
+startup checks in [workflow 38502224799](https://github.com/magicmantheace/AthenZ/actions/runs/38502224799).
+An empty owner-hypothesis `.txt` scores as complete deletion instead of
+creating a bogus denominator or printing private audio. The full Python
+3.11 Windows/Linux matrix is separately tracked in
+[38502233185](https://github.com/magicmantheace/AthenZ/actions/runs/38502233185).
+This evidence does not involve or certify any real owner audio, native
+faster-whisper accuracy, RTX 3060, microphone device or model training.

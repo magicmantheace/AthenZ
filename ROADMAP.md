@@ -498,3 +498,19 @@ owner profile data or unattended coding action implied by this milestone.
   [38501687005](https://github.com/magicmantheace/AthenZ/actions/runs/38501687005),
   actual reference-labelled WAV data, installed native faster-whisper model
   CPU/CUDA behavior, human review and accessible UI remain separately unverified.
+
+### 2026-10-13 — Voice WER/CER final regression checkpoint
+
+- [x] An empty *hypothesis* UTF-8 file is a valid speech failure with full
+  deletion error, not a filesystem/input-format error; empty owner reference
+  remains disallowed. Synthetic race-mutation fixtures accept the same
+  bounded reader flags as production code.
+- [x] Source `1ede7cad603b95fa5fd2c859c07d3ebb082c35e3` passed
+  **551 tests each** on Linux Python 3.12/3.13 (four skips each), and passed
+  Windows unsigned portable executable/Tk startup in public CI
+  [38502224799](https://github.com/magicmantheace/AthenZ/actions/runs/38502224799).
+- [ ] Complete Python 3.11 Linux/Windows regression for this source in
+  [38502233185](https://github.com/magicmantheace/AthenZ/actions/runs/38502233185)
+  must be separately confirmed. Real faster-whisper accuracy, CPU/CUDA
+  behavior, owner-device latency, audio accessibility and owner-reviewed
+  ground-truth corpus are not verified by public synthetic tests.
