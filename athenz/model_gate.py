@@ -120,8 +120,15 @@ def _consistent_comparison_metadata(report: dict) -> bool:
                 any(letter not in '0123456789abcdef' for letter in value)
                 for value in values) or values[0] == values[1]):
             return False
+    if report['schema'] == 2:
+        if not all(present) or not all(key in report for key in digests):
+            return False
+        if not all(key in report for key in (
+                'paired_improved', 'paired_regressed', 'paired_unchanged',
+                'paired_one_sided_p_value')):
+            return False
     if not any(present):
-        # Older owner-reviewed records omit these statistics altogether.
+        # Historical schema 1 owner-reviewed reports omitted these statistics.
         return not any(key in report for key in (
             'paired_improved', 'paired_regressed', 'paired_unchanged',
             'paired_one_sided_p_value'))
