@@ -378,6 +378,52 @@ class LearningSessionTests(unittest.TestCase):
                 self.store, session['session_id'],
                 expected_revision=trained['revision'], **settings)
 
+    def test_session_cli_refuses_equal_score_different_case_outcomes_before_save(self):
+        from athenz.evaluation import _heldout_rows, _heldout_prompt_messages
+        from athenz.train_cli import main
+        session = self.begin()
+        trained = self.trained(session)
+        cases = _heldout_rows(self.store, 'calibration', 12)
+        gold = []
+        for item in cases:
+            _, choices = _heldout_prompt_messages(self.store, item, 42)
+            gold.append('ABCDEF'[choices.index(item[2])])
+        correct_case = next(i for i, c in enumerate(gold) if c == 'A')
+        wrong_case = next(i for i, c in enumerate(gold) if c == 'B')
+        # Swap one previously correct and one previously wrong response: the
+        # total score is unchanged, while exactly which cases fail differs.
+        flips = {correct_case, wrong_case}
+        class ScriptedLocal:
+            def __init__(self, name):
+                self.model = name
+                self.index = 0
+            def generate(self, messages, **kwargs):
+                if self.model == 'base-local':
+                    choice = 'B' if self.index in flips else 'A'
+                else:
+                    choice = 'B'
+                self.index += 1
+                return json.dumps({'choice_letter': choice})
+        args = [
+            '--home', str(self.store.home), 'compare', self.dataset,
+            '--baseline', 'base-local', '--candidate', 'candidate-local',
+            '--session', session['session_id'],
+            '--revision', str(trained['revision']),
+            '--split', 'calibration', '--limit', '12', '--seed', '42',
+            '--confirm']
+        with mock.patch('athenz.train_cli.OllamaClient',
+                        side_effect=lambda **kw: ScriptedLocal(kw['model'])), \
+             mock.patch('athenz.runtime.model_digest',
+                        side_effect=lambda tag: 'a'*64 if tag == 'base-local' else 'b'*64), \
+             mock.patch('athenz.train_cli.save_report',
+                        side_effect=AssertionError('Do not save drifting predictions')):
+            with self.assertRaisesRegex(LearningSessionError,
+                                        'Baseline predictions changed'):
+                main(args)
+        self.assertEqual(session_status(self.store, session['session_id'])['stage'],
+                         'trained')
+        self.assertFalse((self.store.home / 'datasets' / 'evaluations').exists())
+
     def test_cancel_and_revision_fencing(self):
         session = self.begin()
         ident, revision = session['session_id'], session['revision']
