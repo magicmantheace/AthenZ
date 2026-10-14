@@ -542,3 +542,14 @@ owner profile data or unattended coding action implied by this milestone.
 - [ ] Complete a real baseline → owner-reviewed examples → CUDA training →
   candidate → held-out evaluation → explicit rollback/promotion exercise on
   the owner's target PC. Offline readiness is **not** evidence of learning.
+
+### 2026-10-14 — Held-out population freshness (increment)
+
+- [x] Compare and review-save stages bind new reports to the original
+  requested case limit **and entire approved calibration/test population**,
+  catching new evidence outside the scored window.
+- [x] Keep previous report schemas readable but do not misrepresent legacy
+  evidence as newly population-verified; synthetic forgery and midflight
+  mutation tests added.
+- [ ] Measure model improvements with a real, owner-reviewed distribution of
+  independently sampled decisions and an explicit rollback benchmark.
