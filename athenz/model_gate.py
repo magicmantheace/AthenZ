@@ -416,11 +416,6 @@ def save_report(store: ExperienceStore, comparison: dict, *, confirmed: bool = F
     if (split not in {'calibration', 'test'} or type(count) is not int
             or not 2 <= count <= 1000):
         raise BenchmarkError('Invalid held-out comparison scope')
-    if ('requested_case_limit' in comparison and
-            _approved_heldout_population(store, split) != (
-                comparison['approved_split_total'],
-                comparison.get('approved_split_sha256'))):
-        raise BenchmarkError('Held-out population changed before saving; re-evaluation required')
     try:
         _reject_overlapping_decision_splits(store)
     except ValueError as exc:
@@ -438,6 +433,14 @@ def save_report(store: ExperienceStore, comparison: dict, *, confirmed: bool = F
     if (comparison.get('heldout_fingerprint') != _heldout_fingerprint(store, split, count)
             or comparison.get('reference_fingerprint') != _reference_fingerprint(store)):
         raise BenchmarkError('Evaluation evidence changed before saving; rerun comparison')
+    # Preserve precise legacy diagnostics for scored-case edits/duplicates.
+    # The full-population check then also detects changes beyond the
+    # originally evaluated window that the selected-case hash cannot see.
+    if ('requested_case_limit' in comparison and
+            _approved_heldout_population(store, split) != (
+                comparison['approved_split_total'],
+                comparison.get('approved_split_sha256'))):
+        raise BenchmarkError('Held-out population changed before saving; re-evaluation required')
     # The candidate can have been replaced in the Ollama daemon between
     # evaluation and this explicit owner-confirmed report save. An observed
     # score must never become review evidence for a different installed tag.
