@@ -21,7 +21,8 @@ class PromptTests(unittest.TestCase):
                 self.assertNotIn("UNAPPROVED PRIVATE", str(twin))
                 self.assertNotIn("Fast or tested?", str(agent))
                 store.decision_status(did, "approved")
-                self.assertIn("Fast or tested?", str(build_messages(store, "What next?")))
+                approved = build_messages(store, "Would I favor something fast or tested?")
+                self.assertIn("Fast or tested?", approved[1]["content"])
             finally:
                 store.close()
 
