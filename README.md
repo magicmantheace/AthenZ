@@ -17,6 +17,13 @@ The current Twin-first relevance work includes
 This is deterministic prompt preparation, not evidence of measured owner
 similarity or independent model improvement.
 
+Full-history approved context retrieval and its local **synthetic-only**
+regression benchmark are described in
+[docs/TWIN_CONTEXT.md](docs/TWIN_CONTEXT.md).
+Run `python -m athenz.twin_retrieval_benchmark` to inspect aggregate
+retrieval and revocation results without accessing the owner's profile or
+calling a model. It does **not** measure real Twin personality similarity.
+
 ## Setup
 
 ```sh
