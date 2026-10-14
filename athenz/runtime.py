@@ -179,6 +179,57 @@ def activate(store: ExperienceStore, *, expected_revision: int, baseline_tag: st
     return status(store)
 
 
+def inspect_rollback_readiness(store: ExperienceStore, *,
+                               check_ollama: bool = False,
+                               endpoint: str | None = None) -> dict:
+    """Read-only feasibility check for explicit local baseline restoration.
+
+    A revoked/deleted candidate MUST NOT block rollback. Do not query its
+    adapter, evaluation report or installed tag. By default this is an
+    offline structural assessment only; --check-ollama performs one read-only
+    loopback tag inventory request to verify the pinned baseline digest.
+    This does not actually restore routing or prove live inference works.
+    """
+    if type(check_ollama) is not bool:
+        raise RoutingError('Invalid rollback readiness check mode')
+    cp = _checkpoint(store)
+    revision = cp['revision'] if cp is not None else 0
+    state = cp['state'] if cp is not None else {}
+    candidate_active = state.get('active_run_id') is not None
+    baseline = state.get('baseline_tag')
+    digest = state.get('baseline_digest')
+    structurally_valid = (candidate_active and type(baseline) is str
+                          and ALIAS.fullmatch(baseline) is not None
+                          and type(digest) is str and SHA.fullmatch(digest) is not None
+                          and type(state.get('active_tag')) is str
+                          and type(state.get('active_digest')) is str
+                          and SHA.fullmatch(state['active_digest']) is not None)
+    matching = False
+    if structurally_valid and check_ollama:
+        try:
+            matching = model_digest(baseline, endpoint=endpoint) == digest
+        except (RoutingError, TypeError, OSError, ValueError):
+            matching = False
+    if not candidate_active:
+        next_step = 'no-active-candidate'
+    elif not structurally_valid:
+        next_step = 'review-invalid-baseline-record'
+    elif not check_ollama:
+        next_step = 'check-local-baseline-digest'
+    elif not matching:
+        next_step = 'restore-or-review-pinned-baseline'
+    else:
+        next_step = 'owner-may-confirm-runtime-rollback'
+    return {'revision': revision, 'candidate_active': candidate_active,
+            'baseline_record_valid': bool(structurally_valid),
+            'local_inventory_checked': bool(structurally_valid and check_ollama),
+            'baseline_digest_matches': bool(matching),
+            'ready_for_manual_rollback': bool(structurally_valid and check_ollama and matching),
+            'next_step': next_step, 'model_called': False,
+            'routing_changed': False, 'training_started': False,
+            'promotion_authorized': False, 'private_text_returned': False}
+
+
 def rollback(store: ExperienceStore, *, expected_revision: int,
              confirmed: bool = False, endpoint: str | None = None) -> dict:
     """Restore pinned baseline even if adapter/candidate has been revoked or deleted."""
