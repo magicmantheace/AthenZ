@@ -352,9 +352,10 @@ stays false during offline status reads: installed model availability is
 verified during explicitly approved inference, not in the read-only view.
 
 Legacy schema-one sessions remain readable and may finish the older
-pre-baseline workflow; newly created schema-two sessions enforce the new
-baseline stage. **This is a local observation, not proof that external
-training never happened before it, or that the model's per-case predictions
+pre-baseline workflow. Historical schema-two sessions preserve the original
+aggregate pre-training baseline check; newly created schema-three sessions
+add a keyed per-case baseline fingerprint. **This is a local observation,
+not proof that external training never happened before it or that predictions
 cannot vary.** Real training and deployment are separate opt-in steps.
 
 ## v0.7 keyed baseline reproducibility (2026-10-14)
