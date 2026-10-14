@@ -312,3 +312,19 @@ Scores produced on duplicated previous samples should be rerun after owner
 review and a distinct case set. The conventional Wilson interval assumes
 independent observations and can be overconfident even after this lexical
 guard passes.
+
+## Held-out population freshness on owner-reviewed model comparisons (2026-10-14)
+
+New comparisons record both the requested evaluation case limit and the
+**entire approved split population** at the time of evaluation. The validator
+rechecks that full count after the two model calls and before owner-confirmed
+report persistence, including when the new case is outside the selected
+limited sample. A newly approved, unscored decision no longer silently
+preserves stale evaluation evidence. Both fields are aggregate numbers,
+never scenario text or answer labels.
+
+Historical reports without this metadata remain recognizable for compatibility
+and do not gain retrospective full-population attestation. Rerun comparison
+on a current independent held-out set when the approved evaluation population
+changes. This adds freshness checks, not statistically independent evaluation
+or permission to deploy models.
