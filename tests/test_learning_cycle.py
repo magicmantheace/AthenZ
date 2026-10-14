@@ -36,6 +36,18 @@ class LearningCycleTests(unittest.TestCase):
                 source='synthetic', options=['Wait', 'Proceed'],
                 split='calibration', approved=True)
 
+    def test_approved_dataset_fingerprint_streams_bounded_rows(self):
+        from athenz.training import _render
+        self.approve_pair(instruction='Synthetic first sample', answer='First response')
+        self.approve_pair(instruction='Synthetic second sample', answer='Second response')
+        with mock.patch('athenz.learning_cycle._render', wraps=_render) as renderer:
+            report = inspect_learning_cycle(self.store)
+        self.assertTrue(report['training_sources_eligible'])
+        self.assertEqual(report['training']['included'], 2)
+        self.assertGreaterEqual(renderer.call_count, 4)  # before and after
+        self.assertTrue(all(len(call.args[0]) == 1
+                            for call in renderer.call_args_list))
+
     def test_empty_plan_is_a_sanitized_blocker_without_dataset_directory(self):
         with mock.patch('athenz.runtime.model_digest',
                         side_effect=AssertionError('No model requests')):
