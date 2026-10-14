@@ -164,6 +164,18 @@ def _model_files_observed(root: Path) -> tuple:
     return tuple(rows)
 
 
+def inspect_local_model(path: Path) -> dict:
+    """Read-only local CTranslate2 model scope inspection without importing it."""
+    root = _local_model_dir(path)
+    observed = _model_files_observed(root)
+    return {'schema': 1, 'scope': 'existing-local-ctranslate2-whisper',
+            'required_files_present': True, 'selected_files': len(observed),
+            'selected_bytes': sum(record[3] for record in observed),
+            'native_backend_loaded': False, 'inference_observed': False,
+            'accuracy_validated': False, 'cuda_validated': False,
+            'model_downloaded': False, 'owner_path_in_output': False}
+
+
 def _load_engine(model_dir: Path, *, device: str):
     try:
         from faster_whisper import WhisperModel
@@ -248,6 +260,9 @@ def main(argv: list[str] | None = None) -> None:
     sub = parser.add_subparsers(dest='command', required=True)
     view = sub.add_parser('inspect', help='Read only audio format metadata')
     view.add_argument('wav', type=Path)
+    model = sub.add_parser('inspect-model',
+                           help='Read existing local model file counts and size without loading inference')
+    model.add_argument('--model', type=Path, required=True)
     work = sub.add_parser('transcribe', help='Opt-in private local speech transcription')
     work.add_argument('wav', type=Path)
     work.add_argument('--model', type=Path, required=True,
@@ -256,9 +271,13 @@ def main(argv: list[str] | None = None) -> None:
     work.add_argument('--language', choices=['en', 'fr', 'es', 'de'], default='en')
     work.add_argument('--confirm', action='store_true')
     args = parser.parse_args(argv)
-    report = (inspect_wav(args.wav) if args.command == 'inspect'
-              else transcribe_wav(args.wav, args.model, confirmed=args.confirm,
-                                  device=args.device, language=args.language))
+    if args.command == 'inspect':
+        report = inspect_wav(args.wav)
+    elif args.command == 'inspect-model':
+        report = inspect_local_model(args.model)
+    else:
+        report = transcribe_wav(args.wav, args.model, confirmed=args.confirm,
+                                device=args.device, language=args.language)
     print(json.dumps(report, ensure_ascii=False, indent=2))
 
 

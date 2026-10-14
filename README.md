@@ -396,3 +396,10 @@ The file is size/duration bounded, and its content hash is checked before
 and after inference so a changed recording invalidates the transcript.
 Supported input: 16-bit PCM WAV, up to 90 seconds. Never redirect transcript
 output into public logs. See [voice privacy and limitations](docs/VOICE.md).
+
+The optional file-only offline voice CLI can inspect an existing speech model
+without importing a native inference engine:
+`athenz-voice inspect-model --model <local-ctranslate2-directory>`.
+It prints only metadata counts and file sizes, not paths, transcript text or
+weights. Actual speech transcription remains separately owner-confirmed, with
+no recording, network upload or automatic chat/memory integration.

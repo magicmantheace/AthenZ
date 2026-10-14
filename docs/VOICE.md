@@ -88,3 +88,17 @@ and parsing. The inspection still returns only format metadata—no audio
 samples, model request, upload, transcription or owner transcript. Native
 Windows filesystem semantics and adversarial same-user directory races are
 not independently security-certified.
+
+### Read-only model inventory
+
+```powershell
+athenz-voice inspect-model --model C:\\PrivateModels\\whisper-ct2
+```
+
+This requires no speech input, owner transcript consent, model import, GPU
+setup, native inference or network request. It checks that the existing
+CTranslate2 configuration and weights are ordinary, non-hardlinked local
+files, and returns only aggregate file count and byte size (including optional
+recognized tokenizer/vocabulary sidecars). It never prints the private model
+path, filename list or model bytes. A successful inventory is **not** an
+inference, accuracy, provenance or CUDA-readiness certification.

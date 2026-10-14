@@ -10,7 +10,8 @@ import unittest
 from unittest import mock
 import wave
 
-from athenz.voice import VoiceError, inspect_wav, transcribe_wav, main
+from athenz.voice import (VoiceError, inspect_wav, inspect_local_model,
+                          transcribe_wav, main)
 
 
 class VoiceTests(unittest.TestCase):
@@ -35,6 +36,41 @@ class VoiceTests(unittest.TestCase):
                 self.calls = (path, kwargs)
                 return (iter(segments), {'language': 'en'})
         return Engine()
+
+    def test_model_inspection_is_metadata_only_and_never_loads_backend(self):
+        with mock.patch('athenz.voice._load_engine',
+                        side_effect=AssertionError('No native model import allowed')):
+            report = inspect_local_model(self.model)
+        self.assertTrue(report['required_files_present'])
+        self.assertEqual(report['selected_files'], 2)
+        self.assertEqual(report['selected_bytes'], sum(
+            (self.model / name).stat().st_size for name in ('config.json', 'model.bin')))
+        self.assertFalse(report['native_backend_loaded'])
+        self.assertFalse(report['inference_observed'])
+        self.assertFalse(report['model_downloaded'])
+        self.assertNotIn(str(self.model), json.dumps(report))
+
+    def test_model_inspection_cli_has_no_audio_or_runtime_side_effects(self):
+        with mock.patch('athenz.voice._load_engine',
+                        side_effect=AssertionError('Native model must not load')), \
+             mock.patch('athenz.voice.inspect_wav',
+                        side_effect=AssertionError('Audio must not be read')), \
+             mock.patch('builtins.print') as output:
+            main(['inspect-model', '--model', str(self.model)])
+        report = json.loads(output.call_args.args[0])
+        self.assertTrue(report['required_files_present'])
+        self.assertFalse(report['cuda_validated'])
+        self.assertFalse(report['accuracy_validated'])
+        self.assertNotIn(str(self.model), output.call_args.args[0])
+
+    def test_local_model_inspection_rejects_linked_optional_sidecar(self):
+        tokenizer = self.model / 'tokenizer.json'
+        try:
+            tokenizer.symlink_to(self.model / 'config.json')
+        except (OSError, NotImplementedError):
+            self.skipTest('Synthetic runner cannot create symlinks')
+        with self.assertRaisesRegex(VoiceError, 'model changed'):
+            inspect_local_model(self.model)
 
     def test_metadata_inspection_is_readonly_and_does_not_access_model(self):
         from types import SimpleNamespace
