@@ -145,6 +145,24 @@ class StyleSplitTests(unittest.TestCase):
         self.assertNotIn("PRIVATE_STYLE_TEST_ONLY",
                          str(build_messages(self.store, "Write a letter", "twin")))
 
+    def test_reopening_v6_profile_is_idempotent(self):
+        from athenz.experience import ExperienceStore
+        original = self.store.add_sample(
+            "Synthetic held-out text never becomes training", source="synthetic",
+            split="test")
+        self.store.set_review("writing_samples", original, "approved")
+        reopened = ExperienceStore(self.store.home)
+        self.addCleanup(reopened.close)
+        self.assertEqual(reopened.db.execute(
+            "PRAGMA user_version").fetchone()[0], 6)
+        row = reopened.db.execute(
+            "SELECT split,status,text FROM writing_samples WHERE id=?",
+            (original,)).fetchone()
+        self.assertEqual(tuple(row), (
+            "test", "approved", "Synthetic held-out text never becomes training"))
+        self.assertNotIn("Synthetic held-out text",
+                         str(build_messages(reopened, "What is my style?", "twin")))
+
     def test_migration_retains_legacy_approved_sample_as_training_only(self):
         legacy = sqlite3.connect(":memory:")
         self.addCleanup(legacy.close)
