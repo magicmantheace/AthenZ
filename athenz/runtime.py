@@ -67,6 +67,28 @@ def _checkpoint(store: ExperienceStore) -> dict | None:
     return store.get_checkpoint(CHECKPOINT)
 
 
+def _import_lineage(store: ExperienceStore, run_id: str,
+                    candidate_tag: str, candidate_digest: str) -> dict:
+    """Verify the actual owner-reviewed GGUF import without contacting Ollama.
+
+    Import evidence is itself owner-acknowledged, not an independent proof of
+    model-weight derivation. A prepared, failed or tampered import is never
+    equivalent to a successfully created local candidate tag.
+    """
+    from .ollama_import import verify_import
+    try:
+        imported = verify_import(store, run_id)
+    except (ValueError, OSError, TypeError, KeyError, UnicodeError):
+        # Private paths may be present in lower-level filesystem exceptions.
+        raise RoutingError('Recorded local model import is missing or stale') from None
+    if (imported.get('status') != 'complete'
+            or imported.get('deployment') != 'created-local-not-selected'
+            or imported.get('candidate_tag') != candidate_tag
+            or imported.get('candidate_digest') != candidate_digest):
+        raise RoutingError('Recorded local model import does not match reviewed candidate')
+    return imported
+
+
 def _check_lineage(store: ExperienceStore, state: dict) -> None:
     run_id = state.get('active_run_id')
     if run_id is None:
@@ -86,6 +108,20 @@ def _check_lineage(store: ExperienceStore, state: dict) -> None:
             report.get('candidate_digest') != state.get('active_digest') or
             state.get('active_tag') != entry['candidate_model']):
         raise RoutingError('Candidate/evaluation/adapter lineage no longer agrees')
+    policy = state.get('lineage_policy')
+    if policy in (None, 'legacy-owner-attested'):
+        # A missing policy denotes a historical checkpoint created before
+        # this gate, which remains readable and rollback-capable. New legacy
+        # activations require the owner's explicit --ack-legacy-lineage.
+        return
+    if policy != 'recorded-local-import':
+        raise RoutingError('Unknown runtime lineage policy; explicit rollback required')
+    imported = _import_lineage(
+        store, run_id, entry['candidate_model'], state['active_digest'])
+    if (type(state.get('import_revision')) is not int
+            or imported['revision'] != state['import_revision']
+            or state.get('gguf_sha256') != imported['gguf_sha256']):
+        raise RoutingError('Pinned import evidence changed; runtime routing paused')
 
 
 def status(store: ExperienceStore) -> dict:
@@ -95,7 +131,8 @@ def status(store: ExperienceStore) -> dict:
                 'active_run_id': None, 'routing': 'default-configuration'}
     state = cp['state']
     return {k: state.get(k) for k in ('active_tag', 'active_digest', 'baseline_tag',
-                                      'baseline_digest', 'active_run_id', 'evaluation_sha256')} | {
+                                      'baseline_digest', 'active_run_id', 'evaluation_sha256',
+                                      'lineage_policy', 'import_revision', 'gguf_sha256')} | {
         'revision': cp['revision'], 'routing': 'explicit-local-tag-selection'}
 
 
@@ -116,7 +153,8 @@ def checked_active_tag(store: ExperienceStore, *, endpoint: str | None = None) -
 
 def activate(store: ExperienceStore, *, expected_revision: int, baseline_tag: str,
              confirmed: bool = False, endpoint: str | None = None,
-             smoke_model_factory=None) -> dict:
+             smoke_model_factory=None,
+             ack_legacy_lineage: bool = False) -> dict:
     """Probe already-installed candidate, then atomically route AthenZ to its tag.
 
     Nothing is added to or changed in the Ollama server. Candidate lineage is
@@ -124,6 +162,8 @@ def activate(store: ExperienceStore, *, expected_revision: int, baseline_tag: st
     """
     if not confirmed:
         raise RoutingError('Explicit --confirm required to activate a local tag')
+    if type(ack_legacy_lineage) is not bool:
+        raise RoutingError('Invalid legacy-lineage acknowledgment')
     if not isinstance(baseline_tag, str) or not ALIAS.fullmatch(baseline_tag):
         raise RoutingError('Baseline must be an explicit local tag')
     cp = _checkpoint(store)
@@ -155,6 +195,19 @@ def activate(store: ExperienceStore, *, expected_revision: int, baseline_tag: st
     if previous and (previous.get('baseline_tag') != baseline_tag
                      or previous.get('baseline_digest') != baseline_sha):
         raise RoutingError('Baseline drifted since previous runtime selection')
+    import_checkpoint = store.get_checkpoint('ollama_import_' + run_id)
+    if import_checkpoint is None:
+        if not ack_legacy_lineage:
+            raise RoutingError(
+                'No recorded local model import; explicit --ack-legacy-lineage required')
+        lineage = {'lineage_policy': 'legacy-owner-attested'}
+    else:
+        # An invalid or interrupted import cannot be bypassed by requesting
+        # the legacy path: a recorded import must validate before activation.
+        imported = _import_lineage(store, run_id, candidate, candidate_sha)
+        lineage = {'lineage_policy': 'recorded-local-import',
+                   'import_revision': imported['revision'],
+                   'gguf_sha256': imported['gguf_sha256']}
     # No private examples, chat logs, or identity context are used for smoke inference.
     model = (smoke_model_factory(candidate) if smoke_model_factory is not None
              else OllamaClient(endpoint=endpoint, model=candidate))
@@ -168,12 +221,12 @@ def activate(store: ExperienceStore, *, expected_revision: int, baseline_tag: st
     if model_digest(candidate, endpoint=endpoint) != candidate_sha:
         raise RoutingError('Candidate tag changed during smoke test')
     # Source approval may be revoked during the smoke inference.
-    _check_lineage(store, {'active_run_id': run_id, 'evaluation_sha256': report_sha,
-                           'baseline_tag': baseline_tag, 'active_tag': candidate,
-                           'baseline_digest': baseline_sha, 'active_digest': candidate_sha})
-    state = {'active_tag': candidate, 'active_digest': candidate_sha,
-             'baseline_tag': baseline_tag, 'baseline_digest': baseline_sha,
-             'active_run_id': run_id, 'evaluation_sha256': report_sha}
+    checked_state = {'active_run_id': run_id, 'evaluation_sha256': report_sha,
+                     'baseline_tag': baseline_tag, 'active_tag': candidate,
+                     'baseline_digest': baseline_sha, 'active_digest': candidate_sha,
+                     **lineage}
+    _check_lineage(store, checked_state)
+    state = checked_state
     store.checkpoint(CHECKPOINT, 'Owner-approved local Ollama tag routing', state,
                      status='paused', expected_revision=revision)
     return status(store)
