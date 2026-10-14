@@ -2,7 +2,7 @@
 
 **Status: planned, not implemented.** Created 2026-10-14 to align
 [AthenZ](https://github.com/magicmantheace/AthenZ),
-[Developmental AI](https://github.com/magicmantheace/Developmental-AI) and
+Developmental AI (separate private repository) and
 [Synveil](https://github.com/magicmantheace/Synveil) for the February 9, 2029
 integrated research target.
 
@@ -11,7 +11,7 @@ evidence that these repositories currently communicate. Developmental AI
 already has separate synthetic simulators, tabular policies, latent dynamics,
 stepwise change detection, memory experiments, quarantined candidates and
 held-out predictive review. Its draft
-[contract](https://github.com/magicmantheace/Developmental-AI/blob/main/docs/INTEGRATION_CONTRACT.md)
+integration contract (`docs/INTEGRATION_CONTRACT.md` in the separate repository)
 is specification-only. Actual cross-repository transports and trusted
 runtime integration remain unimplemented.
 
