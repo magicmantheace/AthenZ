@@ -314,7 +314,7 @@ def verify_bundle(home: Path | None, identifier: str) -> dict:
                         if db.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
                             raise BackupError('Bundle SQLite failed integrity check')
                         version = db.execute('PRAGMA user_version').fetchone()[0]
-                        if not 1 <= version <= 5:
+                        if not 1 <= version <= 6:
                             raise BackupError('Bundle SQLite schema is unsupported')
         except (zipfile.BadZipFile, KeyError, TypeError, ValueError,
                 AttributeError, UnicodeError, OverflowError, sqlite3.DatabaseError) as exc:
