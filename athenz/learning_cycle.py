@@ -40,6 +40,10 @@ def inspect_learning_cycle(store: ExperienceStore, *,
     an absent/malformed/stale snapshot is reported as an aggregate blocker,
     rather than creating one or disclosing an owner-specific error.
     """
+    if (split not in {'calibration', 'test'} or type(limit) is not int
+            or type(min_cases) is not int or not 2 <= min_cases <= limit <= 1000
+            or type(seed) is not int or not 0 <= seed < 2**32):
+        raise LearningCycleError('Invalid bounded held-out learning-cycle settings')
     if dataset_sha256 is not None and (
             type(dataset_sha256) is not str or
             re.fullmatch(r'[a-f0-9]{64}', dataset_sha256) is None):
