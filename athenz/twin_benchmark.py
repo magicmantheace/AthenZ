@@ -38,8 +38,11 @@ def run_benchmark() -> dict:
                 hits += int(present == expected)
                 unrelated += int(not expected and present)
             store.status(target, "rejected")
-            revoked = json.dumps(build_messages(
-                store, "Tell me about restoring antique telescopes", "twin"))
+            # Query text is user-supplied, not a retrieved memory. Never
+            # confuse words in the question with a revoked reference record.
+            messages = build_messages(
+                store, "Tell me about restoring antique telescopes", "twin")
+            revoked = messages[1]["content"].split("\\n", 1)[1]
             return {
                 "schema": 1,
                 "synthetic_only": True,
