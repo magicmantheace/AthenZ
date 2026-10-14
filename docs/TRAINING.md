@@ -315,3 +315,43 @@ These checkpoints are not tamper-proof signed attestations. They store opaque
 IDs, hashes and metadata locally, not personal examples or transcripts.
 Synthetic CI does not establish on-device CUDA training, voice fidelity or
 actual behavioral improvement.
+
+## v0.7 source-pinned pretraining baseline (October 14, 2026)
+
+New learning sessions require a locally measured baseline **before** a
+completed training run may be linked. This closes the gap where a candidate
+could be evaluated with no recorded pre-training reference. The steps are:
+
+```sh
+athenz-training session-start <reviewed-dataset-sha256> --confirm
+athenz-training session-baseline <session-id> --model <installed-baseline-ollama-tag> --revision 1 --confirm
+# Separately prepare, train, and register a candidate with existing commands.
+athenz-training session-link-run <session-id> <registered-completed-run-id> --revision 2 --confirm
+# After a separate owner-confirmed compare and report save:
+athenz-training session-link-report <session-id> <saved-schema-two-report-sha256> --revision 3 --confirm
+```
+
+Use the actual current revisions from each response; numbers shown are only
+illustrative. `session-baseline` is the one new command that **does**
+contact an installed loopback Ollama model, only when explicitly confirmed.
+It runs the existing protected held-out evaluation with a pinned model
+digest, zero-temperature and deterministic seed. It records aggregate
+correct/total counts, exact case-identity and protected source fingerprints
+in the private SQLite journal, not personal prompts, predictions, rationales,
+or model output text. The confirmation never grants training or deployment
+permission. If evidence is revoked or model bytes/tag digest change before
+the evaluation completes, the session stays `prepared`.
+
+The later candidate comparison must match the pre-training baseline tag,
+digest, selected case set and correct count. If repeating the baseline
+produces a different score, it refuses that comparison instead of treating
+a candidate gain as established. A session records the observed
+`baseline_observed` state while `baseline_model_installed_verified`
+stays false during offline status reads: installed model availability is
+verified during explicitly approved inference, not in the read-only view.
+
+Legacy schema-one sessions remain readable and may finish the older
+pre-baseline workflow; newly created schema-two sessions enforce the new
+baseline stage. **This is a local observation, not proof that external
+training never happened before it, or that the model's per-case predictions
+cannot vary.** Real training and deployment are separate opt-in steps.
