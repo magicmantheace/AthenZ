@@ -244,6 +244,37 @@ class LearningSessionTests(unittest.TestCase):
             self.assertFalse(closed['promotion_authorized'])
             self.assertFalse(self.store.get_checkpoint('ollama_runtime'))
 
+    def test_schema_one_legacy_sessions_still_link_training_and_comparisons(self):
+        started = self.begin()
+        recent = self.trained(started)
+        key = 'learning_session_' + started['session_id']
+        checkpoint = self.store.get_checkpoint(key)
+        run_id = checkpoint['state']['run_id']
+        # Model a genuine historical schema-one prepared journal persisted
+        # before baseline observations were introduced.
+        old_state = {k: v for k, v in checkpoint['state'].items()
+                     if not k.startswith('baseline_') and k not in (
+                         'run_id', 'candidate_tag', 'adapter_sha256')}
+        old_state.update(schema=1, stage='prepared')
+        self.store.checkpoint(key, checkpoint['task'], old_state,
+                              expected_revision=checkpoint['revision'])
+        old_prepared = session_status(self.store, started['session_id'])
+        self.assertEqual(old_prepared['stage'], 'prepared')
+        self.assertFalse(old_prepared['baseline_observed'])
+        linked = link_completed_run(
+            self.store, started['session_id'], run_id,
+            expected_revision=old_prepared['revision'], confirmed=True)
+        self.assertEqual(linked['stage'], 'trained')
+        evaluated = link_comparison(
+            self.store, started['session_id'], self.report(),
+            expected_revision=linked['revision'], confirmed=True)
+        self.assertTrue(evaluated['evidence_current'])
+        closed = close_session(
+            self.store, started['session_id'],
+            expected_revision=evaluated['revision'], confirmed=True)
+        self.assertEqual(closed['stage'], 'closed')
+        self.assertTrue(closed['evidence_current'])
+
     def test_cancel_and_revision_fencing(self):
         session = self.begin()
         ident, revision = session['session_id'], session['revision']
