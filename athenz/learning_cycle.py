@@ -23,7 +23,12 @@ class LearningCycleError(ValueError):
 def _review_snapshot(store: ExperienceStore, split: str, limit: int) -> tuple:
     """Fingerprint private selected records in memory; return only digests."""
     pairs, stats = _read_approved(store)
-    return (hashlib.sha256(_render(pairs)).hexdigest(),
+    # Don't materialize one giant JSONL blob merely to inspect a large
+    # approved dataset. Hash one bounded source row at a time instead.
+    digest = hashlib.sha256()
+    for row in pairs:
+        digest.update(_render([row]))
+    return (digest.hexdigest(),
             tuple(row[0] for row in pairs),
             stats,
             _fingerprint(_heldout_rows(store, split, limit)),
