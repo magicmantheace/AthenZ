@@ -124,7 +124,7 @@ def _evidence_is_current(store: ExperienceStore, state: dict) -> bool:
             dataset_sha256=state['dataset_sha256'])
         if not ready['ready_for_manual_model_comparison']:
             return False
-        if state.get('baseline_digest'):
+        if state['schema'] == 2 and state.get('baseline_digest'):
             if (state['baseline_reference_sha256'] != state['reference_sha256']
                     or state['baseline_heldout_sha256'] !=
                     _heldout_fingerprint(store, state['split'], state['baseline_cases'])):
