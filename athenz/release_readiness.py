@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import sqlite3
+import stat
 
 
 CHECKS = (
@@ -45,8 +46,15 @@ def _private_home(home: Path | None) -> Path:
     if os.name != 'nt' and resolved.is_dir() and (resolved.stat().st_mode & 0o077):
         raise ReadinessError('Private home must not be accessible to group or other users')
     db = resolved / 'release-acceptance.sqlite3'
-    if db.is_symlink() or (db.exists() and not db.is_file()):
+    if db.is_symlink():
         raise ReadinessError('Unsafe private acceptance database')
+    if db.exists():
+        metadata = db.lstat()
+        # A hardlink could point at a database owned by another workflow. An
+        # overly permissive existing file might disclose acceptance history.
+        if (not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1
+                or (os.name != 'nt' and metadata.st_mode & 0o077)):
+            raise ReadinessError('Unsafe private acceptance database')
     return resolved
 
 
@@ -120,18 +128,25 @@ def status_report(home: Path | None) -> dict:
             if history_exists:
                 history_count = int(con.execute(
                     'SELECT COUNT(*) FROM observation_history').fetchone()[0])
-                # Older profiles can have unanchored observations from before
-                # local history was introduced. But after a history exists for
-                # a check, its latest owner-reported outcome must agree with
-                # the currently recorded value. A changed current row must not
-                # silently erase a previous failure from owner-visible status.
-                for check_id, state, _ in rows:
-                    latest = con.execute(
-                        'SELECT status,source FROM observation_history '
-                        'WHERE check_id=? ORDER BY id DESC LIMIT 1',
-                        (check_id,)).fetchone()
-                    if latest is not None and latest != (state, 'owner-reported'):
-                        raise ReadinessError('Private acceptance observation history disagrees with current status')
+                # Legacy unanchored current rows are supported. But once a
+                # check has an owner-history event, its current row MUST exist
+                # and agree with the latest event. Inspect every event, not
+                # only the most recent event for each surviving current row:
+                # otherwise deleting a failed current row or corrupting an
+                # older event could silently hide acceptance evidence.
+                latest: dict[str, str] = {}
+                for check_id, state, source, timestamp in con.execute(
+                        'SELECT check_id,status,source,recorded_at '
+                        'FROM observation_history ORDER BY id'):
+                    if (check_id not in dict(CHECKS) or state not in VALID
+                            or source != 'owner-reported'
+                            or not isinstance(timestamp, str)
+                            or len(timestamp) > 40 or not timestamp.endswith('Z')):
+                        raise ReadinessError('Private acceptance history is invalid')
+                    latest[check_id] = state
+                if any(observed.get(check_id) != state
+                       for check_id, state in latest.items()):
+                    raise ReadinessError('Private acceptance observation history disagrees with current status')
         except sqlite3.DatabaseError as exc:
             raise ReadinessError('Private acceptance database is invalid') from exc
         finally:
