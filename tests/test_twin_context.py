@@ -114,6 +114,32 @@ class TwinContextTests(unittest.TestCase):
         self.assertNotIn("classic parser", contested)
         self.assertNotIn("fast parser", contested)
 
+    def test_unchanged_profile_retains_historical_reference_digest(self):
+        from athenz.evaluation import _fingerprint
+        self.store.propose("style", "Synthetic reviewed preference",
+                           source="synthetic", approved=True)
+        self.store.add_decision("What is our test plan?", "Review",
+                                "Evidence before action", source="synthetic",
+                                approved=True)
+        core = []
+        for table, predicate in (
+            ("identity", "status='approved'"),
+            ("decisions", "status='approved' AND split='train'"),
+            ("episodes", "status='approved'"),
+        ):
+            rows = [list(row) for row in self.store.db.execute(
+                f"SELECT * FROM {table} WHERE {predicate} ORDER BY id")]
+            core.append([table, rows])
+        historical = _fingerprint(core)
+        self.assertEqual(_reference_fingerprint(self.store), historical)
+        sample = self.store.add_sample("SYNTHETIC PENDING WRITING",
+                                       source="synthetic")
+        self.assertEqual(_reference_fingerprint(self.store), historical)
+        self.store.set_review("writing_samples", sample, "approved")
+        self.assertNotEqual(_reference_fingerprint(self.store), historical)
+        self.store.set_review("writing_samples", sample, "rejected")
+        self.assertEqual(_reference_fingerprint(self.store), historical)
+
     def test_reference_fingerprint_follows_approved_style_and_disputes(self):
         before = _reference_fingerprint(self.store)
         sample = self.store.add_sample("Example of my own writing, synthetic",
