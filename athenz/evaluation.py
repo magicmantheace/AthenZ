@@ -161,7 +161,9 @@ def _reference_fingerprint(store: IdentityStore) -> str:
     for table, predicate in (
         ('identity', "status='approved'"),
         ('decisions', "status='approved' AND split='train'"),
+        ('writing_samples', "status='approved'"),
         ('episodes', "status='approved'"),
+        ('episode_disputes', "1=1"),
     ):
         # Table names and predicates are constants here, never user input.
         rows = [list(row) for row in store.db.execute(
