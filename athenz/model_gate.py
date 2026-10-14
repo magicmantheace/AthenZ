@@ -13,7 +13,8 @@ from pathlib import Path
 
 from .evaluation import (evaluate_decisions, _fingerprint, _heldout_rows,
                          _reference_fingerprint, _reject_overlapping_decision_splits,
-                         _wilson_interval, _heldout_prompt_messages)
+                         _wilson_interval, _heldout_prompt_messages,
+                         _reject_repeated_heldout_scenarios)
 from .experience import ExperienceStore
 from .training import DatasetError, _private_root, _write_new, verify_dataset
 
@@ -189,6 +190,13 @@ def inspect_heldout_readiness(store: ExperienceStore, *, split: str = 'calibrati
         clean = True
     except ValueError:
         clean = False
+    # Count independence is not merely a cross-split property: duplicate
+    # calibration/test questions can inflate success and Wilson precision.
+    try:
+        _reject_repeated_heldout_scenarios(store, split, limit)
+        independent = True
+    except ValueError:
+        independent = False
     # This report never exposes the scenario/answer/rationale/options. It
     # deliberately leaves actual semantic leakage and full model verification
     # for the protected evaluator at inference time.
@@ -221,12 +229,14 @@ def inspect_heldout_readiness(store: ExperienceStore, *, split: str = 'calibrati
             'minimum_cases': min_cases, 'approved_cases': total,
             'selected_cases': len(rows),
             'split_independence_check': 'lexical-pass' if clean else 'lexical-overlap',
+            'selected_cases_independent': independent,
             'minimum_cases_met': sufficient,
             'heldout_options_valid': options_valid,
             'reference_profile_clean': reference_profile_clean,
             'evidence_snapshot_stable': snapshot_stable,
-            'ready_for_owner_review': (clean and sufficient and options_valid and
-                                       reference_profile_clean and snapshot_stable),
+            'ready_for_owner_review': (clean and independent and sufficient
+                                       and options_valid and reference_profile_clean
+                                       and snapshot_stable),
             'model_called': False, 'dataset_verified': False,
             'private_text_returned': False, 'promotion': 'not-authorized'}
 
@@ -245,6 +255,9 @@ def compare_models(store: ExperienceStore, baseline_model, candidate_model,
     if (not isinstance(baseline, str) or not isinstance(candidate, str)
             or not baseline.strip() or not candidate.strip() or baseline == candidate):
         raise BenchmarkError('Select two distinct, explicitly named local models')
+    # Refuse biased held-out samples before contacting local model services.
+    _reject_overlapping_decision_splits(store)
+    _reject_repeated_heldout_scenarios(store, split, limit)
     from .runtime import model_digest
     initial_baseline_digest = model_digest(baseline)
     initial_candidate_digest = model_digest(candidate)
@@ -286,6 +299,8 @@ def compare_models(store: ExperienceStore, baseline_model, candidate_model,
         ('approved', split, limit)).fetchall()]
     if ids_a != current_ids or _heldout_fingerprint(store, split, limit) != initial_cases_sha:
         raise BenchmarkError('Evaluation decisions changed while comparing models')
+    _reject_overlapping_decision_splits(store)
+    _reject_repeated_heldout_scenarios(store, split, limit)
     if _reference_fingerprint(store) != initial_reference_sha:
         raise BenchmarkError('Approved reference evidence changed while comparing models')
     # Reject mismatched evidence snapshots even when model scores look plausible.
@@ -346,6 +361,10 @@ def save_report(store: ExperienceStore, comparison: dict, *, confirmed: bool = F
         _reject_overlapping_decision_splits(store)
     except ValueError as exc:
         raise BenchmarkError('Evaluation partitions overlap; re-evaluation required') from exc
+    try:
+        _reject_repeated_heldout_scenarios(store, split, count)
+    except ValueError as exc:
+        raise BenchmarkError('Evaluation sample independence failed; re-evaluation required') from exc
     current_ids = [row[0] for row in store.db.execute(
         "SELECT id FROM decisions WHERE status='approved' AND split=? "
         "ORDER BY id LIMIT ?", (split, count))]

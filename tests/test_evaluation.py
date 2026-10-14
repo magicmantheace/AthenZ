@@ -150,6 +150,65 @@ class DecisionEvaluationTests(unittest.TestCase):
             evaluate_decisions(self.store, stub)
         self.assertEqual(stub.calls, [])
 
+    def test_same_split_punctuation_duplicates_refused_before_inference(self):
+        scenario = 'Would the owner verify backups before deploying the updated system?'
+        self.store.add_decision(scenario, 'Yes', 'Synthetic review reason',
+                                source='synthetic', options=['Yes', 'No'],
+                                split='test', approved=True)
+        self.store.add_decision(scenario[:-1] + '!', 'Yes', 'Different private reason',
+                                source='synthetic', options=['Yes', 'No'],
+                                split='test', approved=True)
+        model = Stub()
+        with self.assertRaisesRegex(ValueError, 'Repeated held-out'):
+            evaluate_decisions(self.store, model)
+        self.assertEqual(model.calls, [])
+
+    def test_same_split_long_near_duplicate_refused_before_inference(self):
+        self.store.add_decision(
+            'Would the owner approve this experimental release after the security review passes today?',
+            'No', 'First reason', source='synthetic', options=['Yes', 'No'],
+            split='calibration', approved=True)
+        self.store.add_decision(
+            'Would the owner approve this experimental release after the local security review passes today?',
+            'No', 'Second reason', source='synthetic', options=['Yes', 'No'],
+            split='calibration', approved=True)
+        model = Stub()
+        with self.assertRaisesRegex(ValueError, 'Repeated held-out'):
+            evaluate_decisions(self.store, model, split='calibration')
+        self.assertEqual(model.calls, [])
+
+    def test_approved_within_split_duplicate_added_midflight_refuses_score(self):
+        scenario = 'Would the owner check restore evidence before releasing a new build?'
+        self.store.add_decision(scenario, 'Yes', 'Owner only evidence',
+                                source='synthetic', options=['Yes', 'No'],
+                                split='test', approved=True)
+        store = self.store
+        class MutatingModel(Stub):
+            def generate(self, messages, **kwargs):
+                result = super().generate(messages, **kwargs)
+                store.add_decision(scenario[:-1] + '!', 'Yes',
+                                   'Second synthetic reason', source='synthetic',
+                                   options=['Yes', 'No'], split='test',
+                                   approved=True)
+                return result
+        model = MutatingModel()
+        with self.assertRaisesRegex(ValueError, 'Repeated held-out'):
+            evaluate_decisions(self.store, model)
+        self.assertEqual(len(model.calls), 1)
+
+    def test_pending_duplicate_is_not_scored_as_correlated_approved_case(self):
+        scenario = 'Would the owner confirm private snapshot safety before release?'
+        self.store.add_decision(scenario, 'Yes', 'Approved rationale',
+                                source='synthetic', options=['Yes', 'No'],
+                                split='test', approved=True)
+        self.store.add_decision(scenario[:-1] + '!', 'Yes', 'Pending rationale',
+                                source='synthetic', options=['Yes', 'No'],
+                                split='test')
+        model = Stub()
+        report = evaluate_decisions(self.store, model)
+        self.assertEqual(report['total'], 1)
+        self.assertEqual(len(model.calls), 1)
+
     def test_distinct_scenarios_with_shared_lead_in_remain_evaluable(self):
         self.store.add_decision(
             'Would the owner authorize deployment after all automated validation checks pass today?',

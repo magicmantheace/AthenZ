@@ -286,3 +286,29 @@ stopping that process when necessary, the owner can explicitly run
 new numbered attempt directory and never overwrites the old one. Pausing a
 completed/failed conversion is refused, and no Ollama model is automatically
 selected or imported.
+
+
+## v0.7 held-out within-split independence guard (2026-10-14)
+
+The protected evaluator now checks the **selected approved calibration or test
+cases** for repetitions before sending any case to a model. Exact scenarios
+after Unicode NFKC, case and punctuation normalization are refused; long,
+distinctive scenarios are also refused when their token sets reach the same
+conservative 88% Jaccard near-match threshold as cross-split leakage checks.
+Pending/unapproved records do not count as held-out observations. These are
+lexical heuristics: paraphrases can still slip through, and diverse cases may
+still be correlated in reality.
+
+`athenz-training inspect-heldout` exposes a new
+`selected_cases_independent` boolean without returning the underlying
+scenarios. A false value also makes `ready_for_owner_review` false. The
+actual evaluator rechecks selected-case independence after inference; the
+candidate comparison checks it before consulting Ollama's installed-model
+inventory, and immutable report persistence refuses corrupted or repeated
+samples. The checker does not train models, infer private decisions from
+metadata, authorize promotion or establish statistical independence.
+
+Scores produced on duplicated previous samples should be rerun after owner
+review and a distinct case set. The conventional Wilson interval assumes
+independent observations and can be overconfident even after this lexical
+guard passes.

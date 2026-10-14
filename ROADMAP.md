@@ -514,3 +514,16 @@ owner profile data or unattended coding action implied by this milestone.
   must be separately confirmed. Real faster-whisper accuracy, CPU/CUDA
   behavior, owner-device latency, audio accessibility and owner-reviewed
   ground-truth corpus are not verified by public synthetic tests.
+
+
+### 2026-10-14 — v0.7 repeated held-out scenario preflight
+
+- [x] Reject punctuation/Unicode-equivalent duplicates and strong lexical
+  near-duplicates within a selected approved calibration/test batch before
+  any local model inference.
+- [x] Include private-text-free `selected_cases_independent` in read-only
+  held-out preflight, reject biased comparisons/report saves and recheck
+  before accepting an inference result.
+- [ ] Test semantic/paraphrase independence and real owner-chosen scenarios
+  without contaminating train/calibration/test partitions; synthetic CI
+  checks do not validate true independence or improved behavior.
