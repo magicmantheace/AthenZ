@@ -7,7 +7,7 @@ approved evidence enters a local prompt. It does not train or update a model.
 
 ## What changes
 
-- Retain up to five globally approved `style`/`value` records as a general
+- Retain up to five globally approved `style`/`value`/`preference` records as a general
   communication backbone, prioritizing topic overlap, owner-assigned
   confidence and recency. Other approved identity/preference records must
   match the query lexically (except explicit profile/background questions).
