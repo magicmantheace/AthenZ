@@ -185,7 +185,8 @@ def _collides_with_approved_reference(store: IdentityStore, scenario: str,
     """
     for sql in (
         "SELECT text FROM identity WHERE status='approved'",
-        "SELECT text FROM writing_samples WHERE status='approved'",
+        "SELECT text FROM writing_samples "
+        "WHERE status='approved' AND split='train'",
         "SELECT topic || ' ' || detail FROM episodes WHERE status='approved'",
         "SELECT scenario || ' ' || rationale FROM decisions "
         "WHERE status='approved' AND split='train'",
