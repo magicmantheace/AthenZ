@@ -39,10 +39,11 @@ class EvaluationGateTests(unittest.TestCase):
                                     source='synthetic', options=['yes','no'], split='calibration',
                                     approved=True)
 
-    def observations(self, first=5, second=9, offset=0):
+    def observations(self, first=5, second=9, offset=0, limit=100):
         ids = [r['id'] for r in self.store.db.execute(
-            "SELECT id FROM decisions WHERE split='calibration' ORDER BY id")]
-        heldout_sha = _fingerprint(_heldout_rows(self.store, 'calibration', 100))
+            "SELECT id FROM decisions WHERE split='calibration' ORDER BY id LIMIT ?",
+            (limit,))]
+        heldout_sha = _fingerprint(_heldout_rows(self.store, 'calibration', limit))
         reference_sha = _reference_fingerprint(self.store)
         def one(correct, tweak=0):
             return {'heldout_sha256': heldout_sha, 'reference_sha256': reference_sha,
@@ -124,6 +125,7 @@ class EvaluationGateTests(unittest.TestCase):
                                     self.sha, limit=100)
         self.assertEqual(report['requested_case_limit'], 100)
         self.assertEqual(report['approved_split_total'], 12)
+        self.assertEqual(len(report['approved_split_sha256']), 64)
         self.assertEqual(report['cases'], 12)
         self.assertTrue(save_report(self.store, report, confirmed=True))
 
@@ -162,6 +164,24 @@ class EvaluationGateTests(unittest.TestCase):
                                self.sha, limit=12)
         self.assertEqual(count['calls'], 2)
 
+    def test_unscored_heldout_evidence_edit_invalidates_saved_report(self):
+        outside = self.store.add_decision(
+            'Should another independent owner audit precede the optional release?',
+            'yes', 'PRIVATE OUTSIDE WINDOW GOLD', source='synthetic',
+            options=['yes', 'no'], split='calibration', approved=True)
+        with mock.patch('athenz.model_gate.evaluate_decisions',
+                        side_effect=self.observations(limit=12)):
+            report = compare_models(self.store, Model('base'), Model('candidate'),
+                                    self.sha, limit=12)
+        self.assertEqual(report['cases'], 12)
+        self.assertEqual(report['approved_split_total'], 13)
+        with self.store.db:
+            self.store.db.execute('UPDATE decisions SET rationale=? WHERE id=?',
+                                  ('CHANGED PRIVATE OUTSIDE WINDOW', outside))
+        with self.assertRaisesRegex(BenchmarkError, 'population changed'):
+            save_report(self.store, report, confirmed=True)
+        self.assertFalse((self.store.home / 'datasets' / 'evaluations').exists())
+
     def test_forged_population_metadata_never_persists(self):
         with mock.patch('athenz.model_gate.evaluate_decisions',
                         side_effect=self.observations()):
@@ -170,7 +190,8 @@ class EvaluationGateTests(unittest.TestCase):
         mutations = ({'requested_case_limit': True},
                      {'requested_case_limit': 1},
                      {'approved_split_total': 8},
-                     {'approved_split_total': False})
+                     {'approved_split_total': False},
+                     {'approved_split_sha256': 'bad-digest'})
         for change in mutations:
             with self.subTest(change=change):
                 with self.assertRaisesRegex(BenchmarkError, 'metadata is inconsistent'):
@@ -187,7 +208,8 @@ class EvaluationGateTests(unittest.TestCase):
                                     self.sha)
         self.assertEqual(report['schema'], 2)
         for removed in ('requested_case_limit', 'approved_split_total',
-                        'baseline_correct', 'paired_improved', 'baseline_digest'):
+                        'approved_split_sha256', 'baseline_correct',
+                        'paired_improved', 'baseline_digest'):
             with self.subTest(removed=removed):
                 altered = {k: v for k, v in report.items() if k != removed}
                 with self.assertRaisesRegex(BenchmarkError, 'metadata is inconsistent'):
