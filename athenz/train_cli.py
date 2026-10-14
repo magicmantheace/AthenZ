@@ -9,6 +9,8 @@ from .experience import ExperienceStore
 from .training import build_dataset, delete_dataset, inspect_dataset, verify_dataset
 from .model_gate import compare_models, save_report, inspect_heldout_readiness
 from .learning_cycle import inspect_learning_cycle
+from .learning_session import (start_session, session_status, link_completed_run,
+                               link_comparison, close_session, cancel_session)
 from .chat import OllamaClient
 from .finetune import create_run, describe_run, execute_run
 from .adapters import register_adapter, selection, select_for_review, rollback_selection
@@ -41,6 +43,33 @@ def parser() -> argparse.ArgumentParser:
     x.add_argument('--min-cases', type=int, default=10)
     x.add_argument('--seed', type=int, default=42)
     x.add_argument('--dataset-sha256', default=None, help='Optional previously exported local reviewed dataset fingerprint')
+    x = sub.add_parser('session-start', help='Record an owner-confirmed offline learning experiment (no training)')
+    x.add_argument('dataset_sha256')
+    x.add_argument('--split', choices=['calibration', 'test'], default='calibration')
+    x.add_argument('--limit', type=int, default=100)
+    x.add_argument('--min-cases', type=int, default=10)
+    x.add_argument('--seed', type=int, default=42)
+    x.add_argument('--confirm', action='store_true')
+    x = sub.add_parser('session-status', help='Revalidate private experiment evidence without model calls')
+    x.add_argument('session_id')
+    x = sub.add_parser('session-link-run', help='Record a separately completed and registered QLoRA adapter')
+    x.add_argument('session_id')
+    x.add_argument('run_id')
+    x.add_argument('--revision', type=int, required=True)
+    x.add_argument('--confirm', action='store_true')
+    x = sub.add_parser('session-link-report', help='Record an already saved local comparison (even if worse)')
+    x.add_argument('session_id')
+    x.add_argument('report_sha256')
+    x.add_argument('--revision', type=int, required=True)
+    x.add_argument('--confirm', action='store_true')
+    x = sub.add_parser('session-close', help='Seal an evaluated session as an observation; does NOT deploy')
+    x.add_argument('session_id')
+    x.add_argument('--revision', type=int, required=True)
+    x.add_argument('--confirm', action='store_true')
+    x = sub.add_parser('session-cancel', help='Cancel a pending session without touching model routing')
+    x.add_argument('session_id')
+    x.add_argument('--revision', type=int, required=True)
+    x.add_argument('--confirm', action='store_true')
     x = sub.add_parser('compare', help='Compare two local models on the SAME held-out decision cases')
     x.add_argument('sha256', help='Previously approved private dataset hash')
     x.add_argument('--baseline', required=True)
@@ -130,6 +159,28 @@ def main(argv: list[str] | None = None) -> None:
                 store, split=args.split, limit=args.limit,
                 min_cases=args.min_cases, seed=args.seed,
                 dataset_sha256=args.dataset_sha256)
+        elif args.command == 'session-start':
+            result = start_session(
+                store, args.dataset_sha256, split=args.split, limit=args.limit,
+                min_cases=args.min_cases, seed=args.seed, confirmed=args.confirm)
+        elif args.command == 'session-status':
+            result = session_status(store, args.session_id)
+        elif args.command == 'session-link-run':
+            result = link_completed_run(
+                store, args.session_id, args.run_id,
+                expected_revision=args.revision, confirmed=args.confirm)
+        elif args.command == 'session-link-report':
+            result = link_comparison(
+                store, args.session_id, args.report_sha256,
+                expected_revision=args.revision, confirmed=args.confirm)
+        elif args.command == 'session-close':
+            result = close_session(
+                store, args.session_id, expected_revision=args.revision,
+                confirmed=args.confirm)
+        elif args.command == 'session-cancel':
+            result = cancel_session(
+                store, args.session_id, expected_revision=args.revision,
+                confirmed=args.confirm)
         elif args.command == 'build':
             result = build_dataset(store, confirmed=args.confirm)
         elif args.command == 'verify':
