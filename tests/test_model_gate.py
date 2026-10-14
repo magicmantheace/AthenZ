@@ -180,6 +180,21 @@ class EvaluationGateTests(unittest.TestCase):
                         {k: v for k, v in report.items() if k != 'requested_case_limit'},
                         confirmed=True)
 
+    def test_new_reports_require_population_and_paired_metadata(self):
+        with mock.patch('athenz.model_gate.evaluate_decisions',
+                        side_effect=self.observations()):
+            report = compare_models(self.store, Model('base'), Model('candidate'),
+                                    self.sha)
+        self.assertEqual(report['schema'], 2)
+        for removed in ('requested_case_limit', 'approved_split_total',
+                        'baseline_correct', 'paired_improved', 'baseline_digest'):
+            with self.subTest(removed=removed):
+                altered = {k: v for k, v in report.items() if k != removed}
+                with self.assertRaisesRegex(BenchmarkError, 'metadata is inconsistent'):
+                    save_report(self.store, altered, confirmed=True)
+        with self.assertRaisesRegex(BenchmarkError, 'metadata is inconsistent'):
+            save_report(self.store, {**report, 'schema': True}, confirmed=True)
+
     def test_comparison_carries_aggregate_uncertainty_only(self):
         reports = self.observations()
         reports[0]['accuracy_interval_95'] = [0.15, 0.72]
@@ -310,6 +325,8 @@ class EvaluationGateTests(unittest.TestCase):
                                  'baseline_accuracy', 'candidate_accuracy',
                                  'paired_improved', 'paired_regressed',
                                  'paired_unchanged', 'paired_one_sided_p_value')}
+        # Genuine historical schema-one records predate paired statistics.
+        legacy['schema'] = 1
         self.assertTrue(save_report(self.store, legacy, confirmed=True))
         malformed = {key: value for key, value in legacy.items()
                      if key != 'candidate_digest'}
