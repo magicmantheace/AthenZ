@@ -553,3 +553,13 @@ owner profile data or unattended coding action implied by this milestone.
   mutation tests added.
 - [ ] Measure model improvements with a real, owner-reviewed distribution of
   independently sampled decisions and an explicit rollback benchmark.
+
+### 2026-10-14 — Immutable schema-two evaluation lineage
+
+- [x] Newly generated comparison reports require schema-two complete paired
+  metrics and full held-out population; stripping fields cannot downgrade the
+  evidence contract without explicit historical schema-one handling.
+- [x] Downstream adapter selection and runtime review invalidate schema-two
+  evaluation reports when additional held-out cases are approved.
+- [x] Legacy schema-one report reading remains compatible, but cannot claim
+  the new full-population freshness guarantee.
