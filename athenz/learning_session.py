@@ -17,7 +17,8 @@ from .evaluation import (evaluate_decisions, _heldout_rows,
 from .experience import ExperienceStore
 from .learning_cycle import inspect_learning_cycle
 from .model_gate import (_approved_heldout_population, _consistent_comparison_metadata,
-                         _heldout_fingerprint, _validated_case_outcomes)
+                         _heldout_fingerprint, _validated_case_outcomes,
+                         _case_outcome_fingerprint)
 from .training import _private_root, verify_dataset
 
 
@@ -41,7 +42,7 @@ def _checkpoint(store: ExperienceStore, session_id: str) -> dict:
     if item is None or not isinstance(item.get('state'), dict):
         raise LearningSessionError('Learning session not found')
     s = item['state']
-    if (type(s.get('schema')) is not int or s['schema'] not in (1, 2)
+    if (type(s.get('schema')) is not int or s['schema'] not in (1, 2, 3)
             or s.get('stage') not in _STAGES
             or (s['schema'] == 1 and s['stage'] == 'baselined')
             or s.get('session_id') != session_id
@@ -70,6 +71,10 @@ def _checkpoint(store: ExperienceStore, session_id: str) -> dict:
                        for field in ('baseline_digest', 'baseline_case_ids_sha256',
                                      'baseline_heldout_sha256', 'baseline_reference_sha256'))):
             raise LearningSessionError('Stored baseline evidence is invalid')
+    if s['schema'] == 3 and s['stage'] in {'baselined', 'trained', 'evaluated', 'closed'}:
+        if any(type(s.get(field)) is not str or not _SHA.fullmatch(s[field])
+               for field in ('baseline_outcome_key', 'baseline_outcome_sha256')):
+            raise LearningSessionError('Stored per-case baseline fingerprint is invalid')
     if s['stage'] in {'trained', 'evaluated', 'closed'} and not isinstance(s.get('run_id'), str):
         raise LearningSessionError('Stored session is missing training evidence')
     if s['stage'] in {'evaluated', 'closed'} and not isinstance(s.get('report_sha256'), str):
@@ -154,12 +159,15 @@ def _evidence_is_current(store: ExperienceStore, state: dict) -> bool:
                     or report['baseline_digest'] != state['baseline_digest']
                     or report['candidate_digest'] != state['candidate_digest']):
                 return False
-            if state['schema'] == 2 and (
+            if state['schema'] in (2, 3) and (
                     report['baseline'] != state['baseline_tag']
                     or report['baseline_correct'] != state['baseline_correct']
                     or report['cases'] != state['baseline_cases']
                     or report['case_ids_sha256'] != state['baseline_case_ids_sha256']
                     or report['baseline_digest'] != state['baseline_digest']):
+                return False
+            if state['schema'] == 3 and (
+                    report.get('baseline_outcome_sha256') != state['baseline_outcome_sha256']):
                 return False
         return True
     except (ValueError, OSError, UnicodeError, TypeError, KeyError, IndexError):
@@ -172,6 +180,7 @@ def _summary(item: dict, *, current: bool) -> dict:
         'session_id': state['session_id'], 'revision': item['revision'],
         'stage': state['stage'], 'evidence_current': current,
         'baseline_observed': bool(state.get('baseline_digest')),
+        'baseline_outcomes_pinned': bool(state.get('baseline_outcome_sha256')),
         'baseline_model_installed_verified': False,
         'training_run_linked': bool(state.get('run_id')),
         'comparison_linked': bool(state.get('report_sha256')),
@@ -216,7 +225,7 @@ def start_session(store: ExperienceStore, dataset_sha256: str, *,
             break
     else:
         raise LearningSessionError('Could not reserve a unique session ID')
-    state = {'schema': 2, 'session_id': session_id, 'stage': 'prepared',
+    state = {'schema': 3, 'session_id': session_id, 'stage': 'prepared',
              'dataset_sha256': dataset_sha256, 'split': split, 'limit': limit,
              'min_cases': min_cases, 'seed': seed, 'approved_total': total,
              'population_sha256': population, 'reference_sha256': reference}
@@ -266,7 +275,7 @@ def record_baseline(store: ExperienceStore, session_id: str, model, *,
     state = item['state']
     if type(expected_revision) is not int or expected_revision != item['revision']:
         raise LearningSessionError('Session revision changed; reload before inference')
-    if state['schema'] != 2 or state['stage'] != 'prepared':
+    if state['schema'] not in (2, 3) or state['stage'] != 'prepared':
         raise LearningSessionError('Only a new prepared session can record its baseline')
     tag = getattr(model, 'model', None)
     if type(tag) is not str or not ALIAS.fullmatch(tag):
@@ -301,7 +310,18 @@ def record_baseline(store: ExperienceStore, session_id: str, model, *,
         # Suppress chained tracebacks: CLI exceptions must never print that
         # backend message or echo the held-out content it may contain.
         raise LearningSessionError('Baseline evaluation failed; review local evidence') from None
+    # Private per-session key makes per-case outcome hashes resistant to
+    # exhaustive guessing when the held-out set is small. Only this checkpoint
+    # stores the key. No per-case prediction text is persisted.
+    outcome_fields = {}
+    if state['schema'] == 3:
+        outcome_key = secrets.token_bytes(32)
+        outcome_fields = {
+            'baseline_outcome_key': outcome_key.hex(),
+            'baseline_outcome_sha256': _case_outcome_fingerprint(
+                cases, outcome_key)}
     return _transition(store, session_id, expected_revision, 'baselined', {
+        **outcome_fields,
         'baseline_tag': tag, 'baseline_digest': pinned_digest,
         'baseline_cases': len(cases), 'baseline_correct': observations['correct'],
         'baseline_case_ids_sha256': hashlib.sha256(
@@ -315,7 +335,7 @@ def link_completed_run(store: ExperienceStore, session_id: str, run_id: str, *,
     if not confirmed:
         raise LearningSessionError('Explicit --confirm required to link a trained adapter')
     item = _checkpoint(store, session_id)
-    if item['state']['stage'] != ('baselined' if item['state']['schema'] == 2 else 'prepared'):
+    if item['state']['stage'] != ('baselined' if item['state']['schema'] in (2, 3) else 'prepared'):
         raise LearningSessionError('Session is not awaiting a completed training run')
     if not _evidence_is_current(store, item['state']):
         raise LearningSessionError('Source evidence changed; start a new session')
@@ -349,12 +369,14 @@ def link_comparison(store: ExperienceStore, session_id: str, report_sha256: str,
             or report['reference_fingerprint'] != state['reference_sha256']
             or report['candidate'] != state['candidate_tag']
             or report['cases'] < state['min_cases']
-            or (state['schema'] == 2 and (
+            or (state['schema'] in (2, 3) and (
                 report['baseline'] != state['baseline_tag']
                 or report['baseline_digest'] != state['baseline_digest']
                 or report['baseline_correct'] != state['baseline_correct']
                 or report['cases'] != state['baseline_cases']
                 or report['case_ids_sha256'] != state['baseline_case_ids_sha256']))
+            or (state['schema'] == 3 and report.get('baseline_outcome_sha256') !=
+                state['baseline_outcome_sha256'])
             or report['heldout_fingerprint'] !=
                 _heldout_fingerprint(store, state['split'], report['cases'])):
         raise LearningSessionError('Report is for different or outdated model evidence')
@@ -366,6 +388,31 @@ def link_comparison(store: ExperienceStore, session_id: str, report_sha256: str,
         'report_sha256': report_sha256, 'observed_outcome': result,
         'baseline_digest': report['baseline_digest'],
         'candidate_digest': report['candidate_digest']})
+
+
+def session_comparison_context(store: ExperienceStore, session_id: str, *,
+                               expected_revision: int, baseline: str,
+                               candidate: str, dataset_sha256: str, split: str,
+                               limit: int, seed: int) -> tuple[bytes, str]:
+    """Validate same-session comparison and supply private keyed digest salt.
+
+    Call before and after inferencing. This function never makes network
+    requests; the caller must separately require explicit inference consent.
+    """
+    item = _checkpoint(store, session_id)
+    state = item['state']
+    if type(expected_revision) is not int or item['revision'] != expected_revision:
+        raise LearningSessionError('Session revision changed; reload before inference')
+    if state['schema'] != 3 or state['stage'] != 'trained':
+        raise LearningSessionError('Session must have a registered run and keyed baseline')
+    if (baseline != state['baseline_tag'] or candidate != state['candidate_tag']
+            or dataset_sha256 != state['dataset_sha256'] or split != state['split']
+            or type(limit) is not int or limit != state['limit']
+            or type(seed) is not int or seed != state['seed']):
+        raise LearningSessionError('Requested comparison differs from session baseline')
+    if not _evidence_is_current(store, state):
+        raise LearningSessionError('Session evidence changed before comparison')
+    return bytes.fromhex(state['baseline_outcome_key']), state['baseline_outcome_sha256']
 
 
 def close_session(store: ExperienceStore, session_id: str, *,
