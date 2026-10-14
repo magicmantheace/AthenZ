@@ -12,7 +12,7 @@ from athenz.adapters import (AdapterError, _read_review, inspect_adapter, regist
 from athenz.experience import ExperienceStore
 from athenz.finetune import create_run, execute_run
 from athenz.training import build_dataset
-from athenz.model_gate import save_report, _heldout_fingerprint
+from athenz.model_gate import save_report, _heldout_fingerprint, _approved_heldout_population
 from athenz.evaluation import _reference_fingerprint
 
 
@@ -51,7 +51,8 @@ class AdaptersTests(unittest.TestCase):
         return run['run_id']
 
     def report(self, model='candidate-a',gain=0.2, eligible=True):
-        ids = [r[0] for r in self.store.db.execute('SELECT id FROM decisions ORDER BY id')]
+        ids = [r[0] for r in self.store.db.execute(
+            'SELECT id FROM decisions ORDER BY id LIMIT 12')]
         obj={'schema':1,'dataset_sha256':self.dataset,'split':'calibration',
              'candidate':model,'baseline':'base','cases':12,
              'eligible_for_review':eligible,'accuracy_gain':gain,
@@ -66,8 +67,10 @@ class AdaptersTests(unittest.TestCase):
         old_sha = self.report()
         folder = self.store.home / 'datasets' / 'evaluations'
         old = json.loads((folder / ('eval-' + old_sha + '.json')).read_text())
+        total, population_sha = _approved_heldout_population(self.store, 'calibration')
         new = {**old, 'schema': 2,
-               'requested_case_limit': 12, 'approved_split_total': 12,
+               'requested_case_limit': 12, 'approved_split_total': total,
+               'approved_split_sha256': population_sha,
                'baseline_digest': 'a' * 64, 'candidate_digest': 'b' * 64,
                'baseline_correct': 5, 'candidate_correct': 9,
                'baseline_accuracy': 5 / 12, 'candidate_accuracy': 9 / 12,
@@ -90,12 +93,29 @@ class AdaptersTests(unittest.TestCase):
         with self.assertRaisesRegex(AdapterError, 'population changed'):
             _read_review(self.store, sha)
 
+    def test_new_schema_detects_out_of_window_case_content_edits(self):
+        extra_id = self.store.add_decision(
+            'Would an owner perform an entirely new optional synthetic audit?',
+            'yes', 'PRIVATE EVIDENCE BEYOND TWELVE',
+            source='synthetic', split='calibration',
+            options=['yes', 'no'], approved=True)
+        sha = self.schema_two_report()
+        report = _read_review(self.store, sha)
+        self.assertEqual(report['cases'], 12)
+        self.assertEqual(report['approved_split_total'], 13)
+        with self.store.db:
+            self.store.db.execute(
+                'UPDATE decisions SET rationale=? WHERE id=?',
+                ('CHANGED PRIVATE EVIDENCE BEYOND TWELVE', extra_id))
+        with self.assertRaisesRegex(AdapterError, 'population changed'):
+            _read_review(self.store, sha)
+
     def test_new_schema_review_rejects_tampered_population_fields(self):
         sha = self.schema_two_report()
         directory = self.store.home / 'datasets' / 'evaluations'
         original = json.loads((directory / ('eval-' + sha + '.json')).read_text())
-        for drop in ('approved_split_total', 'requested_case_limit',
-                     'baseline_correct', 'paired_improved'):
+        for drop in ('approved_split_total', 'approved_split_sha256',
+                     'requested_case_limit', 'baseline_correct', 'paired_improved'):
             with self.subTest(drop=drop):
                 altered = {k: v for k, v in original.items() if k != drop}
                 body = (json.dumps(altered, sort_keys=True,
