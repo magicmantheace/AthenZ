@@ -441,3 +441,37 @@ authorize execution. Actual restoration is still separate and requires
 cannot prove that future model bytes, filesystem permissions or runtime
 availability will remain unchanged, and it is not a signed model-lineage
 attestation.
+
+### Read-only end-to-end model lineage audit (October 14, 2026)
+
+```sh
+athenz-training lineage-audit <registered-run-id>
+athenz-training lineage-audit <registered-run-id> --check-ollama
+```
+
+This command examines the **existing private evidence chain**: consent-
+reviewed training/adapter registration, locally observed converter output
+(if recorded), GGUF import record, selected eligible held-out comparison,
+owner-approved review pointer and currently active runtime routing. The
+optional flag performs **one read-only loopback Ollama tag inventory lookup**
+for the reviewed candidate, never inference, import, model installation,
+remote upload or model activation.
+
+The output contains only aggregate stage results, provenance category,
+freshness gates and the next manual action. It does not reveal training text,
+transcripts, paths, model labels, run identifiers or fingerprints. An
+unselected candidate is not claimed to have an evaluation merely because a
+report file exists. A manual GGUF merge remains **owner-attested**, even if
+its imported candidate tag and benchmark still match; only a recorded and
+currently validated converter output earns the weaker but informative
+`local-conversion-observed` category. Neither result independently proves
+that the model internally contains the intended adapted weights.
+
+The `complete_local_record_chain` flag requires all six private stages to
+remain valid, including active runtime routing. Even then,
+`all_recorded_local_stages_current` is false until the opt-in loopback
+digest lookup succeeds. Both are observations, not authorization for
+promotion or proof of behavioral improvement or model provenance.
+A failed or absent stage returns a bounded status instead of private
+backend exception text. The command never repairs, retrains, reroutes
+or resets the model itself.
