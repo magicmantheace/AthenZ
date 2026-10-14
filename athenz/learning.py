@@ -16,7 +16,7 @@ from .store import IdentityStore, STATES, utc_now
 def _writing_split_key(text: str) -> str:
     """Conservative normalized exact-duplicate check, not semantic overlap."""
     return ' '.join(re.findall(
-        r'\\w+', unicodedata.normalize('NFKC', text).casefold()))
+        r'\w+', unicodedata.normalize('NFKC', text).casefold()))
 
 
 class LearningStore(IdentityStore):
