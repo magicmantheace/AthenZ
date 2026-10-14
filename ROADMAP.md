@@ -134,8 +134,8 @@ See [docs/TWIN_CONTEXT.md](docs/TWIN_CONTEXT.md).
 - [ ] Validate actual Twin style, decision accuracy and inference latency
   with the owner's real local installed model on the target PC.
 
-Details: [docs/TWIN_CONTEXT.md](docs/TWIN_CONTEXT.md). Readiness counts
-do not demonstrate correct style imitation or human digital continuity.
+Details: [docs/TWIN_STYLE_VALIDATION.md](docs/TWIN_STYLE_VALIDATION.md). Readiness
+counts do not demonstrate correct style imitation or human digital continuity.
 
 ## Next critical path
 1. Record and evaluate user decisions with reproducible train/test splits (#3).
