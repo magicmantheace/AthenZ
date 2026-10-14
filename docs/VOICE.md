@@ -64,3 +64,16 @@ inode, byte length and modification timestamp before releasing the result.
 The optional faster-whisper constructor is tested to require an absolute
 pre-existing model directory with `local_files_only=True` for both CPU and
 CUDA. No model weights or source audio are included in the public tests.
+
+### Local model-file stability during transcription
+
+On explicit transcription, AthenZ captures the local speech-model file
+identities, byte lengths and modification timestamps for required CTranslate2
+configuration/weights and any present tokenizer or vocabulary sidecars.
+It verifies the same local files after speech inference before returning the
+owner transcript. A file replacement, deletion, symlink, or rewrite during the
+operation refuses the private result rather than reporting it as generated
+by a stable local model. No model paths, transcript text or these metadata
+identifiers are persisted as audit data. These checks are not independent
+cryptographic provenance, cannot defeat a privileged same-user adversary,
+and do not certify accuracy or model licensing.

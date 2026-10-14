@@ -115,6 +115,38 @@ def _local_model_dir(path: Path) -> Path:
     return root
 
 
+def _model_files_observed(root: Path) -> tuple:
+    """Freeze the local runtime file identities without recording private paths.
+
+    Ordinary concurrent file replacement/rewrites invalidate a transcript;
+    this is not a model-content hash or adversarial-same-user attestation.
+    """
+    if root.is_symlink() or not root.is_dir():
+        raise VoiceError('Local speech model changed during transcription')
+    rows = []
+    total = 0
+    for name in ('config.json', 'model.bin', 'tokenizer.json', 'vocabulary.json'):
+        file = root / name
+        mandatory = name in ('config.json', 'model.bin')
+        if not file.exists() and not file.is_symlink():
+            if mandatory:
+                raise VoiceError('Local speech model changed during transcription')
+            continue
+        try:
+            if file.is_symlink():
+                raise VoiceError('Local speech model changed during transcription')
+            info = file.stat()
+        except OSError:
+            raise VoiceError('Local speech model changed during transcription') from None
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size < 1:
+            raise VoiceError('Local speech model changed during transcription')
+        total += info.st_size
+        if total > MAX_MODEL_BYTES:
+            raise VoiceError('Local speech model exceeds permitted size')
+        rows.append((name, info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns))
+    return tuple(rows)
+
+
 def _load_engine(model_dir: Path, *, device: str):
     try:
         from faster_whisper import WhisperModel
@@ -145,6 +177,7 @@ def transcribe_wav(path: Path, model_dir: Path, *,
         raise VoiceError('Choose an explicitly supported transcription language')
     evidence = inspect_wav(path)
     model = _local_model_dir(model_dir)
+    before_model = _model_files_observed(model)
     audio = Path(path).expanduser().absolute().resolve(strict=True)
     before_audio = _audio_fingerprint(audio)
     engine = _load_engine(model, device=device)
@@ -176,9 +209,13 @@ def transcribe_wav(path: Path, model_dir: Path, *,
         # Do not return speech inferred from bytes that changed while the
         # optional native decoder or model was reading the selected file.
         raise VoiceError('Selected audio changed during local transcription')
+    if _model_files_observed(model) != before_model:
+        # This also catches replacement or deletion of optional tokenizer
+        # sidecars during inference. It is not proof of model provenance.
+        raise VoiceError('Local speech model changed during transcription')
     result = ' '.join(parts)
     return {'schema': 1, 'status': 'transcribed' if result else 'no-speech',
-            'audio_fingerprint_stable': True,
+            'audio_fingerprint_stable': True, 'model_files_stable': True,
             'transcript': result, 'device_requested': device,
             'language_requested': language,
             'model_downloaded': False, 'audio_uploaded': False,

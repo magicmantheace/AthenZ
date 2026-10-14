@@ -70,6 +70,7 @@ class VoiceTests(unittest.TestCase):
         self.assertFalse(engine.calls[1]['word_timestamps'])
         self.assertEqual(report['transcript'], 'Hello local world')
         self.assertTrue(report['audio_fingerprint_stable'])
+        self.assertTrue(report['model_files_stable'])
         self.assertFalse(report['stored_in_profile'])
         self.assertFalse(report['audio_uploaded'])
         self.assertFalse(report['submitted_to_chat'])
@@ -116,6 +117,40 @@ class VoiceTests(unittest.TestCase):
         with self.assertRaisesRegex(VoiceError, 'language'):
             transcribe_wav(self.wav, self.model, confirmed=True,
                            language='auto-network')
+
+    def test_model_file_change_during_transcription_never_releases_transcript(self):
+        from types import SimpleNamespace
+        voice_model = self.model / 'model.bin'
+        class EditingEngine:
+            def transcribe(inner, wav, **kwargs):
+                voice_model.write_bytes(b'OTHER-LOCAL-MODEL-WEIGHTS')
+                os.utime(voice_model, None)
+                return iter([SimpleNamespace(text='PRIVATE-TRANSCRIPT-BLOCKED')]), None
+        with mock.patch('athenz.voice._load_engine', return_value=EditingEngine()):
+            with self.assertRaisesRegex(VoiceError, 'model changed') as caught:
+                transcribe_wav(self.wav, self.model, confirmed=True)
+        self.assertNotIn('PRIVATE-', str(caught.exception))
+
+    def test_optional_tokenizer_change_or_symlink_is_refused(self):
+        from types import SimpleNamespace
+        tokenizer = self.model / 'tokenizer.json'
+        tokenizer.write_text('{"synthetic":true}')
+        class EditingEngine:
+            def transcribe(inner, wav, **kwargs):
+                tokenizer.write_text('{"synthetic":false}')
+                return iter([SimpleNamespace(text='PRIVATE-SPEECH')]), None
+        with mock.patch('athenz.voice._load_engine', return_value=EditingEngine()):
+            with self.assertRaisesRegex(VoiceError, 'model changed'):
+                transcribe_wav(self.wav, self.model, confirmed=True)
+        tokenizer.unlink()
+        try:
+            tokenizer.symlink_to(self.model / 'config.json')
+        except (OSError, NotImplementedError):
+            self.skipTest('No symlink privilege available')
+        with mock.patch('athenz.voice._load_engine',
+                        side_effect=AssertionError('Must refuse before model load')):
+            with self.assertRaisesRegex(VoiceError, 'model changed'):
+                transcribe_wav(self.wav, self.model, confirmed=True)
 
     def test_changed_audio_during_transcription_refuses_private_result(self):
         from types import SimpleNamespace

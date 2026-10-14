@@ -444,3 +444,12 @@ owner profile data or unattended coding action implied by this milestone.
   on the owner PC, native microphone/TTS UI, accessibility and connected
   local voice workflow require separate explicit acceptance. These tests
   are not a privacy or hardware audit of external model libraries.
+
+### 2026-10-13 — File-based voice runtime input stability
+
+- [x] Optional, consent-only offline WAV transcription now checks both the
+  selected audio SHA-256 and local CTranslate2 model file identities before
+  returning speech text. Model configuration, weights and optional tokenizer
+  sidecars cannot silently change during a transcription operation.
+- [ ] Real CPU/CUDA speech quality, Windows native CTranslate2 dependencies,
+  multilingual comprehension and accessible voice controls remain unverified.
