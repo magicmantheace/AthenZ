@@ -20,7 +20,7 @@ class StyleSplitTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.store = IdentityStore(Path(self.tmp.name) / "private")
+        self.store = ExperienceStore(Path(self.tmp.name) / "private")
         self.addCleanup(self.store.close)
 
     def sample(self, text, split="train", status="approved"):
