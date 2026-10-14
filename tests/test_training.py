@@ -241,7 +241,7 @@ class TrainingDatasetTests(unittest.TestCase):
 
     def test_cli_has_no_train_or_deploy_command(self):
         commands = parser()._subparsers._group_actions[0].choices
-        self.assertEqual(set(commands), {'inspect', 'inspect-heldout', 'learning-plan', 'build', 'verify', 'delete', 'compare', 'prepare-qlora', 'verify-qlora', 'run-qlora', 'register-adapter', 'selection', 'select-adapter', 'rollback-adapter', 'runtime-status', 'runtime-activate', 'runtime-rollback', 'prepare-import', 'verify-import', 'import-local', 'prepare-conversion', 'run-conversion', 'pause-conversion', 'verify-conversion'})
+        self.assertEqual(set(commands), {'inspect', 'inspect-heldout', 'learning-plan', 'session-start', 'session-status', 'session-link-run', 'session-link-report', 'session-close', 'session-cancel', 'build', 'verify', 'delete', 'compare', 'prepare-qlora', 'verify-qlora', 'run-qlora', 'register-adapter', 'selection', 'select-adapter', 'rollback-adapter', 'runtime-status', 'runtime-activate', 'runtime-rollback', 'prepare-import', 'verify-import', 'import-local', 'prepare-conversion', 'run-conversion', 'pause-conversion', 'verify-conversion'})
 
 
 if __name__ == '__main__':
