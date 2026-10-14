@@ -125,11 +125,10 @@ def _writing_excerpt(text: str, terms: set[str]) -> tuple[str, bool]:
     """
     start = 0
     if len(text) > 700 and terms:
-        matches = [m.start() for m in re.finditer(r"[a-z0-9][a-z0-9_-]{2,}",
-                                                 text.lower())
-                   if m.group() in terms]
-        if matches:
-            start = min(max(0, matches[0] - 140), len(text) - 700)
+        for match in re.finditer(r"[a-z0-9][a-z0-9_-]{2,}", text.lower()):
+            if match.group() in terms:
+                start = min(max(0, match.start() - 140), len(text) - 700)
+                break
     end = min(len(text), start + 700)
     return text[start:end], start > 0 or end < len(text)
 
