@@ -57,6 +57,24 @@ training evaluation and explicit selection; no model is auto-promoted.
 See [development integration status](docs/INTEGRATION_STATUS.md) for the
 archival branch, exact tested source and remaining merge gates.
 
+### Developmental AI integration (planned)
+
+Developmental AI
+is the planned **single adaptive learning subsystem** for AthenZ's
+owner-facing executive, not another digital-twin persona or permission
+authority. Its experimental persistent policies, world models, learned
+memory controls and reviewed candidates currently run as separate
+simulator research; no AthenZ/Synveil learning-service bridge is
+implemented yet. The first dependency is a versioned, permissioned local
+event/experience interface, with simulated agent memories always
+separate from the consenting person's records. Synveil is an optional
+future operating host, not a requirement for Windows/WSL2 development.
+
+See [integration architecture and release acceptance gates](
+docs/DEVELOPMENTAL_AI_INTEGRATION.md) and the
+[updated AthenZ roadmap](ROADMAP.md) for the linked 2027–2029 milestones.
+No human-mind emulation or autonomous real-world tool authority is claimed.
+
 See [ROADMAP.md](ROADMAP.md), [AGENTS.md](AGENTS.md),
 [docs/LEARNING.md](docs/LEARNING.md), [docs/WORKER.md](docs/WORKER.md), and
 [docs/CONTROLLER.md](docs/CONTROLLER.md). Encryption at rest, robust local

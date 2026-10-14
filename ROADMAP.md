@@ -6,9 +6,10 @@ periodic model updates. It is not a literal copy of a human consciousness.
 
 ## Safety contracts
 - Twin estimates owner behavior; Agent works for owner. Never invent lived history.
-- Three rates of learning: approved context, reviewed/test-backed experience,
-  and explicitly approved benchmark-gated local LoRA updates (experimental
-  implementation exists; target-device training/inference not yet validated).
+- Keep four distinct learning tracks: approved context, reviewed/test-backed
+  AthenZ experience, Developmental AI sandbox policy/world-model adaptation
+  (not yet integrated), and explicitly approved benchmark-gated local LoRA
+  updates (experimental; target-device training/inference not yet validated).
 - Imported chat data remains pending by default; training export only includes
   reviewed data. No private data or corpora in Git.
 - Explicit file scope, review and human action precede any code write; no
@@ -29,6 +30,53 @@ periodic model updates. It is not a literal copy of a human consciousness.
 | v0.8 | Optional voice and local connectors | Per-integration opt-in and disable controls |
 | v0.9 | Privacy and reliability hardening, installer and Windows validation | Backup/erasure threat tests and regression gates pass |
 | v1.0 | Stable personalized local agent with controlled learning | Identity, coding, privacy, recoverability benchmarks met |
+
+## Cross-project Developmental AI integration track (added 2026-10-14)
+
+**Architecture decision:** AthenZ is the persistent owner-facing agent and
+consent/identity authority. Developmental AI is its **single adaptive learning subsystem**, not a second independent persona
+or an authority over the owner's data or computer. Specializations (reasoning,
+coding, speech, perception, planning, skills) are invoked as bounded
+capabilities by that one agent, never as competing identities. Synveil is the
+future optional local operating environment and guarded actuator host; the
+AthenZ + Developmental AI combination must also run on Windows/WSL2 without it.
+
+**Learning modes are distinct and must not be conflated:**
+1. AthenZ owner-reviewed factual and autobiographical retrieval (no weight updates).
+2. AthenZ evidence-backed agent episode/procedural memory with source revocation.
+3. Developmental AI's *sandbox-only* experiential policy, world-model, and
+   memory-control learning, with isolated checkpoints and candidate quarantine.
+4. Separately consented AthenZ neural fine-tuning, held-out evaluation,
+   provenance checks, explicit promotion and reversible rollback.
+No simulated experience becomes a fact about the consenting person's life.
+
+This is a **parallel dependency track**, not a renumbering of completed v0.1–v0.8
+features. Its gates are prerequisite to claiming one continuously developing
+v1.0 agent. Detailed contract and acceptance plan:
+[docs/DEVELOPMENTAL_AI_INTEGRATION.md](docs/DEVELOPMENTAL_AI_INTEGRATION.md).
+The separate access-controlled Developmental AI source-of-truth roadmap
+tracks research D0–D10; this public AthenZ roadmap tracks integration.
+
+| AthenZ target | Cross-repository dependency and acceptance gate | Status on 2026-10-14 |
+| --- | --- | --- |
+| v0.7 bridge / 2027 Q1 (Developmental AI D2) | Versioned local, authenticated or explicitly owner-authorized transport; typed, bounded observation/episode/action-proposal/result envelopes; schema negotiation, provenance, deduplication, replay and pause; no real action execution | Not implemented: Developmental AI has a simulation-only ledger and a draft integration contract |
+| v0.7–v0.8 evaluation / 2027 Q2 (D3) | Independent held-out cross-task and shifted-distribution benchmarks; abstain on unfamiliar conditions; report success, wrong decisions, coverage, regressions and unknowns, including negative results | Not implemented: separate research experiments exist, but generalization/reliability is not established |
+| v0.8 skill and memory service / 2027 Q3 (D4) | One AthenZ agent invokes reusable approved skill descriptors; sandbox demonstrations, reproducible skill tests, retrieval with rollback; no learning of extra permissions | Not implemented |
+| v0.8 supervised sandbox autonomy / 2027 Q4 (D5) | Durable bounded perceive → propose goal → simulate/action proposal → feedback → learn loop, with time/compute budgets, interruption, no unreviewed physical/system acts and restart recovery | Not implemented |
+| v0.9 lifelong learning / 2028 Q1 (D6) | Quarantined candidate policies; replay and forgetting checks across old/new tasks, owner approval for promotion, versioned knowledge snapshots and tested recovery after restart | Partial research components only; not an integrated lifelong learner |
+| v0.9 AthenZ personal integration / 2028 Q2 (D7) | Owner-approved human history and agent-acquired experience in separate provenance namespaces; deletion/revocation propagated to derived features, lessons and candidates; one stable persona | Not implemented |
+| v0.9 optional Synveil hosting / 2028 Q3 (D8) | Sandboxed typed system action proposals, Synveil policy mediation and AI-off fallback; AthenZ remains functional on Windows/WSL2 without Synveil | Not implemented |
+| v1.0 long-run readiness / 2028 Q4 (D9) | At least 30 days of supervised, restartable, auditable operation with retention, drift, no-contamination, rollback, safe shutdown and privacy tests; independently held-out acceptance suite | Not implemented |
+| v1.0 integrated candidate / **2029-02-09** (D10) | Demonstrate one persistent learning agent, controlled improvements and retention across tasks, consented Twin simulation, safe Agent coding, optional Synveil home and reproducible limitations | Not implemented; date is a research target, not a claim of mind transfer, consciousness or human-level ability |
+
+**Immediate implementation order:** (1) freeze a minimum event / feedback / checkpoint
+schema and a synthetic bidirectional adapter, (2) test consent and
+human-vs-agent-vs-simulation provenance boundaries plus replay and revocation,
+(3) connect a single sandbox lifelong-learning cycle, (4) evaluate across
+unseen task families before escalating autonomy, (5) add Synveil as an
+optional adapter rather than a dependency. Do not put personal examples in
+either public Git repository, permit learned text to grant tools, or use
+simulation checksums as user authentication.
 
 ## Next critical path
 1. Record and evaluate user decisions with reproducible train/test splits (#3).
