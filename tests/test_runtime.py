@@ -13,7 +13,7 @@ from athenz.finetune import create_run, execute_run
 from athenz.model_gate import save_report, _heldout_fingerprint
 from athenz.evaluation import _reference_fingerprint
 from athenz.runtime import (RoutingError, activate, checked_active_tag,
-                            model_digest, rollback, status)
+                            model_digest, rollback, status, inspect_rollback_readiness)
 from athenz.train_cli import parser
 from athenz.training import build_dataset
 
@@ -189,6 +189,63 @@ class RoutingTests(unittest.TestCase):
         with self.assertRaisesRegex(RoutingError, 'baseline digest changed'):
             rollback(self.s, expected_revision=1, confirmed=True)
         self.assertEqual(status(self.s)['active_tag'], 'candidate-a')
+
+    def test_rollback_preflight_requires_explicit_read_only_inventory(self):
+        self.select()
+        self.activate()
+        with mock.patch('athenz.runtime.model_digest',
+                        side_effect=AssertionError('Unexpected offline inventory')):
+            offline = inspect_rollback_readiness(self.s)
+        self.assertEqual(offline['revision'], 1)
+        self.assertTrue(offline['candidate_active'])
+        self.assertTrue(offline['baseline_record_valid'])
+        self.assertFalse(offline['ready_for_manual_rollback'])
+        self.assertFalse(offline['local_inventory_checked'])
+        self.assertEqual(status(self.s)['revision'], 1)
+        checked = inspect_rollback_readiness(self.s, check_ollama=True)
+        self.assertTrue(checked['baseline_digest_matches'])
+        self.assertTrue(checked['ready_for_manual_rollback'])
+        self.assertEqual(checked['next_step'], 'owner-may-confirm-runtime-rollback')
+        self.assertFalse(checked['routing_changed'])
+        self.assertEqual(status(self.s)['active_tag'], 'candidate-a')
+
+    def test_rollback_preflight_ignores_revoked_candidate(self):
+        self.select()
+        self.activate()
+        self.s.set_review('train_pairs', self.pair, 'rejected')
+        del self.seen['candidate-a']
+        checked = inspect_rollback_readiness(self.s, check_ollama=True)
+        self.assertTrue(checked['ready_for_manual_rollback'])
+        self.assertEqual(status(self.s)['revision'], 1)
+        self.assertEqual(rollback(self.s, expected_revision=1, confirmed=True)['active_tag'], 'base')
+        self.assertEqual(inspect_rollback_readiness(self.s, check_ollama=True)['next_step'],
+                         'no-active-candidate')
+
+    def test_rollback_readiness_fails_closed_on_baseline_digest_drift(self):
+        self.select()
+        self.activate()
+        self.seen['base'] = 'f'*64
+        result = inspect_rollback_readiness(self.s, check_ollama=True)
+        self.assertFalse(result['ready_for_manual_rollback'])
+        self.assertFalse(result['baseline_digest_matches'])
+        self.assertEqual(result['next_step'], 'restore-or-review-pinned-baseline')
+        self.assertEqual(status(self.s)['active_tag'], 'candidate-a')
+        del self.seen['base']
+        self.assertFalse(inspect_rollback_readiness(self.s, check_ollama=True)['ready_for_manual_rollback'])
+
+    def test_rollback_readiness_refuses_malformed_checkpoint_without_mutation(self):
+        self.select()
+        self.activate()
+        cp = self.s.get_checkpoint('ollama_runtime')
+        state = {**cp['state'], 'baseline_digest': 'invalid'}
+        self.s.checkpoint('ollama_runtime', cp['task'], state,
+                          expected_revision=cp['revision'])
+        with mock.patch('athenz.runtime.model_digest',
+                        side_effect=AssertionError('Unsafe inventory access')):
+            check = inspect_rollback_readiness(self.s, check_ollama=True)
+        self.assertFalse(check['baseline_record_valid'])
+        self.assertFalse(check['local_inventory_checked'])
+        self.assertFalse(check['ready_for_manual_rollback'])
 
     def test_runtime_cli_commands_present(self):
         actions = parser()._subparsers._group_actions[0].choices
