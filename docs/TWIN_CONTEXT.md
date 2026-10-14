@@ -79,3 +79,16 @@ paraphrase leakage nor memorization in model weights.
    subjective similarity. Keep private test examples out of GitHub CI.
 4. Validate actual local Ollama inference and Windows/RTX 3060 Twin sessions
    with owner approval; synthetic retrieval tests do not validate fidelity.
+
+## Offline retrieval acceptance benchmark
+
+Run `python -m athenz.twin_benchmark` locally to create a **disposable,
+entirely synthetic** private profile, place a relevant identity record behind
+260 newer unrelated records, and verify that relevant retrieval works while
+unrelated and subsequently revoked evidence is absent. Output contains only
+aggregate counts, no private excerpts. CI also runs the same acceptance check
+via `tests/test_twin_benchmark.py`.
+
+This tests retrieval mechanics and owner revocation, **not** real owner style
+fidelity, semantic memory quality or model reasoning. Those require an
+independent, explicitly approved local evaluation dataset.
