@@ -34,11 +34,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 1419fa17b21bb7a08fb923e72d36a43762f5def5
+          ref: 0ae6ee8cb723eb3d1673b26436e67641ac4822df
           persist-credentials: false
       - name: Verify exact reviewed source
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "1419fa17b21bb7a08fb923e72d36a43762f5def5"
+        run: test "$(git rev-parse HEAD)" = "0ae6ee8cb723eb3d1673b26436e67641ac4822df"
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
@@ -53,11 +53,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 1419fa17b21bb7a08fb923e72d36a43762f5def5
+          ref: 0ae6ee8cb723eb3d1673b26436e67641ac4822df
           persist-credentials: false
       - name: Verify exact reviewed source
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "1419fa17b21bb7a08fb923e72d36a43762f5def5"
+        run: test "$(git rev-parse HEAD)" = "0ae6ee8cb723eb3d1673b26436e67641ac4822df"
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
