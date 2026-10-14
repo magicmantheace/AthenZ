@@ -577,3 +577,16 @@ owner profile data or unattended coding action implied by this milestone.
   selects a candidate.
 - [ ] Prove real improved decisions and explicit runtime rollback on the
   owner's Windows/RTX 3060 machine with separately approved local inference.
+
+### 2026-10-14 — bounded pre-training baseline milestone
+
+- [x] New schema-two learning sessions require an owner-confirmed local
+  baseline prediction benchmark before linking registered training output.
+- [x] Pin the exact baseline Ollama model digest, selected held-out case IDs,
+  dataset consent and complete approved case population before/after inference.
+- [x] Require later candidate comparison to match baseline tag, model digest,
+  selected cases and observed correct count; refuse reproducibility failures.
+- [x] Preserve existing schema-one session compatibility and fail-closed
+  revision fencing, no implicit model training or deployment.
+- [ ] Re-run end-to-end pre-training baseline → CUDA fine-tuning → paired
+  comparison → explicit rollback on owner hardware with approved real data.
