@@ -328,3 +328,19 @@ and do not gain retrospective full-population attestation. Rerun comparison
 on a current independent held-out set when the approved evaluation population
 changes. This adds freshness checks, not statistically independent evaluation
 or permission to deploy models.
+
+### Versioned learning evidence and downstream adapter validity
+
+New paired `compare` outputs use report **schema 2**, requiring a complete
+baseline/candidate aggregate, paired improvement counts/probability, pinned
+installed-model digests, requested case limit and full approved split count.
+A new schema-two report cannot silently discard these fields and still pass
+owner review. Adapter review and routed runtime model validation also reject
+a schema-two report if the approved held-out population changes later, even
+when the new case lies beyond the originally scored limit.
+
+Historical **schema 1** reports remain readable for continuity, but are not
+retroactively claimed to be bound to the full approved population. Their
+earlier consent, score, selected-case fingerprint and reference checks remain
+in force. A new training/promotion decision should use a fresh schema-two
+comparison rather than relying on an older report.
