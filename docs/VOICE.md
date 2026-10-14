@@ -77,3 +77,14 @@ by a stable local model. No model paths, transcript text or these metadata
 identifiers are persisted as audit data. These checks are not independent
 cryptographic provenance, cannot defeat a privileged same-user adversary,
 and do not certify accuracy or model licensing.
+
+### No-follow WAV metadata inspection
+
+WAV inspection now opens the selected local file through a bounded,
+non-symlink-following descriptor where supported and compares its open-file
+identity, inode, size and modification time with the named file. This refuses
+common file replacement and torn-header races between initial path validation
+and parsing. The inspection still returns only format metadata—no audio
+samples, model request, upload, transcription or owner transcript. Native
+Windows filesystem semantics and adversarial same-user directory races are
+not independently security-certified.

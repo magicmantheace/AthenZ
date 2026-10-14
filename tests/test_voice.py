@@ -49,6 +49,34 @@ class VoiceTests(unittest.TestCase):
         self.assertNotIn(str(self.wav), json.dumps(report))
         self.assertFalse((self.root / 'identity.sqlite3').exists())
 
+    def test_wav_inspection_uses_no_follow_handle_after_initial_selection(self):
+        from athenz.voice import _local_regular
+        original = _local_regular
+        def change_name_before_open(path, *, max_bytes):
+            selected = original(path, max_bytes=max_bytes)
+            self.wav.unlink()
+            try:
+                self.wav.symlink_to(self.model / 'model.bin')
+            except (OSError, NotImplementedError):
+                self.skipTest('No symlink privilege for synthetic replacement race')
+            return selected
+        with mock.patch('athenz.voice._local_regular',
+                        side_effect=change_name_before_open):
+            with self.assertRaises(VoiceError):
+                inspect_wav(self.wav)
+
+    def test_wav_inspection_rejects_changed_open_file_identity(self):
+        from athenz.voice import _local_regular
+        original = _local_regular
+        def modify_selected_file(path, *, max_bytes):
+            chosen = original(path, max_bytes=max_bytes)
+            self.wav.write_bytes(b'RIFFPRIVATE-CORRUPT-WAV')
+            return chosen
+        with mock.patch('athenz.voice._local_regular',
+                        side_effect=modify_selected_file):
+            with self.assertRaises(VoiceError):
+                inspect_wav(self.wav)
+
     def test_explicit_consent_precedes_any_private_audio_or_model_access(self):
         with mock.patch('athenz.voice.inspect_wav',
                         side_effect=AssertionError('Private audio accessed')):

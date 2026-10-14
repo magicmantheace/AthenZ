@@ -46,12 +46,29 @@ def inspect_wav(path: Path) -> dict:
     if p.suffix.lower() != '.wav':
         raise VoiceError('Only existing PCM WAV audio is supported')
     try:
-        with wave.open(str(p), 'rb') as stream:
-            channels = stream.getnchannels()
-            rate = stream.getframerate()
-            samples = stream.getnframes()
-            width = stream.getsampwidth()
-            compression = stream.getcomptype()
+        # Do not re-open a mutable path through wave.open(filename). Use the
+        # original name via a no-follow descriptor, then verify its identity.
+        flags = os.O_RDONLY | getattr(os, 'O_BINARY', 0) | getattr(os, 'O_NOFOLLOW', 0)
+        with os.fdopen(os.open(p, flags), 'rb') as handle:
+            before = os.fstat(handle.fileno())
+            named = p.lstat()
+            if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                    or not stat.S_ISREG(named.st_mode) or named.st_nlink != 1
+                    or (before.st_dev, before.st_ino) != (named.st_dev, named.st_ino)
+                    or before.st_size != length):
+                raise VoiceError('Selected PCM WAV changed before inspection')
+            with wave.open(handle, 'rb') as stream:
+                channels = stream.getnchannels()
+                rate = stream.getframerate()
+                samples = stream.getnframes()
+                width = stream.getsampwidth()
+                compression = stream.getcomptype()
+            after = os.fstat(handle.fileno())
+            if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
+                    != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns):
+                raise VoiceError('Selected PCM WAV changed during inspection')
+    except VoiceError:
+        raise
     except (wave.Error, OSError, EOFError, ValueError):
         raise VoiceError('Invalid or unreadable PCM WAV file') from None
     if (compression != 'NONE' or width != 2 or channels not in (1, 2)
