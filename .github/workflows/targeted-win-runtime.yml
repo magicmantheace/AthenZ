@@ -1,0 +1,29 @@
+name: AthenZ targeted Windows rollback regression
+
+on:
+  push:
+    branches: [ci/rollback-rehearsal-diagnostic-20261014]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-tests:
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 2581344bdbd0cf82b69f1314d3af29aca6aef96e
+          persist-credentials: false
+      - name: Verify source
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "2581344bdbd0cf82b69f1314d3af29aca6aef96e"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install local project
+        run: python -m pip install -e .
+      - name: Rehearsal and runtime unit tests only
+        run: python -m unittest discover -s tests -p test_runtime.py -v
