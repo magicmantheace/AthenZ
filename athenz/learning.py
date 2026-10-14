@@ -7,8 +7,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+import unicodedata
 from contextlib import nullcontext
 from .store import IdentityStore, STATES, utc_now
+
+
+def _writing_split_key(text: str) -> str:
+    """Conservative normalized exact-duplicate check, not semantic overlap."""
+    return ' '.join(re.findall(
+        r'\\w+', unicodedata.normalize('NFKC', text).casefold()))
 
 
 class LearningStore(IdentityStore):
@@ -57,6 +65,17 @@ class LearningStore(IdentityStore):
         row = self.db.execute(f'SELECT * FROM {table} WHERE id=?', (item_id,)).fetchone()
         if row is None:
             return False
+        if table == 'writing_samples' and state == 'approved':
+            normalized = _writing_split_key(row['text'])
+            if not normalized:
+                raise ValueError('Reviewed writing sample cannot be empty')
+            for other in self.db.execute(
+                """SELECT text FROM writing_samples
+                   WHERE status='approved' AND split<>? AND id<>?""",
+                (row['split'], item_id)
+            ):
+                if _writing_split_key(other['text']) == normalized:
+                    raise ValueError('Duplicate writing sample in a separate evaluation split')
         if table == 'experiences' and state == 'approved':
             if row['outcome'] != 'test_pass':
                 raise ValueError('Cannot approve a failed test as a successful lesson')
