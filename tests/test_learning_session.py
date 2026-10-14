@@ -190,7 +190,7 @@ class LearningSessionTests(unittest.TestCase):
                 return json.dumps({'choice_letter': 'A'})
         self_pair = self.pair
         with mock.patch('athenz.runtime.model_digest', return_value='a'*64):
-            with self.assertRaisesRegex(LearningSessionError, 'Baseline evaluation failed'):
+            with self.assertRaisesRegex(LearningSessionError, 'Baseline evaluation evidence changed'):
                 record_baseline(self.store, session['session_id'], Fake(),
                                 expected_revision=session['revision'], confirmed=True)
         self.assertEqual(session_status(self.store, session['session_id'])['stage'],
