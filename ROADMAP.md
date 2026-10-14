@@ -590,3 +590,17 @@ owner profile data or unattended coding action implied by this milestone.
   revision fencing, no implicit model training or deployment.
 - [ ] Re-run end-to-end pre-training baseline → CUDA fine-tuning → paired
   comparison → explicit rollback on owner hardware with approved real data.
+
+### 2026-10-14 — prediction-level reproducibility and rollback preflight
+
+- [x] New schema-three sessions keep a private per-session HMAC key and
+  keyed ordered-case baseline outcomes, including errors, without storing
+  prompts, answer labels or predictions.
+- [x] Session-bound paired comparison verifies matching baseline predictions,
+  model digests, selected evidence and checkpoint revision before saving
+  a reviewed report. Equal total accuracy cannot disguise case-level drift.
+- [x] Read-only rollback readiness distinguishes offline structural review
+  from explicit loopback Ollama baseline digest verification, independently
+  of candidate availability and without mutating model routing.
+- [ ] Validate this workflow against real owner-reviewed held-out examples
+  and installed models on the target Windows/RTX 3060 environment.
