@@ -1,58 +1,62 @@
-# Development integration status (2026-10-13, America/Edmonton)
+# AthenZ source consolidation and validation — 2026-10-14
 
-This branch is an **integration candidate**, not a stable Windows installer or
-a release tag. It begins at archival source `233047ee528c969636dc820326268ef7a2164f00`
-and preserves its history while applying release-readiness consistency fixes
-and correcting stale public status documentation.
+**Current source of truth:** `main` at
+`4d02fc7993b72815c9452269ee7595f6bae629de` (post-PR #43).
+It is experimental **v0.6 alpha**, with partial **v0.7 held-out evaluation**
+and **v0.8 optional offline voice** groundwork. It is not a stable release,
+signed installer, independently certified model, human consciousness copy,
+or fully autonomous coding agent.
 
-## Branch roles
+## Consolidation completed
 
-- `main` (`5d7e5b8ef3eca602dee0f9ac2ad85aac7761d255`) is the older
-  v0.6 alpha desktop baseline. Do not discard it or force-push it.
-- `archive/manual-ci-budget-2026-10-12` is the long-running implementation
-  history, including early v0.7 held-out evaluation and v0.8 offline voice.
-- `integration/archival-v06-v08-review-20261013` is the reviewable forward
-  reconciliation candidate. It must not be reported as merged until a
-  deliberate main-branch merge occurs.
+- The old `main` source `5d7e5b8ef3eca602dee0f9ac2ad85aac7761d255`
+  is retained on `backup/main-pre-archival-consolidation-20261014`.
+- PR [#42](https://github.com/magicmantheace/AthenZ/pull/42)
+  passed public Linux 3.11/3.12/3.13 and Windows 3.11 tests plus unsigned
+  packaged Windows/Tk startup checks. It hardened local release-readiness
+  acceptance history and storage checks.
+- PR [#43](https://github.com/magicmantheace/AthenZ/pull/43)
+  passed the same five jobs, adding seven regression tests and a lexical
+  within-split uniqueness gate for held-out decision evaluation.
+- These fixes were merged to the archival implementation history, which was
+  then **fast-forwarded** to `main` without force-push. The consolidated
+  source advances the original main by 157 commits.
+- Obsolete onboarding PR #41 was closed, not merged: its functionality,
+  documentation and tests already exist in the consolidated implementation.
 
-## Functional increments carried forward
+## Source-pinned validation evidence
 
-1. Approved memory and contradiction-review flows, held-out evaluation
-   preflights and privacy-sensitive prompt checks.
-2. Supervised worktree/Docker test snapshots, private-file exclusions,
-   transaction/revision fencing and interruption recovery.
-3. Local-only diagnostics, release acceptance, backup/profile restore
-   rehearsals, and portable Windows integrity/staging.
-4. Owner-initiated existing-WAV faster-whisper transcription and numeric
-   WER/CER comparison; no continuous recording, auto-chat or model promotion.
+- Release-readiness hardening source `4ddbe9a4ae4d531079b22fc82e13653c44dd72a5`:
+  [five passing checks](https://github.com/magicmantheace/AthenZ/actions/runs/38505880817).
+- Held-out independence source `0ae6ee8cb723eb3d1673b26436e67641ac4822df`:
+  [five passing checks](https://github.com/magicmantheace/AthenZ/actions/runs/38555380534)
+  (562 tests per Linux Python version; four expected skips per Linux suite;
+  Windows Python 3.11 and unsigned Windows portable GUI smoke passed).
+- These checks pin feature source commits before their review merge commits.
+  The final merge tree carries that validated implementation; these runs
+  are **not** native owner-device tests or cryptographic supply-chain proof.
+- This consolidated `main` has `workflow_dispatch`-only core Python,
+  Docker and portable Windows workflows. There was no new automatic `main`
+  workflow run observed after the fast-forward.
 
-## Validation boundaries
+## Available engineering capabilities (experimental)
 
-Archived pinned source `1ede7cad603b95fa5fd2c859c07d3ebb082c35e3`
-passed the public Linux Python 3.11 / Windows Python 3.11 regression at
-[run 38502233185](https://github.com/magicmantheace/AthenZ/actions/runs/38502233185),
-and Linux Python 3.12/3.13 (551 tests each, four skips each) plus an unsigned
-Windows portable executable and GUI startup smoke at
-[run 38502224799](https://github.com/magicmantheace/AthenZ/actions/runs/38502224799).
-Those runs validated the pinned source, **not** this branch's newer changes.
+Approved persistent memory, explicit contradiction review, supervised
+isolated Git worktree coding and Docker snapshots, bounded proposal scheduler,
+opt-in reviewed QLoRA/GGUF conversion and manual routing, selected profile
+recovery, owner-only hardware diagnostics, read-only benchmark preflight and
+existing-WAV offline voice transcription/scoring.
 
-The archive's head only adds documentation to that pinned source. This
-integration candidate includes additional code and regression tests; it
-requires its **own** source-pinned validation before merge.
+## Remaining v1.0 acceptance blockers
 
-GitHub-hosted synthetic/packaging tests are not target-hardware acceptance.
-Actual Windows HiDPI/accessibility, RTX 3060 CUDA/QLoRA, WSL2 Docker,
-locally installed speech-model fidelity, backup-and-rollback, signed
-publisher identity and real user-data consent tests remain incomplete.
+1. Real observed improvement over a sufficient, distinct, owner-reviewed
+   held-out decision set without test leakage or biased examples.
+2. Target-PC Windows 11 GUI/HiDPI/assistive technology, RTX 3060 local Ollama,
+   CUDA/QLoRA, model conversion, installed model lineage and WSL2 Docker tests.
+3. Signed Windows installer and authenticated upgrade/rollback,
+   secure private backup lifecycle and full end-to-end recovery on owner PC.
+4. Owner-controlled scheduling, stronger cancellation/fencing and approved
+   longer-running task autonomy, without implicit model-granted permissions.
 
-## Before considering a merge
-
-1. Inspect the full diff against `main`; avoid exposing private memory,
-   model corpora, credentials and personal profile artifacts in public Git.
-2. Check that the isolated public-runner validation pinned to this exact
-   integration commit passes, including Windows compatibility and packaging.
-3. Confirm `.github/workflows/` in this branch remains **manual-only**.
-   Do not accidentally re-enable paid automatic push/PR workflows.
-4. Independently decide whether and when to merge; keep `main` history and
-   provide an explicit rollback point. Never present the source-only merge
-   as a certified binary or verified local model-training release.
+Git history is the source of truth. No owner profile, memory corpus, private
+speech or model weights should be committed to this public repository.
