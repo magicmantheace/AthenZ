@@ -132,7 +132,7 @@ def migrate_v4(db: sqlite3.Connection) -> None:
 def migrate_v5(db: sqlite3.Connection) -> None:
     """Explicit dispute quarantine and locally observed artifact fingerprints."""
     version = db.execute('PRAGMA user_version').fetchone()[0]
-    if version == 5:
+    if version >= 5:
         return
     if version != 4:
         raise RuntimeError(f'Unexpected schema version {version}; expected 4 or 5')
