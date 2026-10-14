@@ -617,3 +617,17 @@ owner profile data or unattended coding action implied by this milestone.
 - [ ] Repeat rehearsal on the owner's PC against a genuinely installed local
   baseline; CI only uses synthetic model responses and disposable SQLite
   fixtures, not actual Windows/Ollama/GPU behavior.
+
+### 2026-10-14 — cross-stage model-lineage audit
+
+- [x] Introduce a read-only `lineage-audit` covering current adapter
+  consent/registration, conversion GGUF content, owner-attested import,
+  selected benchmark/reference, active runtime pointer and optional local
+  Ollama digest evidence in one bounded aggregate report.
+- [x] Distinguish an observed local conversion from a manual merge; no
+  report can claim independent proof that GGUF contains a particular adapter.
+- [x] Synthetic regression cases for complete local record chain, unreviewed
+  adapter, interrupted import, GGUF mutation, imported digest mismatch,
+  revoked consent, owner-attested manual merge and privacy-safe CLI output.
+- [ ] Exercise real owner hardware, imported weights, end-to-end model
+  improvement, and an actual consented rollback after model selection.
