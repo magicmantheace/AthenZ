@@ -6,6 +6,7 @@ or persists a prompt or retrieval trace.
 """
 from __future__ import annotations
 
+import heapq
 import json
 import re
 
@@ -52,59 +53,100 @@ def _overlap(query: set[str], text: str) -> int:
     return len(query.intersection(tokens(text))) if query else 0
 
 
-def _selected_identity(rows: list[dict], query: str) -> list[dict]:
-    """Keep a small style/value/preference backbone plus topic-specific facts.
+def _keep_best(heap: list, rank: tuple, result: dict, limit: int) -> None:
+    """Keep only the best N rows as the complete approved SQLite corpus streams.
 
-    A source is already owner approved when it arrives from store.context().
-    A lexical match is a relevance hint, never a truth or contradiction test.
+    Rank's last element is a unique row id, avoiding dictionary comparisons.
+    A full table may be arbitrarily large, but this heap remains bounded.
+    """
+    item = (*rank, result)
+    if len(heap) < limit:
+        heapq.heappush(heap, item)
+    elif item[:-1] > heap[0][:-1]:
+        heapq.heapreplace(heap, item)
+
+
+def _ranked_rows(heap: list) -> list[dict]:
+    return [item[-1] for item in sorted(heap, reverse=True)]
+
+
+def _selected_identity(store: IdentityStore, query: str) -> list[dict]:
+    """Scan every approved identity record with bounded, deterministic top-K.
+
+    Maintain a general style/value/preference backbone plus topical evidence,
+    instead of silently restricting retrieval to the newest 200 approvals.
     """
     terms = tokens(query)
     direct_bio = bool(re.search(
         r"\b(who am i|describe me|about me|my background|my profile)\b",
         query.lower()))
-    global_rows = [r for r in rows if r["kind"] in {"style", "value", "preference"}]
-    global_rows.sort(key=lambda r: (
-        _overlap(terms, r["text"]), r["confidence"], r["id"]), reverse=True)
-    baseline = global_rows[:5]
-    baseline_ids = {r["id"] for r in baseline}
-
-    specific = [r for r in rows if r["id"] not in baseline_ids
-                and (_overlap(terms, r["text"]) > 0
-                     or (direct_bio and r["kind"] == "identity"))]
-    specific.sort(key=lambda r: (
-        _overlap(terms, r["text"]), r["confidence"], r["id"]), reverse=True)
-    selected = baseline + specific[:15]
+    backbone, topical = [], []
+    for r in store.db.execute(
+        "SELECT id, kind, text, source, confidence FROM identity "
+        "WHERE status='approved'"
+    ):
+        score = _overlap(terms, r["text"])
+        item = {"id": r["id"], "kind": r["kind"], "text": r["text"],
+                "source": r["source"], "confidence": r["confidence"]}
+        rank = (score, r["confidence"], r["id"])
+        if r["kind"] in {"style", "value", "preference"}:
+            _keep_best(backbone, rank, item, 5)
+        if score or (direct_bio and r["kind"] == "identity"):
+            _keep_best(topical, rank, item, 20)
+    general = _ranked_rows(backbone)
+    known = {r["id"] for r in general}
+    selected = general + [r for r in _ranked_rows(topical)
+                          if r["id"] not in known][:15]
     return [{"kind": r["kind"], "text": r["text"], "source": r["source"],
              "confidence": r["confidence"]} for r in selected]
 
 
-def _selected_decisions(rows: list[dict], query: str) -> list[dict]:
-    """Only approved training cases; never pass calibration/test answers."""
+def _selected_decisions(store: IdentityStore, query: str) -> list[dict]:
+    """Scan all approved training decisions, without ever reading held-out gold."""
     terms = tokens(query)
-    relevant = []
-    for r in rows:
-        # Defense in depth: callers must not accidentally promote held-out
-        # cases into ordinary Twin context.
-        if r.get("split") != "train" or r.get("status") != "approved":
-            continue
+    best = []
+    for r in store.db.execute(
+        "SELECT id, scenario, choice, rationale, exception FROM decisions "
+        "WHERE status='approved' AND split='train'"
+    ):
         score = _overlap(terms, r["scenario"] + " " + r["rationale"])
         if score:
-            relevant.append((score, r["id"], r))
-    relevant.sort(key=lambda item: (item[0], item[1]), reverse=True)
-    return [{"scenario": r["scenario"], "choice": r["choice"],
-             "rationale": r["rationale"], "exception": r["exception"]}
-            for _, _, r in relevant[:14]]
+            item = {"scenario": r["scenario"], "choice": r["choice"],
+                    "rationale": r["rationale"], "exception": r["exception"]}
+            _keep_best(best, (score, r["id"]), item, 14)
+    return _ranked_rows(best)
+
+
+def _writing_excerpt(text: str, terms: set[str]) -> tuple[str, bool]:
+    """If relevant wording is far into the sample, include that real passage.
+
+    Never fabricate a style paraphrase or send the whole owner sample when
+    a bounded excerpt is sufficient. Absence of overlap uses the opening.
+    """
+    start = 0
+    if len(text) > 700 and terms:
+        matches = [m.start() for m in re.finditer(r"[a-z0-9][a-z0-9_-]{2,}",
+                                                 text.lower())
+                   if m.group() in terms]
+        if matches:
+            start = min(max(0, matches[0] - 140), len(text) - 700)
+    end = min(len(text), start + 700)
+    return text[start:end], start > 0 or end < len(text)
 
 
 def _selected_writing(store: IdentityStore, query: str) -> list[dict]:
-    """Style-only examples from explicitly approved writing; Twin mode only."""
+    """Use reviewed style records from all dates, never pending/rejected text."""
     terms = tokens(query)
-    rows = store.list_items("writing_samples", "approved", limit=200)
-    rows.sort(key=lambda r: (_overlap(terms, r["text"]), r["id"]),
-              reverse=True)
-    return [{"source": r["source"], "excerpt": r["text"][:700],
-             "excerpt_truncated": len(r["text"]) > 700}
-            for r in rows[:3]]
+    best = []
+    for r in store.db.execute(
+        "SELECT id, source, text FROM writing_samples WHERE status='approved'"
+    ):
+        score = _overlap(terms, r["text"])
+        excerpt, shortened = _writing_excerpt(r["text"], terms)
+        item = {"source": r["source"], "excerpt": excerpt,
+                "excerpt_truncated": shortened}
+        _keep_best(best, (score, r["id"]), item, 3)
+    return _ranked_rows(best)
 
 
 def _pack_profile(candidates: dict[str, list[dict]]) -> str:
@@ -135,10 +177,12 @@ def build_messages(store: IdentityStore, user_message: str,
         raise ValueError("Mode must be twin or agent")
     if not isinstance(user_message, str) or not user_message.strip():
         raise ValueError("Prompt cannot be empty")
-    data = store.context()  # approved only; train decisions only
+    # Stream the complete *approved* private corpus directly from SQLite.
+    # The prompt remains bounded by the top-K heaps and JSON packing, and
+    # held-out decisions are never even fetched from the evaluation splits.
     candidates: dict[str, list[dict]] = {
-        "approved_identity": _selected_identity(data["identity"], user_message),
-        "approved_decisions": _selected_decisions(data["decisions"], user_message),
+        "approved_identity": _selected_identity(store, user_message),
+        "approved_decisions": _selected_decisions(store, user_message),
     }
     if hasattr(store, "relevant_episodes"):
         candidates["approved_relevant_episodes"] = store.relevant_episodes(
