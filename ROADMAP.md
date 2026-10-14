@@ -563,3 +563,17 @@ owner profile data or unattended coding action implied by this milestone.
   evaluation reports when additional held-out cases are approved.
 - [x] Legacy schema-one report reading remains compatible, but cannot claim
   the new full-population freshness guarantee.
+
+### 2026-10-14 — supervised local learning-session journal
+
+- [x] Private, revision-fenced `session-start/status/link-run/link-report/close/cancel`
+  lifecycle for reviewed dataset, separately completed and registered QLoRA
+  adapter, and saved schema-two model comparison evidence.
+- [x] Revalidate current consent, full held-out content fingerprint, reference
+  memory and registered adapter on reads and before transitions; mark stale
+  rather than silently granting model access.
+- [x] Preserve unsuccessful learning attempts as comparable negative/tied
+  observations. Completing a session never deploys, rolls back, trains, or
+  selects a candidate.
+- [ ] Prove real improved decisions and explicit runtime rollback on the
+  owner's Windows/RTX 3060 machine with separately approved local inference.
