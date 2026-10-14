@@ -143,3 +143,11 @@ persisted by AthenZ. This can compare different speech systems using the same
 reference, but models must be tested on the same recorded audio to make
 results comparable. The model-backed `evaluate` command also validates the
 reference *before* starting optional native inference.
+
+Reference stability is checked twice around local native inference. A user
+editing the owner-authored reference during a transcription cannot silently
+change its score; the evaluation fails with a fixed local error and never
+returns the private transcript. Text-only scoring likewise rechecks both
+locally selected text files before publishing numeric results. These bounded
+repeat-read checks do not defeat a privileged same-user adversary who swaps
+bytes and restores them between observations.

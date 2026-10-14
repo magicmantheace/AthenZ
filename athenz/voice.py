@@ -357,8 +357,17 @@ def score_text_files(reference: Path, hypothesis: Path, *,
         raise VoiceError('Explicit --confirm required to read private reference text')
     gold = _private_reference(reference)
     text = _private_reference(hypothesis)
+    # Simple repeat-read fence prevents reporting scores about files replaced
+    # while the other owner-selected transcript was being read. No digest is
+    # published or added to the owner's memory.
+    if (hashlib.sha256(_private_reference(reference).encode('utf-8')).digest()
+            != hashlib.sha256(gold.encode('utf-8')).digest()
+            or hashlib.sha256(_private_reference(hypothesis).encode('utf-8')).digest()
+            != hashlib.sha256(text.encode('utf-8')).digest()):
+        raise VoiceError('Private transcript input changed during evaluation')
     result = score_transcript(gold, text)
     return {**result, 'evaluation_status': 'scored-private-local-text',
+            'reference_and_hypothesis_stable': True,
             'native_backend_loaded': False, 'audio_read': False,
             'model_called': False, 'text_files_modified': False,
             'training_authorized': False}
@@ -373,15 +382,22 @@ def evaluate_wav(path: Path, model_dir: Path, reference: Path, *,
     # Refuse an unsafe, absent or malformed owner reference BEFORE starting
     # optional native model inference and its associated GPU work.
     gold = _private_reference(reference)
-    _word_tokens(gold)
+    if not _word_tokens(gold):
+        raise VoiceError('Reference must contain at least one spoken word')
     observed = transcribe_wav(path, model_dir, confirmed=True,
                              device=device, language=language)
+    # A human may edit a reference while a slow native model transcribes.
+    # Do not issue a seemingly valid score against a superseded reference.
+    if hashlib.sha256(_private_reference(reference).encode('utf-8')).digest() != (
+            hashlib.sha256(gold.encode('utf-8')).digest()):
+        raise VoiceError('Private reference changed during local transcription')
     metrics = score_transcript(gold, observed['transcript'])
     return {**metrics, 'evaluation_status': 'scored-local-speech',
             'device_requested': device, 'language_requested': language,
             'audio_fingerprint_stable': observed['audio_fingerprint_stable'],
             'model_files_stable': observed['model_files_stable'],
-            'transcript_returned': False, 'audio_uploaded': False,
+            'transcript_returned': False, 'reference_stable': True,
+            'audio_uploaded': False,
             'model_downloaded': False, 'training_authorized': False}
 
 

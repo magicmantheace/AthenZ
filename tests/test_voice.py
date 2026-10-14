@@ -37,6 +37,41 @@ class VoiceTests(unittest.TestCase):
                 return (iter(segments), {'language': 'en'})
         return Engine()
 
+    def test_evaluation_refuses_reference_changed_during_native_inference(self):
+        from athenz.voice import evaluate_wav
+        ref = self.root / 'owner-reference.txt'
+        ref.write_text('Owner said the original sentence')
+        def replace_while_decoding(*args, **kwargs):
+            ref.write_text('Owner corrected the reference after audio started')
+            return {'transcript': 'original sentence',
+                    'audio_fingerprint_stable': True,
+                    'model_files_stable': True}
+        with mock.patch('athenz.voice.transcribe_wav',
+                        side_effect=replace_while_decoding):
+            with self.assertRaisesRegex(VoiceError, 'reference changed') as caught:
+                evaluate_wav(self.wav, self.model, ref, confirmed=True)
+        self.assertNotIn('Owner corrected', str(caught.exception))
+        self.assertNotIn(str(ref), str(caught.exception))
+
+    def test_text_score_refuses_second_pass_changed_hypothesis(self):
+        from athenz.voice import score_text_files
+        ref = self.root / 'stable-reference.txt'
+        hyp = self.root / 'hypothesis.txt'
+        ref.write_text('synthetic private reference')
+        hyp.write_text('synthetic private hypothesis')
+        original = __import__('athenz.voice', fromlist=['_private_reference'])._private_reference
+        calls = {'n': 0}
+        def changed_on_verify(path):
+            calls['n'] += 1
+            if calls['n'] == 3:
+                return 'PRIVATE modified reference'
+            return original(path)
+        with mock.patch('athenz.voice._private_reference',
+                        side_effect=changed_on_verify):
+            with self.assertRaisesRegex(VoiceError, 'input changed'):
+                score_text_files(ref, hyp, confirmed=True)
+        self.assertEqual(calls['n'], 3)
+
     def test_invalid_reference_refuses_before_native_transcription(self):
         from athenz.voice import evaluate_wav
         malformed = self.root / 'broken-reference.txt'
