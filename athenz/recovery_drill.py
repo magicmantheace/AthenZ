@@ -117,7 +117,7 @@ def rehearse_sqlite_backup(home: Path | None, identifier: str, *,
                 ).fetchone()[0]
             active_route = db.execute("SELECT count(*) FROM checkpoints WHERE task_key='ollama_runtime'").fetchone()[0]
             active_checkpoints = db.execute("SELECT count(*) FROM checkpoints WHERE status='running'").fetchone()[0]
-        if (not integrity or not 1 <= version <= 5 or pending_scheduler or active_route or active_checkpoints
+        if (not integrity or not 1 <= version <= 6 or pending_scheduler or active_route or active_checkpoints
                 or restored.get('scheduler_disarmed') is not True
                 or restored.get('model_routing_reset') is not True):
             raise RecoveryDrillError('Temporary recovery failed integrity or permission checks')
@@ -189,7 +189,7 @@ def rehearse_profile_bundle(home: Path | None, identifier: str, *,
             running = db.execute(
                 "SELECT count(*) FROM checkpoints WHERE status='running'"
             ).fetchone()[0]
-        if (not integrity or not 1 <= version <= 5 or active_jobs or
+        if (not integrity or not 1 <= version <= 6 or active_jobs or
                 runtime_routes or running or
                 restored.get('scheduler_disarmed') is not True or
                 restored.get('model_routing_reset') is not True):
