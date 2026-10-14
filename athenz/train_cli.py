@@ -16,7 +16,9 @@ from .learning_session import (start_session, session_status, record_baseline,
 from .chat import OllamaClient
 from .finetune import create_run, describe_run, execute_run
 from .adapters import register_adapter, selection, select_for_review, rollback_selection
-from .runtime import status as runtime_status, activate as activate_runtime, rollback as rollback_runtime, checked_active_tag
+from .runtime import (status as runtime_status, activate as activate_runtime,
+                      rollback as rollback_runtime, checked_active_tag,
+                      inspect_rollback_readiness)
 from .ollama_import import prepare_import, verify_import, import_local
 from .conversion import (prepare_conversion, execute_conversion,
                          pause_conversion, conversion_status)
@@ -113,6 +115,9 @@ def parser() -> argparse.ArgumentParser:
     x.add_argument('--ack-lineage', action='store_true', help='I manually verified candidate uses this adapter')
     x.add_argument('--confirm', action='store_true')
     sub.add_parser('runtime-status', help='Show current AthenZ Ollama tag routing (no Ollama mutation)')
+    x = sub.add_parser('runtime-rollback-readiness', help='Read-only rollback status; optional loopback inventory check')
+    x.add_argument('--check-ollama', action='store_true',
+                   help='Read existing pinned baseline digest from local Ollama; no inference or routing change')
     x = sub.add_parser('runtime-activate', help='Route future AthenZ chat to an already installed and reviewed candidate')
     x.add_argument('--baseline', required=True, help='Evaluated, locally installed baseline tag')
     x.add_argument('--revision', type=int, required=True)
@@ -219,6 +224,8 @@ def main(argv: list[str] | None = None) -> None:
                                        lineage_acknowledged=args.ack_lineage)
         elif args.command == 'runtime-status':
             result = runtime_status(store)
+        elif args.command == 'runtime-rollback-readiness':
+            result = inspect_rollback_readiness(store, check_ollama=args.check_ollama)
         elif args.command == 'runtime-activate':
             result = activate_runtime(store, expected_revision=args.revision,
                                       baseline_tag=args.baseline, confirmed=args.confirm)
