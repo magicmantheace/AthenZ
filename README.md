@@ -59,7 +59,7 @@ archival branch, exact tested source and remaining merge gates.
 
 ### Developmental AI integration (planned)
 
-[Developmental AI](https://github.com/magicmantheace/Developmental-AI)
+Developmental AI
 is the planned **single adaptive learning subsystem** for AthenZ's
 owner-facing executive, not another digital-twin persona or permission
 authority. Its experimental persistent policies, world models, learned
