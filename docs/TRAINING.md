@@ -475,3 +475,43 @@ promotion or proof of behavioral improvement or model provenance.
 A failed or absent stage returns a bounded status instead of private
 backend exception text. The command never repairs, retrains, reroutes
 or resets the model itself.
+
+### Activation-time model lineage enforcement (October 14, 2026)
+
+Newly reviewed candidates are **not** eligible for `runtime-activate`
+merely because an owner selected an adapter and an Ollama tag happens to
+match an evaluation. Activation now requires a completed, revalidated private
+`prepare-import` / `import-local` record for the exact adapter run, candidate
+tag, pinned GGUF bytes and installed Ollama digest. It verifies that record
+again after the synthetic candidate smoke inference, before committing the
+new runtime pointer:
+
+```sh
+athenz-training lineage-audit <run-id> --check-ollama
+athenz-training runtime-activate --baseline <reviewed-baseline-tag> --revision 0 --confirm
+```
+
+An import recorded locally can itself be based on a manual owner-attested
+merge. This proves the local record and observed bytes still agree, **not**
+that the resulting weights were independently verified to contain the exact
+approved adapter. A failed, partial or altered import cannot be bypassed
+by claiming legacy status.
+
+For an **older reviewed candidate with no AthenZ local-import record**, a
+separate, explicitly acknowledged compatibility path remains available:
+
+```sh
+athenz-training runtime-activate --baseline <reviewed-baseline-tag> \
+  --revision 0 --ack-legacy-lineage --confirm
+```
+
+This records `legacy-owner-attested` in the private runtime checkpoint.
+Newly recorded imports are pinned as `recorded-local-import`, including
+import revision and GGUF fingerprint. Each subsequently routed chat
+revalidates the local import and current review; changing or deleting its
+GGUF/evidence stops candidate routing. The stronger rehash can incur
+noticeable latency for very large local GGUF files, a performance cost that
+will need benchmarking on the owner PC. Historical checkpoints without a
+lineage policy remain readable and rollback-capable rather than being
+retroactively represented as verified imports. All genuine restoration
+continues to use the separately confirmed pinned-baseline rollback.
