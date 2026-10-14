@@ -284,13 +284,14 @@ the separate existing commands carry out explicitly approved work.
 ```sh
 athenz-training learning-plan --limit 12 --min-cases 10
 athenz-training session-start <approved-dataset-sha256> --limit 12 --confirm
+athenz-training session-baseline <session-id> --model <installed-baseline-tag> --revision 1 --confirm
 athenz-training session-status <session-id>
 # Separately, use the existing prepare-qlora, run-qlora and register-adapter
 # commands with their own explicit approvals. Then record the completed run:
-athenz-training session-link-run <session-id> <run-id> --revision 1 --confirm
+athenz-training session-link-run <session-id> <run-id> --revision 2 --confirm
 # Separately compare installed baseline and candidate models and save a report:
-athenz-training session-link-report <session-id> <saved-evaluation-sha256> --revision 2 --confirm
-athenz-training session-close <session-id> --revision 3 --confirm
+athenz-training session-link-report <session-id> <saved-evaluation-sha256> --revision 3 --confirm
+athenz-training session-close <session-id> --revision 4 --confirm
 ```
 
 Actual revision values are returned by each step: never guess or reuse a stale
