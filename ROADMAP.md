@@ -116,6 +116,27 @@ retrieval engineering, not validated personality fidelity or weight training.
 
 See [docs/TWIN_CONTEXT.md](docs/TWIN_CONTEXT.md).
  
+### 2026-10-14 — Independent Twin writing-style evaluation groundwork
+
+- [x] Versioned private schema v6 partitions owner-reviewed writing into
+  train/calibration/test, migrating historical samples to train only.
+- [x] Keep explicitly approved held-out style examples out of Twin and
+  Agent prompt contexts and out of evaluation reference digests.
+- [x] Offline `athenz style-readiness` counts source approvals and obvious
+  normalized duplicate contamination across training/held-out splits
+  without returning personal text or calling a model.
+- [x] Preserve historical training evidence fingerprints and allow private
+  backup/restore of the v6 database schema; regression coverage includes
+  migration, consent, leakage and duplicate detection.
+- [ ] Implement a blinded owner-rated local writing-style comparison on
+  independently held-out tasks; produce meaningful fidelity metrics and
+  intervals with explicit consent.
+- [ ] Validate actual Twin style, decision accuracy and inference latency
+  with the owner's real local installed model on the target PC.
+
+Details: [docs/TWIN_STYLE_VALIDATION.md](docs/TWIN_STYLE_VALIDATION.md). Readiness
+counts do not demonstrate correct style imitation or human digital continuity.
+
 ## Next critical path
 1. Record and evaluate user decisions with reproducible train/test splits (#3).
 2. Complete v0.3 event ledger with replay-safe checkpoints, indexed evidence,

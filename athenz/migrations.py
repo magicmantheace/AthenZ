@@ -132,7 +132,7 @@ def migrate_v4(db: sqlite3.Connection) -> None:
 def migrate_v5(db: sqlite3.Connection) -> None:
     """Explicit dispute quarantine and locally observed artifact fingerprints."""
     version = db.execute('PRAGMA user_version').fetchone()[0]
-    if version == 5:
+    if version >= 5:
         return
     if version != 4:
         raise RuntimeError(f'Unexpected schema version {version}; expected 4 or 5')
@@ -158,6 +158,32 @@ def migrate_v5(db: sqlite3.Connection) -> None:
                 UNIQUE(test_run_id,artifact_id)
             );
             PRAGMA user_version=5;
+            COMMIT;
+        ''')
+    except Exception:
+        db.rollback()
+        raise
+
+
+def migrate_v6(db: sqlite3.Connection) -> None:
+    """Reserve independently reviewed writing samples for style evaluation.
+
+    Legacy v5 writing samples become TRAINING examples, never held-out
+    references retroactively. Future withheld samples require explicit
+    creation in calibration/test. Migration preserves review status and
+    source provenance and never reads the private sample bytes into logs.
+    """
+    version = db.execute('PRAGMA user_version').fetchone()[0]
+    if version >= 6:
+        return
+    if version != 5:
+        raise RuntimeError(f'Unexpected schema version {version}; expected 5 or 6')
+    try:
+        db.executescript('''BEGIN IMMEDIATE;
+            ALTER TABLE writing_samples ADD COLUMN split TEXT NOT NULL DEFAULT 'train'
+                CHECK(split IN ('train','calibration','test'));
+            CREATE INDEX idx_writing_split ON writing_samples(status,split,id);
+            PRAGMA user_version=6;
             COMMIT;
         ''')
     except Exception:

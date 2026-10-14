@@ -143,7 +143,8 @@ def _selected_writing(store: IdentityStore, query: str) -> list[dict]:
     terms = tokens(query)
     best = []
     for r in store.db.execute(
-        "SELECT id, source, text FROM writing_samples WHERE status='approved'"
+        "SELECT id, source, text FROM writing_samples "
+        "WHERE status='approved' AND split='train'"
     ):
         score = _overlap(terms, r["text"])
         excerpt, shortened = _writing_excerpt(r["text"], terms)

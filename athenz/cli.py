@@ -71,6 +71,9 @@ def build_parser() -> argparse.ArgumentParser:
     x = sub.add_parser('sample')
     x.add_argument('text')
     x.add_argument('--source', default='owner:cli')
+    x.add_argument('--split', choices=['train', 'calibration', 'test'],
+                   default='train', help='Keep held-out writing separate from Twin prompt examples')
+    sub.add_parser('style-readiness')
     x = sub.add_parser('review')
     x.add_argument('table', choices=['writing_samples', 'train_pairs', 'experiences'])
     x.add_argument('id', type=int)
@@ -181,7 +184,10 @@ def main(argv: list[str] | None = None) -> None:
         elif args.cmd == 'decision-status':
             print('Updated' if store.decision_status(args.id, args.state) else 'Unknown ID')
         elif args.cmd == 'sample':
-            print(f'Pending sample #{store.add_sample(args.text, source=args.source)}')
+            print(f'Pending sample #{store.add_sample(args.text, source=args.source, split=args.split)}')
+        elif args.cmd == 'style-readiness':
+            from .style_readiness import style_readiness
+            print(json.dumps(style_readiness(store), sort_keys=True))
         elif args.cmd == 'review':
             print('Updated' if store.set_review(args.table, args.id, args.state) else 'Unknown ID')
         elif args.cmd == 'feedback':

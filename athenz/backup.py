@@ -133,7 +133,7 @@ def verify_backup(home: Path | None, identifier: str) -> dict:
                 record.get('restore_authorized') is not False or
                 type(record.get('size')) is not int or record['size'] <= 0 or
                 type(record.get('sqlite_schema')) is not int or
-                not 1 <= record['sqlite_schema'] <= 5 or
+                not 1 <= record['sqlite_schema'] <= 6 or
                 not isinstance(record.get('sha256'), str) or
                 not re.fullmatch(r'[a-f0-9]{64}', record['sha256'])):
             raise BackupError('Backup manifest is invalid')
@@ -194,7 +194,7 @@ def disarm_recovered_database(db_path: Path) -> None:
         if db.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
             raise BackupError('Recovered SQLite database failed integrity check')
         schema = int(db.execute('PRAGMA user_version').fetchone()[0])
-        if not 1 <= schema <= 5:
+        if not 1 <= schema <= 6:
             raise BackupError('Recovery database schema is unsupported')
         with db:
             # Checkpoint metadata is evidence, NOT permission to execute.
