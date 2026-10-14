@@ -83,7 +83,7 @@ def _consistent_comparison_metadata(report: dict) -> bool:
     independently attested by this function. Newly produced comparisons
     include all aggregate fields and are checked before persistence/review.
     """
-    if report.get('schema') not in (1, 2):
+    if type(report.get('schema')) is not int or report['schema'] not in (1, 2):
         return False
     count = report.get('cases')
     if type(count) is not int or not 0 < count <= 1000:
