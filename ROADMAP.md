@@ -78,6 +78,25 @@ optional adapter rather than a dependency. Do not put personal examples in
 either public Git repository, permit learned text to grant tools, or use
 simulation checksums as user authentication.
 
+### 2026-10-14 — Twin-first personality and relevance improvement
+
+- [x] Select topical approved training decisions and personality evidence for
+  each Twin question rather than blindly supplying the newest 20 decisions.
+- [x] Include short, explicitly approved writing-style examples in Twin
+  prompts, excluding pending/rejected records and Agent-only task contexts.
+- [x] Use a whole-record, valid-JSON profile budget with per-category
+  constraints; omit oversized items instead of truncating facts.
+- [x] Preserve reference contamination protection across ALL approved
+  records, including approved writing and unresolved episode disputes,
+  even when a query filters those records from the current prompt.
+- [ ] Full-history semantic/lexical memory retrieval beyond the current
+  candidate windows, with explicit uncertainty, owner review and benchmarks.
+- [ ] Demonstrate objectively improved owner-style and decision predictions
+  with real, independently held-out owner examples on the target PC.
+
+Details: [docs/TWIN_CONTEXT.md](docs/TWIN_CONTEXT.md). This is prompt
+retrieval engineering, not validated personality fidelity or weight training.
+
 ## Next critical path
 1. Record and evaluate user decisions with reproducible train/test splits (#3).
 2. Complete v0.3 event ledger with replay-safe checkpoints, indexed evidence,
