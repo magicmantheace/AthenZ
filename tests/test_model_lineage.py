@@ -105,7 +105,9 @@ class ModelLineageAuditTests(unittest.TestCase):
             'case_ids_sha256': hashlib.sha256(json.dumps(ids).encode()).hexdigest(),
             'heldout_fingerprint': _heldout_fingerprint(self.store, 'calibration', 12),
             'reference_fingerprint': _reference_fingerprint(self.store)}
-        sha = save_report(self.store, report, confirmed=True)['sha256']
+        with mock.patch('athenz.runtime.model_digest',
+                        side_effect=lambda tag: self.tags[tag]):
+            sha = save_report(self.store, report, confirmed=True)['sha256']
         select_for_review(self.store, self.run_id, sha,
                           expected_revision=0, confirmed=True,
                           lineage_acknowledged=True)
