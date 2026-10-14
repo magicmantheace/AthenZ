@@ -64,8 +64,8 @@ def inspect_wav(path: Path) -> dict:
                 width = stream.getsampwidth()
                 compression = stream.getcomptype()
             after = os.fstat(handle.fileno())
-            if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
-                    != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns):
+            if ((before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
+                    != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)):
                 raise VoiceError('Selected PCM WAV changed during inspection')
     except VoiceError:
         raise
