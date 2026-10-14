@@ -631,3 +631,18 @@ owner profile data or unattended coding action implied by this milestone.
   revoked consent, owner-attested manual merge and privacy-safe CLI output.
 - [ ] Exercise real owner hardware, imported weights, end-to-end model
   improvement, and an actual consented rollback after model selection.
+
+### 2026-10-14 — model activation lineage gate
+
+- [x] New candidate activations require a currently completed private Ollama
+  GGUF import, matching adapter/candidate tag, digest and reviewed evaluation;
+  reject partial, mutated and stale import evidence before and after smoke.
+- [x] Require explicit `--ack-legacy-lineage` for older selected models with
+  no recorded import. Never allow the legacy flag to bypass a present but
+  invalid import.
+- [x] Pin local import revision and GGUF SHA-256 in new runtime checkpoints;
+  fail closed on changed imported evidence during later candidate routing.
+- [x] Preserve existing pre-gate runtime pointers for restoration and
+  previously approved owner workflows, without claiming stronger provenance.
+- [ ] Measure the cost of per-inference large-GGUF verification on owner
+  hardware and optimize only with equivalent content-integrity guarantees.

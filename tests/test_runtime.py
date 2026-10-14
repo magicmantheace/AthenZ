@@ -96,7 +96,8 @@ class RoutingTests(unittest.TestCase):
 
     def activate(self, *, revision=0):
         return activate(self.s, expected_revision=revision, baseline_tag='base',
-                        confirmed=True, smoke_model_factory=lambda tag: self.probe)
+                        confirmed=True, smoke_model_factory=lambda tag: self.probe,
+                        ack_legacy_lineage=True)
 
     def test_default_routing_uses_existing_configuration(self):
         self.assertIsNone(checked_active_tag(self.s))
@@ -112,6 +113,92 @@ class RoutingTests(unittest.TestCase):
             self.activate(revision=1)
         with self.assertRaisesRegex(RoutingError, 'identities'):
             activate(self.s, expected_revision=0, baseline_tag='other', confirmed=True)
+
+    def test_new_activation_requires_import_or_explicit_legacy_ack(self):
+        self.select()
+        with self.assertRaisesRegex(RoutingError, 'ack-legacy-lineage'):
+            activate(self.s, expected_revision=0, baseline_tag='base',
+                     confirmed=True, smoke_model_factory=lambda tag: self.probe)
+        self.assertEqual(self.probe.calls, [])
+        self.assertEqual(status(self.s)['revision'], 0)
+        active = self.activate()
+        self.assertEqual(active['lineage_policy'], 'legacy-owner-attested')
+        self.assertIsNone(active['import_revision'])
+        self.assertEqual(checked_active_tag(self.s), 'candidate-a')
+        self.assertEqual(rollback(self.s, expected_revision=1,
+                                  confirmed=True)['active_tag'], 'base')
+
+    def test_invalid_existing_import_cannot_fallback_to_legacy(self):
+        self.select()
+        self.s.checkpoint(
+            'ollama_import_' + self.run_id,
+            'Incomplete synthetic import', {'status': 'incomplete'},
+            status='paused', expected_revision=0)
+        with self.assertRaisesRegex(RoutingError, 'import'):
+            self.activate()
+        self.assertEqual(self.probe.calls, [])
+        self.assertEqual(status(self.s)['revision'], 0)
+
+    def test_legacy_acknowledgment_must_be_explicit_boolean(self):
+        self.select()
+        with self.assertRaisesRegex(RoutingError, 'Invalid legacy-lineage'):
+            activate(self.s, expected_revision=0, baseline_tag='base',
+                     confirmed=True, ack_legacy_lineage='yes',
+                     smoke_model_factory=lambda tag: self.probe)
+        self.assertEqual(self.probe.calls, [])
+        self.assertEqual(status(self.s)['revision'], 0)
+
+    def test_pre_gate_active_checkpoint_remains_rollback_capable(self):
+        self.select()
+        self.activate()
+        cp = self.s.get_checkpoint('ollama_runtime')
+        old = {k: v for k, v in cp['state'].items()
+               if k not in ('routing_schema', 'lineage_policy', 'import_revision', 'gguf_sha256')}
+        self.s.checkpoint('ollama_runtime', cp['task'], old,
+                          status='paused', expected_revision=cp['revision'])
+        self.assertEqual(checked_active_tag(self.s), 'candidate-a')
+        self.assertEqual(rollback(self.s, expected_revision=2,
+                                  confirmed=True)['active_tag'], 'base')
+
+    def test_new_provenance_missing_policy_blocks_routing(self):
+        self.select()
+        self.activate()
+        cp = self.s.get_checkpoint('ollama_runtime')
+        changed = {k: v for k, v in cp['state'].items()
+                   if k != 'lineage_policy'}
+        self.s.checkpoint('ollama_runtime', cp['task'], changed,
+                          status='paused', expected_revision=cp['revision'])
+        with self.assertRaisesRegex(RoutingError, 'provenance marker'):
+            checked_active_tag(self.s)
+        self.assertEqual(rollback(
+            self.s, expected_revision=2, confirmed=True)['active_tag'], 'base')
+
+    def test_baseline_changed_during_candidate_smoke_blocks_activation(self):
+        self.select()
+        before = self.s.get_checkpoint('ollama_runtime')
+        seen = self.seen
+        class MutatingSyntheticModel:
+            def generate(self, messages, **kwargs):
+                seen['base'] = 'f'*64
+                return 'synthetic greeting'
+        with self.assertRaisesRegex(RoutingError, 'Baseline tag changed'):
+            activate(self.s, expected_revision=0, baseline_tag='base',
+                     confirmed=True, ack_legacy_lineage=True,
+                     smoke_model_factory=lambda tag: MutatingSyntheticModel())
+        self.assertEqual(self.s.get_checkpoint('ollama_runtime'), before)
+
+    def test_candidate_smoke_failure_suppresses_private_exception(self):
+        self.select()
+        class FailingSyntheticModel:
+            def generate(self, messages, **kwargs):
+                raise RuntimeError('PRIVATE_LOCAL_USER_CONTENT_DO_NOT_SHOW')
+        with self.assertRaisesRegex(RoutingError, 'inference failed') as caught:
+            activate(self.s, expected_revision=0, baseline_tag='base',
+                     confirmed=True, ack_legacy_lineage=True,
+                     smoke_model_factory=lambda tag: FailingSyntheticModel())
+        self.assertNotIn('PRIVATE_LOCAL_USER_CONTENT_DO_NOT_SHOW',
+                         ''.join(traceback.format_exception(caught.exception)))
+        self.assertEqual(status(self.s)['revision'], 0)
 
     def test_successful_activation_pins_tag_and_baseline_then_rollback(self):
         self.select()
