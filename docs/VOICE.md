@@ -131,3 +131,15 @@ size-bounded regular UTF-8 `.txt` file. A malicious or outdated owner
 reference can yield misleading numbers; an observed score is **not**
 independent accuracy certification, speaker identity evidence, or universal
 quality validation. Private plaintext is still held in memory while scoring.
+
+### Comparing existing private text transcripts without native inference
+
+Use `athenz-voice score-text --reference C:\\PrivateAudio\\reference.txt --hypothesis C:\\PrivateAudio\\hypothesis.txt --confirm` to measure
+WER/CER without reading a WAV, loading faster-whisper, initializing GPU
+libraries or contacting Ollama. The two owner-selected, bounded UTF-8 text
+files are read locally after explicit confirmation. Only numerical aggregate
+results are printed; neither text, input paths nor private metadata are
+persisted by AthenZ. This can compare different speech systems using the same
+reference, but models must be tested on the same recorded audio to make
+results comparable. The model-backed `evaluate` command also validates the
+reference *before* starting optional native inference.

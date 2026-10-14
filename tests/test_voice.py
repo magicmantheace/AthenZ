@@ -37,6 +37,50 @@ class VoiceTests(unittest.TestCase):
                 return (iter(segments), {'language': 'en'})
         return Engine()
 
+    def test_invalid_reference_refuses_before_native_transcription(self):
+        from athenz.voice import evaluate_wav
+        malformed = self.root / 'broken-reference.txt'
+        malformed.write_bytes(b'\\xff\\xfe\\x00')
+        with mock.patch('athenz.voice.transcribe_wav',
+                        side_effect=AssertionError('native inference must not start')):
+            with self.assertRaisesRegex(VoiceError, 'reference'):
+                evaluate_wav(self.wav, self.model, malformed, confirmed=True)
+        malformed.write_text('!', encoding='utf-8')
+        with mock.patch('athenz.voice.transcribe_wav',
+                        side_effect=AssertionError('native inference must not start')):
+            with self.assertRaisesRegex(VoiceError, 'at least one'):
+                evaluate_wav(self.wav, self.model, malformed, confirmed=True)
+
+    def test_score_text_only_is_explicit_and_never_accesses_model_audio_or_private_paths(self):
+        from athenz.voice import score_text_files
+        reference = self.root / 'private-reference.txt'
+        hypothesis = self.root / 'private-hypothesis.txt'
+        reference.write_text('Welcome to AthenZ.', encoding='utf-8')
+        hypothesis.write_text('Welcome AthenZ.', encoding='utf-8')
+        with mock.patch('athenz.voice._load_engine',
+                        side_effect=AssertionError('model must not load')), \
+             mock.patch('athenz.voice.inspect_wav',
+                        side_effect=AssertionError('no audio metadata')):
+            with self.assertRaisesRegex(VoiceError, 'confirm'):
+                score_text_files(reference, hypothesis)
+            result = score_text_files(reference, hypothesis, confirmed=True)
+        self.assertEqual(result['word_deletions'], 1)
+        self.assertEqual(result['wer_percent'], 33.33)
+        self.assertFalse(result['native_backend_loaded'])
+        self.assertFalse(result['model_called'])
+        self.assertFalse(result['audio_read'])
+        self.assertNotIn('Welcome', json.dumps(result))
+        with mock.patch('builtins.print') as printed, \
+             mock.patch('athenz.voice.transcribe_wav',
+                        side_effect=AssertionError('native inference must not start')):
+            main(['score-text', '--reference', str(reference),
+                  '--hypothesis', str(hypothesis), '--confirm'])
+        body = printed.call_args.args[0]
+        self.assertEqual(json.loads(body)['wer_percent'], 33.33)
+        self.assertNotIn(str(reference), body)
+        self.assertNotIn(str(hypothesis), body)
+        self.assertNotIn('Welcome', body)
+
     def test_numeric_wer_cer_and_insertions_without_text_output(self):
         from athenz.voice import score_transcript
         perfect = score_transcript("Hello, WORLD!", "hello world")

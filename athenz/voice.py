@@ -350,15 +350,32 @@ def score_transcript(reference: str, hypothesis: str) -> dict:
             'independent_accuracy_certification': False}
 
 
+def score_text_files(reference: Path, hypothesis: Path, *,
+                     confirmed: bool = False) -> dict:
+    """Compare two private local transcripts without loading audio or a model."""
+    if confirmed is not True:
+        raise VoiceError('Explicit --confirm required to read private reference text')
+    gold = _private_reference(reference)
+    text = _private_reference(hypothesis)
+    result = score_transcript(gold, text)
+    return {**result, 'evaluation_status': 'scored-private-local-text',
+            'native_backend_loaded': False, 'audio_read': False,
+            'model_called': False, 'text_files_modified': False,
+            'training_authorized': False}
+
+
 def evaluate_wav(path: Path, model_dir: Path, reference: Path, *,
                  confirmed: bool = False, device: str = 'cpu',
                  language: str = 'en') -> dict:
     """Score a privately transcribed WAV without ever emitting its transcript."""
     if confirmed is not True:
         raise VoiceError('Explicit --confirm required to evaluate private speech')
+    # Refuse an unsafe, absent or malformed owner reference BEFORE starting
+    # optional native model inference and its associated GPU work.
+    gold = _private_reference(reference)
+    _word_tokens(gold)
     observed = transcribe_wav(path, model_dir, confirmed=True,
                              device=device, language=language)
-    gold = _private_reference(reference)
     metrics = score_transcript(gold, observed['transcript'])
     return {**metrics, 'evaluation_status': 'scored-local-speech',
             'device_requested': device, 'language_requested': language,
@@ -384,6 +401,11 @@ def main(argv: list[str] | None = None) -> None:
     work.add_argument('--device', choices=['cpu', 'cuda'], default='cpu')
     work.add_argument('--language', choices=['en', 'fr', 'es', 'de'], default='en')
     work.add_argument('--confirm', action='store_true')
+    compare = sub.add_parser('score-text',
+                              help='Compare two local UTF-8 .txt transcripts without audio/model inference')
+    compare.add_argument('--reference', type=Path, required=True)
+    compare.add_argument('--hypothesis', type=Path, required=True)
+    compare.add_argument('--confirm', action='store_true')
     score = sub.add_parser('evaluate',
                            help='Private WAV/reference accuracy scores; NEVER print speech or reference text')
     score.add_argument('wav', type=Path)
@@ -402,6 +424,9 @@ def main(argv: list[str] | None = None) -> None:
         report = evaluate_wav(args.wav, args.model, args.reference,
                               confirmed=args.confirm, device=args.device,
                               language=args.language)
+    elif args.command == 'score-text':
+        report = score_text_files(args.reference, args.hypothesis,
+                                  confirmed=args.confirm)
     else:
         report = transcribe_wav(args.wav, args.model, confirmed=args.confirm,
                                 device=args.device, language=args.language)
