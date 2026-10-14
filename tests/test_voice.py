@@ -61,11 +61,11 @@ class VoiceTests(unittest.TestCase):
         hyp.write_text('synthetic private hypothesis')
         original = __import__('athenz.voice', fromlist=['_private_reference'])._private_reference
         calls = {'n': 0}
-        def changed_on_verify(path):
+        def changed_on_verify(path, **kwargs):
             calls['n'] += 1
             if calls['n'] == 3:
                 return 'PRIVATE modified reference'
-            return original(path)
+            return original(path, **kwargs)
         with mock.patch('athenz.voice._private_reference',
                         side_effect=changed_on_verify):
             with self.assertRaisesRegex(VoiceError, 'input changed'):
