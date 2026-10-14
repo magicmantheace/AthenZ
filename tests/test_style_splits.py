@@ -12,7 +12,7 @@ from athenz.cli import main
 from athenz.evaluation import _reference_fingerprint, _fingerprint
 from athenz.migrations import migrate_v6
 from athenz.prompting import build_messages
-from athenz.store import IdentityStore
+from athenz.experience import ExperienceStore
 from athenz.style_readiness import style_readiness
 
 
