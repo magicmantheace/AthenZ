@@ -42,7 +42,7 @@ def run_benchmark() -> dict:
             # confuse words in the question with a revoked reference record.
             messages = build_messages(
                 store, "Tell me about restoring antique telescopes", "twin")
-            revoked = messages[1]["content"].split("\\n", 1)[1]
+            revoked = messages[1]["content"].split("\n", 1)[1]
             return {
                 "schema": 1,
                 "synthetic_only": True,
