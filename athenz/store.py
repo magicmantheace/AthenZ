@@ -67,7 +67,7 @@ class IdentityStore:
     def _migrate(self) -> None:
         # Never blindly ALTER a live database or silently rewrite private records.
         version = self.db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 5:
+        if version > 6:
             raise RuntimeError(f"Database schema v{version} is newer than this application")
         if version == 0:
             with self.db:
@@ -105,11 +105,12 @@ class IdentityStore:
                 PRAGMA user_version = 1;
                 """)
 
-        from .migrations import migrate_v2, migrate_v3, migrate_v4, migrate_v5
+        from .migrations import migrate_v2, migrate_v3, migrate_v4, migrate_v5, migrate_v6
         migrate_v2(self.db)
         migrate_v3(self.db)
         migrate_v4(self.db)
         migrate_v5(self.db)
+        migrate_v6(self.db)
 
     def _event(self, operation: str, subject_type: str, subject_id: int | None) -> None:
         # Deliberately exclude content from event logs so deleting content truly removes it.
@@ -203,12 +204,16 @@ class IdentityStore:
                 self._event(f"status:{status}", "decisions", item_id)
         return bool(cur.rowcount)
 
-    def add_sample(self, text: str, *, source: str, source_ref: str = "") -> int:
-        if not text.strip() or not source.strip():
+    def add_sample(self, text: str, *, source: str, source_ref: str = "",
+                   split: str = "train") -> int:
+        if not isinstance(text, str) or not text.strip() or not isinstance(source, str) or not source.strip():
             raise ValueError("Text and source required")
+        if split not in {"train", "calibration", "test"}:
+            raise ValueError("Writing sample split must be train, calibration or test")
         with self.db:
-            cur = self.db.execute("""INSERT INTO writing_samples(text,source,source_ref,created_at)
-                                     VALUES (?,?,?,?)""", (text, source, source_ref, utc_now()))
+            cur = self.db.execute("""INSERT INTO writing_samples(text,source,source_ref,created_at,split)
+                                     VALUES (?,?,?,?,?)""",
+                                  (text, source, source_ref, utc_now(), split))
             self._event("created", "writing_samples", cur.lastrowid)
         return int(cur.lastrowid)
 
