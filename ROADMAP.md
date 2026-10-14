@@ -6,9 +6,10 @@ periodic model updates. It is not a literal copy of a human consciousness.
 
 ## Safety contracts
 - Twin estimates owner behavior; Agent works for owner. Never invent lived history.
-- Three rates of learning: approved context, reviewed/test-backed experience,
-  and explicitly approved benchmark-gated local LoRA updates (experimental
-  implementation exists; target-device training/inference not yet validated).
+- Keep four distinct learning tracks: approved context, reviewed/test-backed
+  AthenZ experience, Developmental AI sandbox policy/world-model adaptation
+  (not yet integrated), and explicitly approved benchmark-gated local LoRA
+  updates (experimental; target-device training/inference not yet validated).
 - Imported chat data remains pending by default; training export only includes
   reviewed data. No private data or corpora in Git.
 - Explicit file scope, review and human action precede any code write; no
@@ -33,8 +34,7 @@ periodic model updates. It is not a literal copy of a human consciousness.
 ## Cross-project Developmental AI integration track (added 2026-10-14)
 
 **Architecture decision:** AthenZ is the persistent owner-facing agent and
-consent/identity authority. [Developmental AI](https://github.com/magicmantheace/Developmental-AI)
-is its **single adaptive learning subsystem**, not a second independent persona
+consent/identity authority. Developmental AI is its **single adaptive learning subsystem**, not a second independent persona
 or an authority over the owner's data or computer. Specializations (reasoning,
 coding, speech, perception, planning, skills) are invoked as bounded
 capabilities by that one agent, never as competing identities. Synveil is the
@@ -54,8 +54,8 @@ This is a **parallel dependency track**, not a renumbering of completed v0.1–v
 features. Its gates are prerequisite to claiming one continuously developing
 v1.0 agent. Detailed contract and acceptance plan:
 [docs/DEVELOPMENTAL_AI_INTEGRATION.md](docs/DEVELOPMENTAL_AI_INTEGRATION.md).
-The Developmental AI source-of-truth [roadmap](https://github.com/magicmantheace/Developmental-AI/blob/main/ROADMAP.md)
-tracks research D0–D10 separately; this AthenZ roadmap tracks integration.
+The separate access-controlled Developmental AI source-of-truth roadmap
+tracks research D0–D10; this public AthenZ roadmap tracks integration.
 
 | AthenZ target | Cross-repository dependency and acceptance gate | Status on 2026-10-14 |
 | --- | --- | --- |
