@@ -119,9 +119,11 @@ def parser() -> argparse.ArgumentParser:
     x = sub.add_parser('runtime-rollback-readiness', help='Read-only rollback status; optional loopback inventory check')
     x.add_argument('--check-ollama', action='store_true',
                    help='Read existing pinned baseline digest from local Ollama; no inference or routing change')
-    x = sub.add_parser('runtime-activate', help='Route future AthenZ chat to an already installed and reviewed candidate')
+    x = sub.add_parser('runtime-activate', help='Route to a reviewed locally imported model, or explicitly acknowledge legacy lineage')
     x.add_argument('--baseline', required=True, help='Evaluated, locally installed baseline tag')
     x.add_argument('--revision', type=int, required=True)
+    x.add_argument('--ack-legacy-lineage', action='store_true',
+                   help='Explicit owner acknowledgment ONLY when no AthenZ GGUF import record exists')
     x.add_argument('--confirm', action='store_true')
     x = sub.add_parser('runtime-rehearse-rollback',
                        help='Consent-gated local baseline smoke and temporary SQLite rollback, never persists routing change')
@@ -238,8 +240,10 @@ def main(argv: list[str] | None = None) -> None:
         elif args.command == 'runtime-rollback-readiness':
             result = inspect_rollback_readiness(store, check_ollama=args.check_ollama)
         elif args.command == 'runtime-activate':
-            result = activate_runtime(store, expected_revision=args.revision,
-                                      baseline_tag=args.baseline, confirmed=args.confirm)
+            result = activate_runtime(
+                store, expected_revision=args.revision,
+                baseline_tag=args.baseline, confirmed=args.confirm,
+                ack_legacy_lineage=args.ack_legacy_lineage)
         elif args.command == 'runtime-rehearse-rollback':
             result = rehearse_rollback(
                 store, expected_revision=args.revision, confirmed=args.confirm)
