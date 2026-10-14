@@ -54,6 +54,9 @@ Your reviewed feedback and independently checked results may inform future
 prompt context. Experimental QLoRA updates require separate owner consent,
 training evaluation and explicit selection; no model is auto-promoted.
 
+See [development integration status](docs/INTEGRATION_STATUS.md) for the
+archival branch, exact tested source and remaining merge gates.
+
 See [ROADMAP.md](ROADMAP.md), [AGENTS.md](AGENTS.md),
 [docs/LEARNING.md](docs/LEARNING.md), [docs/WORKER.md](docs/WORKER.md), and
 [docs/CONTROLLER.md](docs/CONTROLLER.md). Encryption at rest, robust local
