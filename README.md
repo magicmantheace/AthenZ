@@ -2,10 +2,11 @@
 
 Private, local-first digital twin and coding assistant. **Twin Mode** simulates
 style and choices based on approved examples; **Agent Mode** provides independent
-assistance without claiming to be the owner. Neither mode modifies model weights
-without a separate future training and evaluation pipeline.
+assistance without claiming to be the owner. Neither mode changes model weights
+during chat; experimental fine-tuning is separate, opt-in and review-gated.
 
-**Status: experimental v0.5 pre-release.** Human review is required for identity
+**Status: experimental v0.6 alpha, with partial v0.7 evaluation and v0.8 voice
+foundations (not a stable release).** Human review is required for identity
 claims and file changes. Task checkpoints, scoped patch proposals, reviewed
 feedback, episodic memory and the review-gated foreground controller are
 implemented. There is no unattended daemon, automatic cloud publishing, automatic
@@ -50,7 +51,8 @@ the `athenz-worker test` opt-in Docker runner with a trusted, digest-pinned imag
 There is no host-side project test command or Git commit/push action.
 
 Your reviewed feedback and independently checked results may inform future
-prompt context. Model-weight updates are a separate future milestone.
+prompt context. Experimental QLoRA updates require separate owner consent,
+training evaluation and explicit selection; no model is auto-promoted.
 
 See [ROADMAP.md](ROADMAP.md), [AGENTS.md](AGENTS.md),
 [docs/LEARNING.md](docs/LEARNING.md), [docs/WORKER.md](docs/WORKER.md), and
