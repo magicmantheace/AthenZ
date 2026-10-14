@@ -15,7 +15,7 @@ from athenz.finetune import create_run, execute_run
 from athenz.model_gate import save_report, _heldout_fingerprint
 from athenz.model_lineage import inspect_model_lineage, LineageAuditError
 from athenz.ollama_import import prepare_import, import_local
-from athenz.runtime import activate
+from athenz.runtime import activate, checked_active_tag, rollback, RoutingError
 from athenz.training import build_dataset
 
 BASE = 'a' * 64
@@ -160,6 +160,70 @@ class ModelLineageAuditTests(unittest.TestCase):
         self.assertFalse(observed['independently_proven_model_derivation'])
         self.assertNotIn(str(converted), json.dumps(observed))
         self.assertNotIn(CANDIDATE, json.dumps(observed))
+
+    def test_activation_pins_exact_recorded_import_and_rolls_back(self):
+        gguf = self._converted()
+        self._imported(gguf)
+        self._reviewed()
+        self._activated()
+        from athenz.runtime import status
+        routed = status(self.store)
+        imported = self.store.get_checkpoint('ollama_import_' + self.run_id)
+        self.assertEqual(routed['lineage_policy'], 'recorded-local-import')
+        self.assertEqual(routed['import_revision'], imported['revision'])
+        self.assertEqual(routed['gguf_sha256'], imported['state']['gguf_sha256'])
+        with mock.patch('athenz.runtime.model_digest',
+                        side_effect=lambda tag, **kw: self.tags[tag]):
+            self.assertEqual(checked_active_tag(self.store), TAG)
+            self.assertEqual(rollback(
+                self.store, expected_revision=routed['revision'],
+                confirmed=True)['active_tag'], 'base')
+
+    def test_import_gguf_tamper_pauses_routing_but_not_baseline_rollback(self):
+        gguf = self._converted()
+        self._imported(gguf)
+        self._reviewed()
+        self._activated()
+        gguf.write_bytes(b'GGUF' + (3).to_bytes(4, 'little') + b'D'*48)
+        with mock.patch('athenz.runtime.model_digest',
+                        side_effect=lambda tag, **kw: self.tags[tag]):
+            with self.assertRaisesRegex(RoutingError, 'import'):
+                checked_active_tag(self.store)
+            self.assertEqual(rollback(
+                self.store, expected_revision=1, confirmed=True)['active_tag'], 'base')
+
+    def test_modified_import_evidence_during_smoke_does_not_activate(self):
+        self._imported(self.gguf)
+        self._reviewed()
+        store, run_id = self.store, self.run_id
+        class ChangingLocalModel:
+            def generate(self, messages, **kwargs):
+                cp = store.get_checkpoint('ollama_import_' + run_id)
+                with store.db:
+                    store.db.execute(
+                        "UPDATE checkpoints SET status='paused' WHERE id=?",
+                        (cp['id'],))
+                return 'synthetic greeting'
+        with mock.patch('athenz.runtime.model_digest',
+                        side_effect=lambda tag, **kw: self.tags[tag]):
+            with self.assertRaisesRegex(RoutingError, 'import'):
+                activate(self.store, baseline_tag='base', expected_revision=0,
+                         confirmed=True, smoke_model_factory=lambda tag: ChangingLocalModel())
+        self.assertIsNone(self.store.get_checkpoint('ollama_runtime'))
+
+    def test_tampered_import_digest_prevents_activation(self):
+        self._imported(self.gguf)
+        self._reviewed()
+        cp = self.store.get_checkpoint('ollama_import_' + self.run_id)
+        self.store.checkpoint('ollama_import_' + self.run_id, cp['task'],
+                              {**cp['state'], 'candidate_digest': 'f'*64},
+                              status='complete', expected_revision=cp['revision'])
+        with mock.patch('athenz.runtime.model_digest',
+                        side_effect=lambda tag, **kw: self.tags[tag]):
+            with self.assertRaisesRegex(RoutingError, 'import'):
+                activate(self.store, baseline_tag='base', expected_revision=0,
+                         confirmed=True, smoke_model_factory=lambda tag: None)
+        self.assertIsNone(self.store.get_checkpoint('ollama_runtime'))
 
     def test_manual_merge_can_never_claim_observed_local_conversion(self):
         self._imported(self.gguf)
