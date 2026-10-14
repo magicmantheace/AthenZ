@@ -52,6 +52,51 @@ class EvaluationGateTests(unittest.TestCase):
                     'correct': index < correct} for index, i in enumerate(ids)]}
         return [one(first), one(second, offset)]
 
+    def test_readonly_preflight_flags_duplicate_calibration_samples_privately(self):
+        self.store.add_decision('synthetic held-out scenario 0!', 'yes',
+                                'DO NOT DISCLOSE private duplicate reason',
+                                source='synthetic', options=['yes', 'no'],
+                                split='calibration', approved=True)
+        report = inspect_heldout_readiness(self.store, min_cases=10)
+        self.assertEqual(report['selected_cases'], 13)
+        self.assertFalse(report['selected_cases_independent'])
+        self.assertFalse(report['ready_for_owner_review'])
+        self.assertTrue(report['minimum_cases_met'])
+        self.assertTrue(report['split_independence_check'] == 'lexical-pass')
+        self.assertNotIn('DO NOT DISCLOSE', json.dumps(report))
+        self.assertFalse(report['model_called'])
+
+    def test_comparison_refuses_duplicates_before_model_inventory_calls(self):
+        self.store.add_decision('synthetic held-out scenario 0!', 'yes',
+                                'Private rationale', source='synthetic',
+                                options=['yes', 'no'], split='calibration',
+                                approved=True)
+        with mock.patch('athenz.runtime.model_digest',
+                        side_effect=AssertionError('No model inventory before preflight')):
+            with self.assertRaisesRegex(ValueError, 'Repeated held-out'):
+                compare_models(self.store, Model('base'), Model('candidate'),
+                               self.sha)
+ 
+    def test_comparison_save_refuses_duplicate_benchmarks_after_review(self):
+        with mock.patch('athenz.model_gate.evaluate_decisions',
+                        side_effect=self.observations()):
+            report = compare_models(self.store, Model('base'), Model('candidate'),
+                                    self.sha)
+        first = self.store.db.execute(
+            "SELECT scenario FROM decisions WHERE status='approved' AND split='calibration' "
+            "ORDER BY id LIMIT 1").fetchone()['scenario']
+        last_id = self.store.db.execute(
+            "SELECT id FROM decisions WHERE status='approved' AND split='calibration' "
+            "ORDER BY id DESC LIMIT 1").fetchone()['id']
+        self.store.db.execute('UPDATE decisions SET scenario=? WHERE id=?',
+                              (first + '!', last_id))
+        self.store.db.commit()
+        # Isolate the new evaluation-sample check from the independent
+        # dataset-consent guard, which would also reject the changed source.
+        with mock.patch('athenz.model_gate.verify_dataset'):
+            with self.assertRaisesRegex(BenchmarkError, 'independence failed'):
+                save_report(self.store, report, confirmed=True)
+
     def test_candidate_comparison_has_no_personal_text_and_no_promotion(self):
         with mock.patch('athenz.model_gate.evaluate_decisions', side_effect=self.observations()) as ev:
             report = compare_models(self.store, Model('base-local'), Model('candidate-local'),
