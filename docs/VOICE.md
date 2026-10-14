@@ -151,3 +151,7 @@ returns the private transcript. Text-only scoring likewise rechecks both
 locally selected text files before publishing numeric results. These bounded
 repeat-read checks do not defeat a privileged same-user adversary who swaps
 bytes and restores them between observations.
+
+An **empty hypothesis file** is allowed in text-only scoring and correctly
+reports 100% deletion error against a nonempty spoken reference. An empty
+reference remains invalid because WER/CER would have no denominator.

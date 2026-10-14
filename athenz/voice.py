@@ -259,7 +259,7 @@ def transcribe_wav(path: Path, model_dir: Path, *,
             'duration_seconds': evidence['duration_seconds']}
 
 
-def _private_reference(path: Path) -> str:
+def _private_reference(path: Path, *, allow_empty: bool = False) -> str:
     """Bounded, no-follow owner reference read without returning paths or bytes.
 
     Reading is only permitted after explicit evaluation consent. The caller
@@ -276,7 +276,8 @@ def _private_reference(path: Path) -> str:
             if (not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1
                     or not stat.S_ISREG(named.st_mode) or named.st_nlink != 1
                     or (opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino)
-                    or not 0 < opened.st_size <= MAX_REFERENCE_BYTES):
+                    or opened.st_size > MAX_REFERENCE_BYTES
+                    or (opened.st_size == 0 and not allow_empty)):
                 raise VoiceError('Reference must be a bounded private regular file')
             payload = handle.read(MAX_REFERENCE_BYTES + 1)
             final = os.fstat(handle.fileno())
@@ -356,13 +357,13 @@ def score_text_files(reference: Path, hypothesis: Path, *,
     if confirmed is not True:
         raise VoiceError('Explicit --confirm required to read private reference text')
     gold = _private_reference(reference)
-    text = _private_reference(hypothesis)
+    text = _private_reference(hypothesis, allow_empty=True)
     # Simple repeat-read fence prevents reporting scores about files replaced
     # while the other owner-selected transcript was being read. No digest is
     # published or added to the owner's memory.
     if (hashlib.sha256(_private_reference(reference).encode('utf-8')).digest()
             != hashlib.sha256(gold.encode('utf-8')).digest()
-            or hashlib.sha256(_private_reference(hypothesis).encode('utf-8')).digest()
+            or hashlib.sha256(_private_reference(hypothesis, allow_empty=True).encode('utf-8')).digest()
             != hashlib.sha256(text.encode('utf-8')).digest()):
         raise VoiceError('Private transcript input changed during evaluation')
     result = score_transcript(gold, text)

@@ -86,6 +86,21 @@ class VoiceTests(unittest.TestCase):
             with self.assertRaisesRegex(VoiceError, 'at least one'):
                 evaluate_wav(self.wav, self.model, malformed, confirmed=True)
 
+    def test_text_score_accepts_empty_hypothesis_as_full_deletion(self):
+        from athenz.voice import score_text_files
+        reference = self.root / 'ref.txt'
+        hypothesis = self.root / 'empty.txt'
+        reference.write_text('one two three', encoding='utf-8')
+        hypothesis.write_bytes(b'')
+        result = score_text_files(reference, hypothesis, confirmed=True)
+        self.assertEqual(result['hypothesis_words'], 0)
+        self.assertEqual(result['word_deletions'], 3)
+        self.assertEqual(result['wer_percent'], 100.0)
+        self.assertEqual(result['cer_percent'], 100.0)
+        reference.write_bytes(b'')
+        with self.assertRaisesRegex(VoiceError, 'Reference'):
+            score_text_files(reference, hypothesis, confirmed=True)
+
     def test_score_text_only_is_explicit_and_never_accesses_model_audio_or_private_paths(self):
         from athenz.voice import score_text_files
         reference = self.root / 'private-reference.txt'
