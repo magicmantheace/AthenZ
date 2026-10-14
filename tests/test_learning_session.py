@@ -118,3 +118,93 @@ class LearningSessionTests(unittest.TestCase):
             self.assertTrue(closed['evidence_current'])
             self.assertFalse(closed['promotion_authorized'])
             self.assertFalse(self.store.get_checkpoint('ollama_runtime'))
+
+    def test_cancel_and_revision_fencing(self):
+        session = self.begin()
+        ident, revision = session['session_id'], session['revision']
+        with self.assertRaisesRegex(LearningSessionError, 'confirm'):
+            cancel_session(self.store, ident, expected_revision=revision)
+        with self.assertRaisesRegex(LearningSessionError, 'revision changed'):
+            cancel_session(self.store, ident, expected_revision=revision + 1, confirmed=True)
+        cancelled = cancel_session(self.store, ident, expected_revision=revision,
+                                   confirmed=True)
+        self.assertEqual(cancelled['stage'], 'cancelled')
+        self.assertFalse(cancelled['evidence_current'])
+        with self.assertRaisesRegex(LearningSessionError, 'already'):
+            cancel_session(self.store, ident, expected_revision=cancelled['revision'],
+                           confirmed=True)
+        with self.assertRaisesRegex(LearningSessionError, 'awaiting'):
+            link_completed_run(self.store, ident, '0'*24,
+                               expected_revision=cancelled['revision'], confirmed=True)
+
+    def test_review_revocation_fences_training_link(self):
+        session = self.begin()
+        self.store.set_review('train_pairs', self.pair, 'rejected')
+        self.assertFalse(session_status(self.store, session['session_id'])['evidence_current'])
+        with self.assertRaisesRegex(LearningSessionError, 'Source evidence changed'):
+            link_completed_run(self.store, session['session_id'], '0'*24,
+                               expected_revision=session['revision'], confirmed=True)
+        self.assertEqual(session_status(self.store, session['session_id'])['revision'], 1)
+
+    def test_unregistered_run_cannot_be_attached(self):
+        session = self.begin()
+        run = create_run(self.store, self.dataset, self.base, confirmed=True)
+        with self.assertRaisesRegex(LearningSessionError, 'not verifiable'):
+            link_completed_run(self.store, session['session_id'], run['run_id'],
+                               expected_revision=session['revision'], confirmed=True)
+
+    def test_population_change_fails_closed(self):
+        session = self.begin()
+        self.store.add_decision(
+            'Would a distinct synthetic approval require another review?',
+            'yes', 'NEW SYNTHETIC GOLD', source='synthetic',
+            options=['yes','no'], split='calibration', approved=True)
+        self.assertFalse(session_status(self.store, session['session_id'])['evidence_current'])
+
+    def test_changed_saved_report_cannot_be_attached(self):
+        session = self.begin()
+        trained = self.trained(session)
+        digest = self.report()
+        path = self.store.home / 'datasets' / 'evaluations' / ('eval-' + digest + '.json')
+        path.write_bytes(path.read_bytes() + b'modified')
+        with self.assertRaisesRegex(LearningSessionError, 'integrity'):
+            link_comparison(self.store, session['session_id'], digest,
+                            expected_revision=trained['revision'], confirmed=True)
+        self.assertEqual(session_status(self.store, session['session_id'])['stage'], 'trained')
+
+    def test_closed_history_becomes_stale_after_revocation(self):
+        session = self.begin()
+        trained = self.trained(session)
+        evaluated = link_comparison(
+            self.store, session['session_id'], self.report(),
+            expected_revision=trained['revision'], confirmed=True)
+        closed = close_session(self.store, session['session_id'],
+                               expected_revision=evaluated['revision'], confirmed=True)
+        self.assertTrue(closed['evidence_current'])
+        self.store.set_review('train_pairs', self.pair, 'rejected')
+        self.assertFalse(session_status(self.store, session['session_id'])['evidence_current'])
+
+    def test_cli_status_outputs_only_aggregate_without_model(self):
+        session = self.begin()
+        from athenz.train_cli import main, parser
+        args = parser().parse_args(['session-status', session['session_id']])
+        self.assertEqual(args.command, 'session-status')
+        with mock.patch('athenz.train_cli.OllamaClient',
+                        side_effect=AssertionError('no inference')), \
+             mock.patch('athenz.runtime.model_digest',
+                        side_effect=AssertionError('no local model inventory')), \
+             mock.patch('builtins.print') as printing:
+            main(['--home', str(self.store.home), 'session-status', session['session_id']])
+        result = json.loads(printing.call_args.args[0])
+        self.assertFalse(result['model_called'])
+        self.assertNotIn('SYNTHETIC GOLD', json.dumps(result))
+        self.assertNotIn(self.dataset, json.dumps(result))
+
+    def test_invalid_session_identifier_is_rejected(self):
+        for value in ('../outside', 'bad', 'f'*80, None, True):
+            with self.subTest(value=value), self.assertRaises(LearningSessionError):
+                session_status(self.store, value)
+
+
+if __name__ == '__main__':
+    unittest.main()
