@@ -83,6 +83,8 @@ def _consistent_comparison_metadata(report: dict) -> bool:
     independently attested by this function. Newly produced comparisons
     include all aggregate fields and are checked before persistence/review.
     """
+    if report.get('schema') not in (1, 2):
+        return False
     count = report.get('cases')
     if type(count) is not int or not 0 < count <= 1000:
         return False
@@ -91,6 +93,8 @@ def _consistent_comparison_metadata(report: dict) -> bool:
     # comparison rather than silently preserving stale approval evidence.
     population_fields = ('requested_case_limit', 'approved_split_total')
     present_population = [field in report for field in population_fields]
+    if report['schema'] == 2 and not all(present_population):
+        return False
     if any(present_population):
         if not all(present_population):
             return False
@@ -335,7 +339,7 @@ def compare_models(store: ExperienceStore, baseline_model, candidate_model,
             second.get('reference_sha256') != initial_reference_sha):
         raise BenchmarkError('Evaluations used unequal or stale evidence snapshots')
     # Do not embed scenarios, gold answers or model predictions in the report.
-    result = {'schema': 1, 'dataset_sha256': dataset_sha256, 'split': split,
+    result = {'schema': 2, 'dataset_sha256': dataset_sha256, 'split': split,
               'seed': seed, 'cases': len(ids_a),
               'requested_case_limit': limit, 'approved_split_total': approved_total,
               'case_ids_sha256': hashlib.sha256(json.dumps(ids_a).encode()).hexdigest(),
