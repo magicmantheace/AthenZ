@@ -97,6 +97,25 @@ simulation checksums as user authentication.
 Details: [docs/TWIN_CONTEXT.md](docs/TWIN_CONTEXT.md). This is prompt
 retrieval engineering, not validated personality fidelity or weight training.
 
+### 2026-10-14 — complete approved-history Twin retrieval
+
+- [x] Stream **all** approved identity, value, style and preference records,
+  training-split decisions, and writing samples from local SQLite rather than
+  dropping everything outside the latest-200 candidate windows.
+- [x] Maintain fixed-size deterministic top-K heaps: source corpus size no
+  longer controls memory selected for Twin or Agent prompts.
+- [x] Retrieve relevant passages buried within long explicitly approved
+  writing samples, without sending the whole document to the model.
+- [x] Test revocation, older evidence recovery, unchanged JSON/profile
+  budgets, and held-out/pending/rejected isolation beyond 200 records.
+- [x] Supply a repeatable *synthetic only* offline retrieval benchmark
+  with aggregate recall@prompt and privacy checks; no owner data or model calls.
+- [ ] Measure retrieval latency at realistic profile sizes and independently
+  measure Twin decisions and writing-style similarity on consented held-out
+  owner examples (synthetic recall is not personal accuracy).
+
+See [docs/TWIN_CONTEXT.md](docs/TWIN_CONTEXT.md).
+ 
 ## Next critical path
 1. Record and evaluate user decisions with reproducible train/test splits (#3).
 2. Complete v0.3 event ledger with replay-safe checkpoints, indexed evidence,
