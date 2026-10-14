@@ -86,7 +86,7 @@ New AthenZ writing samples have an immutable **dataset split**:
 `train`, `calibration` or `test`. Existing approved writing samples
 migrate to `train` without changing their review status, provenance,
 or contents; **no old writing becomes a held-out gold reference automatically**.
-All samples remain pending until individually reviewed. New examples:
+All samples remain pending until individually reviewed. Approval rejects obvious\nnormalized exact duplicates across splits; semantically paraphrased copies\nare not yet detected and must be screened separately. New examples:
 
 ```sh
 athenz sample "An owner-written training paragraph" --split train
