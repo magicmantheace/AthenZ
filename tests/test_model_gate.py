@@ -117,6 +117,69 @@ class EvaluationGateTests(unittest.TestCase):
         self.assertEqual(hashlib.sha256(Path(saved['path']).read_bytes()).hexdigest(), saved['sha256'])
         self.assertEqual(save_report(self.store, report, confirmed=True), saved)
 
+    def test_full_approved_population_is_bound_to_comparison(self):
+        with mock.patch('athenz.model_gate.evaluate_decisions',
+                        side_effect=self.observations()):
+            report = compare_models(self.store, Model('base'), Model('candidate'),
+                                    self.sha, limit=100)
+        self.assertEqual(report['requested_case_limit'], 100)
+        self.assertEqual(report['approved_split_total'], 12)
+        self.assertEqual(report['cases'], 12)
+        self.assertTrue(save_report(self.store, report, confirmed=True))
+
+    def test_appended_unscored_heldout_case_invalidates_report(self):
+        with mock.patch('athenz.model_gate.evaluate_decisions',
+                        side_effect=self.observations()):
+            report = compare_models(self.store, Model('base'), Model('candidate'),
+                                    self.sha, limit=12)
+        self.assertEqual(report['requested_case_limit'], 12)
+        self.assertEqual(report['approved_split_total'], 12)
+        self.store.add_decision(
+            'Should the owner separately audit an unrelated review ledger?',
+            'yes', 'PRIVATE GOLD NEW CASE',
+            source='synthetic', options=['yes', 'no'], split='calibration',
+            approved=True)
+        with self.assertRaisesRegex(BenchmarkError, 'population changed'):
+            save_report(self.store, report, confirmed=True)
+        self.assertFalse((self.store.home / 'datasets' / 'evaluations').exists())
+
+    def test_appended_out_of_window_case_mid_comparison_is_rejected(self):
+        reports = self.observations()
+        count = {'calls': 0}
+        def inject(*args, **kwargs):
+            count['calls'] += 1
+            result = reports[count['calls'] - 1]
+            if count['calls'] == 2:
+                self.store.add_decision(
+                    'Will a separate synthetic review verify immutable labels?',
+                    'yes', 'PRIVATE GOLD OUT OF WINDOW',
+                    source='synthetic', options=['yes', 'no'],
+                    split='calibration', approved=True)
+            return result
+        with mock.patch('athenz.model_gate.evaluate_decisions', side_effect=inject):
+            with self.assertRaisesRegex(BenchmarkError, 'population changed'):
+                compare_models(self.store, Model('base'), Model('candidate'),
+                               self.sha, limit=12)
+        self.assertEqual(count['calls'], 2)
+
+    def test_forged_population_metadata_never_persists(self):
+        with mock.patch('athenz.model_gate.evaluate_decisions',
+                        side_effect=self.observations()):
+            report = compare_models(self.store, Model('base'), Model('candidate'),
+                                    self.sha)
+        mutations = ({'requested_case_limit': True},
+                     {'requested_case_limit': 1},
+                     {'approved_split_total': 8},
+                     {'approved_split_total': False})
+        for change in mutations:
+            with self.subTest(change=change):
+                with self.assertRaisesRegex(BenchmarkError, 'metadata is inconsistent'):
+                    save_report(self.store, {**report, **change}, confirmed=True)
+        with self.assertRaisesRegex(BenchmarkError, 'metadata is inconsistent'):
+            save_report(self.store,
+                        {k: v for k, v in report.items() if k != 'requested_case_limit'},
+                        confirmed=True)
+
     def test_comparison_carries_aggregate_uncertainty_only(self):
         reports = self.observations()
         reports[0]['accuracy_interval_95'] = [0.15, 0.72]
