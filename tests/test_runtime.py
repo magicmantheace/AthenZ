@@ -3,6 +3,7 @@ import hashlib
 import json
 from pathlib import Path
 import tempfile
+import traceback
 import unittest
 from unittest import mock
 
@@ -13,7 +14,8 @@ from athenz.finetune import create_run, execute_run
 from athenz.model_gate import save_report, _heldout_fingerprint
 from athenz.evaluation import _reference_fingerprint
 from athenz.runtime import (RoutingError, activate, checked_active_tag,
-                            model_digest, rollback, status, inspect_rollback_readiness)
+                            model_digest, rollback, status, inspect_rollback_readiness,
+                            rehearse_rollback)
 from athenz.train_cli import parser
 from athenz.training import build_dataset
 
@@ -247,9 +249,141 @@ class RoutingTests(unittest.TestCase):
         self.assertFalse(check['local_inventory_checked'])
         self.assertFalse(check['ready_for_manual_rollback'])
 
+    def test_rollback_rehearsal_checks_actual_baseline_and_discards_checkpoint(self):
+        self.select()
+        self.activate()
+        cp = self.s.get_checkpoint('ollama_runtime')
+        before = self.s.db.execute('SELECT COUNT(*) FROM events').fetchone()[0]
+        model = FakeModel('synthetic-greeting-only')
+        result = rehearse_rollback(
+            self.s, expected_revision=1, confirmed=True,
+            smoke_model_factory=lambda tag: model)
+        self.assertEqual(result['revision'], 1)
+        self.assertTrue(result['baseline_smoke_passed'])
+        self.assertTrue(result['projected_checkpoint_tested'])
+        self.assertTrue(result['checkpoint_unchanged'])
+        self.assertFalse(result['routing_changed'])
+        self.assertTrue(result['ready_for_owner_rollback'])
+        self.assertNotIn('synthetic-greeting-only', json.dumps(result))
+        self.assertEqual(model.calls[0][0],
+                         [{'role':'user','content':'Reply with a short greeting.'}])
+        self.assertEqual(self.s.get_checkpoint('ollama_runtime'), cp)
+        self.assertEqual(self.s.db.execute('SELECT COUNT(*) FROM events').fetchone()[0],
+                         before)
+        self.assertEqual(checked_active_tag(self.s), 'candidate-a')
+        self.assertEqual(rollback(self.s, expected_revision=1, confirmed=True)['active_tag'],
+                         'base')
+
+    def test_rollback_rehearsal_rejects_no_consent_without_smoke(self):
+        self.select()
+        self.activate()
+        model = FakeModel()
+        before = self.s.get_checkpoint('ollama_runtime')
+        with self.assertRaisesRegex(RoutingError, 'confirm'):
+            rehearse_rollback(
+                self.s, expected_revision=1, smoke_model_factory=lambda tag: model)
+        self.assertEqual(model.calls, [])
+        self.assertEqual(self.s.get_checkpoint('ollama_runtime'), before)
+
+    def test_rollback_rehearsal_works_with_revoked_or_deleted_candidate(self):
+        self.select()
+        self.activate()
+        self.s.set_review('train_pairs', self.pair, 'rejected')
+        del self.seen['candidate-a']
+        model = FakeModel()
+        result = rehearse_rollback(
+            self.s, expected_revision=1, confirmed=True,
+            smoke_model_factory=lambda tag: model)
+        self.assertTrue(result['ready_for_owner_rollback'])
+        self.assertEqual(model.calls[0][0][0]['content'], 'Reply with a short greeting.')
+        self.assertEqual(status(self.s)['active_tag'], 'candidate-a')
+        self.assertEqual(rollback(self.s, expected_revision=1, confirmed=True)['active_tag'],
+                         'base')
+
+    def test_rollback_rehearsal_fails_closed_on_missing_baseline(self):
+        self.select()
+        self.activate()
+        del self.seen['base']
+        with self.assertRaisesRegex(RoutingError, 'No local model'):
+            rehearse_rollback(
+                self.s, expected_revision=1, confirmed=True,
+                smoke_model_factory=lambda tag: FakeModel())
+        self.assertEqual(status(self.s)['revision'], 1)
+
+    def test_rollback_rehearsal_rejects_model_change_during_smoke(self):
+        self.select()
+        self.activate()
+        cp = self.s.get_checkpoint('ollama_runtime')
+        original = self._digest
+        seen = {'reads':0}
+        def drift(tag, **kwargs):
+            if tag == 'base':
+                seen['reads'] += 1
+                return BASE if seen['reads'] == 1 else 'f' * 64
+            return original(tag)
+        with mock.patch('athenz.runtime.model_digest', side_effect=drift):
+            with self.assertRaisesRegex(RoutingError, 'changed during rehearsal'):
+                rehearse_rollback(
+                    self.s, expected_revision=1, confirmed=True,
+                    smoke_model_factory=lambda tag: FakeModel())
+        self.assertEqual(self.s.get_checkpoint('ollama_runtime'), cp)
+
+    def test_rollback_rehearsal_suppresses_private_backend_exceptions(self):
+        self.select()
+        self.activate()
+        cp = self.s.get_checkpoint('ollama_runtime')
+        class Failing:
+            def generate(self, messages, **kwargs):
+                raise RuntimeError('PRIVATE_SIMULATED_OWNER_PROMPT')
+        with self.assertRaisesRegex(RoutingError, 'Baseline smoke inference failed') as caught:
+            rehearse_rollback(
+                self.s, expected_revision=1, confirmed=True,
+                smoke_model_factory=lambda tag: Failing())
+        self.assertNotIn('PRIVATE_SIMULATED_OWNER_PROMPT',
+                         ''.join(traceback.format_exception(caught.exception)))
+        self.assertEqual(self.s.get_checkpoint('ollama_runtime'), cp)
+
+    def test_rollback_rehearsal_restores_savepoint_on_staged_failure(self):
+        self.select()
+        self.activate()
+        cp = self.s.get_checkpoint('ollama_runtime')
+        before = self.s.db.execute('SELECT COUNT(*) FROM events').fetchone()[0]
+        actual = self.s.checkpoint
+        def fail_after_write(*args, **kwargs):
+            result = actual(*args, **kwargs)
+            raise ValueError('Synthetic error after staged checkpoint')
+        with mock.patch.object(self.s, 'checkpoint', side_effect=fail_after_write):
+            with self.assertRaisesRegex(RoutingError, 'Rollback rehearsal failed') as caught:
+                rehearse_rollback(
+                    self.s, expected_revision=1, confirmed=True,
+                    smoke_model_factory=lambda tag: FakeModel())
+        self.assertNotIn('Synthetic error after staged checkpoint',
+                         ''.join(traceback.format_exception(caught.exception)))
+        self.assertEqual(self.s.get_checkpoint('ollama_runtime'), cp)
+        self.assertEqual(self.s.db.execute('SELECT COUNT(*) FROM events').fetchone()[0],
+                         before)
+
+    def test_rollback_rehearsal_rejects_changed_revision_after_smoke(self):
+        self.select()
+        self.activate()
+        cp = self.s.get_checkpoint('ollama_runtime')
+        store = self.s
+        class Mutating:
+            def generate(self, messages, **kwargs):
+                store.checkpoint('ollama_runtime', cp['task'], cp['state'],
+                                 expected_revision=cp['revision'])
+                return 'hello'
+        with self.assertRaisesRegex(RoutingError, 'revision changed'):
+            rehearse_rollback(
+                self.s, expected_revision=1, confirmed=True,
+                smoke_model_factory=lambda tag: Mutating())
+        self.assertEqual(status(self.s)['revision'], 2)
+        self.assertEqual(status(self.s)['active_tag'], 'candidate-a')
+
     def test_runtime_cli_commands_present(self):
         actions = parser()._subparsers._group_actions[0].choices
-        self.assertTrue({'runtime-activate', 'runtime-status', 'runtime-rollback'} <= set(actions))
+        self.assertTrue({'runtime-activate', 'runtime-status', 'runtime-rollback',
+                         'runtime-rehearse-rollback'} <= set(actions))
 
 
 class APIInventoryTests(unittest.TestCase):
