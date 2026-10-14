@@ -339,3 +339,19 @@ also passed packaging, executable self-test and GUI startup smoke. Full
 is a separate longer regression and requires a completed success conclusion.
 All tests use synthetic WAVs and fake local inference; no owner audio, trained
 weights, secrets or private SQLite files were uploaded.
+
+### 2026-10-13 — Private speech metric evaluation
+
+Pinned development source `69227ea9cb8b04be93446ef68d073e3800d09e0d`
+contains owner-confirmed offline WAV/reference and text/text numeric WER/CER
+scoring, no returned private text and no persistence of model replies, plus
+synthetic reference-race and privacy tests. Public compatible matrix
+[38501677826](https://github.com/magicmantheace/AthenZ/actions/runs/38501677826)
+completed SUCCESS: 550 synthetic tests each on Linux Python 3.12 and 3.13
+(four skips), and a Windows unsigned portable package and Tk startup smoke.
+Full Linux/Windows Python 3.11 regression
+[38501687005](https://github.com/magicmantheace/AthenZ/actions/runs/38501687005)
+is distinct and must have a completed success conclusion before being
+reported green. Hosted tests have fake model output and synthetic text, not
+actual owner voice/audio or NVIDIA hardware; no private transcript or model
+weights were committed.

@@ -477,3 +477,24 @@ owner profile data or unattended coding action implied by this milestone.
   must finish separately before full native CI can be marked successful.
 - [ ] Real owner-device WAV/model accuracy, native CTranslate2/RTX 3060 CUDA
   support and voice accessibility still need supervised acceptance.
+
+### 2026-10-13 — Offline private speech quality measurement
+
+- [x] Implement explicit `athenz-voice evaluate ... --reference ... --confirm`
+  to compare local native faster-whisper transcripts to owner-authored ground
+  truth entirely in memory; return only aggregate normalized WER/CER, edit
+  counts, and consent/privacy flags. No automatic chat or storage.
+- [x] Implement `athenz-voice score-text --reference ... --hypothesis ... --confirm`
+  for native-free, network-free comparison of existing owner-selected text
+  transcripts. Unicode NFKC/case-folding/punctuation rules are documented.
+- [x] Private UTF-8 reference/hypothesis files use bounded no-follow regular
+  file reads, hardlink checks and stability rereads; malformed references are
+  refused **before** launching optional native speech inference.
+- [x] Synthetic CI source `69227ea9cb8b04be93446ef68d073e3800d09e0d`
+  passed 550 Python regression tests each on Linux Python 3.12 and 3.13
+  (four skipped each) and unsigned Windows portable startup/GUI checks in
+  [run 38501677826](https://github.com/magicmantheace/AthenZ/actions/runs/38501677826).
+- [ ] Full Linux/Windows Python 3.11 regression run
+  [38501687005](https://github.com/magicmantheace/AthenZ/actions/runs/38501687005),
+  actual reference-labelled WAV data, installed native faster-whisper model
+  CPU/CUDA behavior, human review and accessible UI remain separately unverified.

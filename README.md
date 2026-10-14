@@ -403,3 +403,23 @@ without importing a native inference engine:
 It prints only metadata counts and file sizes, not paths, transcript text or
 weights. Actual speech transcription remains separately owner-confirmed, with
 no recording, network upload or automatic chat/memory integration.
+
+## Measuring offline voice recognition accuracy without collecting speech
+
+AthenZ v0.8's explicitly owner-invoked voice evaluation compares an existing
+local WAV recording with a private, owner-verified UTF-8 reference transcript.
+It uses the separately installed local faster-whisper model and computes
+normalized word error rate (WER) and character error rate (CER), returning
+only counts/percentages rather than the owner's words or file paths:
+
+```powershell
+athenz-voice evaluate sample.wav --model C:\\PrivateModels\\whisper-ct2 --reference reference.txt --confirm
+```
+
+For two existing UTF-8 transcripts, use
+`athenz-voice score-text --reference reference.txt --hypothesis output.txt --confirm`
+to calculate the same metrics with **no audio read, model load or CUDA work**.
+Consent is always explicit; input files are bounded and rechecked for changes.
+Neither path writes text into AthenZ memory/training data, and the output is
+not independent proof of real speech-model accuracy. See [offline voice
+privacy and evaluation](docs/VOICE.md).
