@@ -272,3 +272,46 @@ manual score/lineage review. Snapshot-read operations do not attest model
 weights or protect against hostile same-user filesystem races. A running
 AthenZ profile is SQLite-backed and may still create SQLite sidecar files;
 the preflight does not create a new dataset or model artifact.
+
+## v0.7 supervised learning-session journal (2026-10-14)
+
+The new session commands persist an **evidence journal only** in the private
+AthenZ SQLite profile; they do not call a model, launch training, change local
+Ollama routing, or authorize promotion. This makes a baseline → reviewed
+training → candidate evaluation → manual rollback decision traceable while
+the separate existing commands carry out explicitly approved work.
+
+```sh
+athenz-training learning-plan --limit 12 --min-cases 10
+athenz-training session-start <approved-dataset-sha256> --limit 12 --confirm
+athenz-training session-status <session-id>
+# Separately, use the existing prepare-qlora, run-qlora and register-adapter
+# commands with their own explicit approvals. Then record the completed run:
+athenz-training session-link-run <session-id> <run-id> --revision 1 --confirm
+# Separately compare installed baseline and candidate models and save a report:
+athenz-training session-link-report <session-id> <saved-evaluation-sha256> --revision 2 --confirm
+athenz-training session-close <session-id> --revision 3 --confirm
+```
+
+Actual revision values are returned by each step: never guess or reuse a stale
+revision. An unfinished session can be cancelled with `session-cancel`,
+the current `--revision`, and `--confirm`. Cancellation **does not** cancel
+running GPU jobs, uninstall adapters or roll back an activated model; those are
+separate explicit operations.
+
+Session creation requires a currently verified consent-based dataset,
+adequate protected held-out cases, lexical independence checks, and a stable
+evaluation population. Linking a training run requires that it has completed
+and has been separately registered under an owner-chosen candidate label.
+Linking a report requires an immutable saved schema-two comparison from the
+same dataset, exact split, seed, case limit and candidate. The journal accepts
+positive, negative and tied observations; **a positive observed score never
+automatically promotes a candidate**, and the report's paired significance
+must be assessed independently. Completed sessions are also revalidated on
+status reads; source revocation, report tampering or changing evaluation data
+shows `evidence_current: false` instead of silently preserving readiness.
+
+These checkpoints are not tamper-proof signed attestations. They store opaque
+IDs, hashes and metadata locally, not personal examples or transcripts.
+Synthetic CI does not establish on-device CUDA training, voice fidelity or
+actual behavioral improvement.
