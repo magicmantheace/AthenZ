@@ -18,7 +18,7 @@ from .finetune import create_run, describe_run, execute_run
 from .adapters import register_adapter, selection, select_for_review, rollback_selection
 from .runtime import (status as runtime_status, activate as activate_runtime,
                       rollback as rollback_runtime, checked_active_tag,
-                      inspect_rollback_readiness)
+                      inspect_rollback_readiness, rehearse_rollback)
 from .ollama_import import prepare_import, verify_import, import_local
 from .conversion import (prepare_conversion, execute_conversion,
                          pause_conversion, conversion_status)
@@ -122,6 +122,11 @@ def parser() -> argparse.ArgumentParser:
     x.add_argument('--baseline', required=True, help='Evaluated, locally installed baseline tag')
     x.add_argument('--revision', type=int, required=True)
     x.add_argument('--confirm', action='store_true')
+    x = sub.add_parser('runtime-rehearse-rollback',
+                       help='Consent-gated local baseline smoke and temporary SQLite rollback, never persists routing change')
+    x.add_argument('--revision', type=int, required=True)
+    x.add_argument('--confirm', action='store_true',
+                   help='Explicitly authorize one synthetic prompt to the installed baseline via loopback Ollama')
     x = sub.add_parser('runtime-rollback', help='Restore the pinned baseline as AthenZ chat default')
     x.add_argument('--revision', type=int, required=True)
     x.add_argument('--confirm', action='store_true')
@@ -229,6 +234,9 @@ def main(argv: list[str] | None = None) -> None:
         elif args.command == 'runtime-activate':
             result = activate_runtime(store, expected_revision=args.revision,
                                       baseline_tag=args.baseline, confirmed=args.confirm)
+        elif args.command == 'runtime-rehearse-rollback':
+            result = rehearse_rollback(
+                store, expected_revision=args.revision, confirmed=args.confirm)
         elif args.command == 'runtime-rollback':
             result = rollback_runtime(store, expected_revision=args.revision,
                                       confirmed=args.confirm)
