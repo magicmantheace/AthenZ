@@ -158,17 +158,21 @@ def _heldout_rows(store: IdentityStore, split: str, limit: int) -> list[list]:
 def _reference_fingerprint(store: IdentityStore) -> str:
     """Snapshot all approved Twin prompt data, without exposing private rows."""
     evidence = []
+    # Preserve the historical three-table digest when no newly supported
+    # evidence exists: an unchanged profile must not invalidate all previous
+    # reviewed benchmarks purely because AthenZ updated.
     for table, predicate in (
         ('identity', "status='approved'"),
         ('decisions', "status='approved' AND split='train'"),
-        ('writing_samples', "status='approved'"),
         ('episodes', "status='approved'"),
+        ('writing_samples', "status='approved'"),
         ('episode_disputes', "1=1"),
     ):
         # Table names and predicates are constants here, never user input.
         rows = [list(row) for row in store.db.execute(
             f'SELECT * FROM {table} WHERE {predicate} ORDER BY id')]
-        evidence.append([table, rows])
+        if rows or table in {'identity', 'decisions', 'episodes'}:
+            evidence.append([table, rows])
     return _fingerprint(evidence)
 
 
