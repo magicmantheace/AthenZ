@@ -37,6 +37,90 @@ class VoiceTests(unittest.TestCase):
                 return (iter(segments), {'language': 'en'})
         return Engine()
 
+    def test_numeric_wer_cer_and_insertions_without_text_output(self):
+        from athenz.voice import score_transcript
+        perfect = score_transcript("Hello, WORLD!", "hello world")
+        self.assertEqual(perfect['word_errors'], 0)
+        self.assertEqual(perfect['wer_percent'], 0.0)
+        self.assertEqual(perfect['cer_percent'], 0.0)
+        self.assertFalse(perfect['text_in_output'])
+        miss = score_transcript("hello brave world", "hello world")
+        self.assertEqual(miss['word_deletions'], 1)
+        self.assertEqual(miss['word_errors'], 1)
+        self.assertEqual(miss['wer_percent'], 33.33)
+        extra = score_transcript('bonjour', 'bonjour bonjour')
+        self.assertEqual(extra['word_insertions'], 1)
+        self.assertEqual(extra['wer_percent'], 100.0)
+        changed = score_transcript("I like apples", "I love apples")
+        self.assertEqual(changed['word_substitutions'], 1)
+        self.assertEqual(changed['wer_percent'], 33.33)
+        self.assertNotIn('apples', json.dumps(changed))
+
+    def test_score_rejects_empty_reference_and_excessively_long_text(self):
+        from athenz.voice import score_transcript, MAX_EVAL_WORDS
+        with self.assertRaisesRegex(VoiceError, 'at least one'):
+            score_transcript('!!!', 'something')
+        with self.assertRaisesRegex(VoiceError, 'bounded'):
+            score_transcript('hello', ('word ' * (MAX_EVAL_WORDS + 1)))
+        missing = score_transcript('hello world', '')
+        self.assertEqual(missing['word_deletions'], 2)
+        self.assertEqual(missing['wer_percent'], 100.0)
+
+    def test_evaluate_wav_emits_aggregate_only_and_never_stores_transcript(self):
+        from types import SimpleNamespace
+        from athenz.voice import evaluate_wav
+        reference = self.root / 'private-reference.txt'
+        reference.write_text('private origin hello world', encoding='utf-8')
+        engine = self.fake_engine(SimpleNamespace(text='hello world'))
+        with mock.patch('athenz.voice._load_engine', return_value=engine):
+            result = evaluate_wav(self.wav, self.model, reference, confirmed=True)
+        self.assertEqual(result['wer_percent'], 50.0)
+        self.assertTrue(result['audio_fingerprint_stable'])
+        self.assertFalse(result['transcript_returned'])
+        self.assertFalse(result['reference_persisted'])
+        self.assertNotIn('private origin', json.dumps(result))
+        self.assertNotIn(str(reference), json.dumps(result))
+        self.assertEqual(sorted(p.name for p in self.root.iterdir()),
+                         ['offline-model', 'private-reference.txt', 'synthetic.wav'])
+
+    def test_evaluate_cli_never_prints_private_words(self):
+        from types import SimpleNamespace
+        reference = self.root / 'reference.txt'
+        reference.write_text('PRIVATE_REFERENCE_WORDS', encoding='utf-8')
+        engine = self.fake_engine(SimpleNamespace(text='private reference words'))
+        with mock.patch('athenz.voice._load_engine', return_value=engine), \
+             mock.patch('builtins.print') as printed:
+            main(['evaluate', str(self.wav), '--model', str(self.model),
+                  '--reference', str(reference), '--confirm'])
+        data = json.loads(printed.call_args.args[0])
+        self.assertEqual(data['wer_percent'], 0.0)
+        self.assertNotIn('PRIVATE_', printed.call_args.args[0])
+        self.assertNotIn('reference.txt', printed.call_args.args[0])
+
+    def test_reference_consent_before_open_and_no_symlink_or_bad_utf8(self):
+        from athenz.voice import evaluate_wav
+        private = self.root / 'PRIVATE-reference.txt'
+        private.write_text('private speech')
+        with mock.patch('athenz.voice._private_reference',
+                        side_effect=AssertionError('reference should stay unread')):
+            with self.assertRaisesRegex(VoiceError, 'confirm'):
+                evaluate_wav(self.wav, self.model, private)
+        link = self.root / 'reference-link.txt'
+        try:
+            link.symlink_to(private)
+        except (OSError, NotImplementedError):
+            self.skipTest('No symlinks')
+        with mock.patch('athenz.voice.transcribe_wav',
+                        return_value={'transcript': 'hi',
+                                      'audio_fingerprint_stable': True,
+                                      'model_files_stable': True}):
+            with self.assertRaises(VoiceError):
+                evaluate_wav(self.wav, self.model, link, confirmed=True)
+            private.write_bytes(b'\\xff\\xfe')
+            with self.assertRaises(VoiceError) as exc:
+                evaluate_wav(self.wav, self.model, private, confirmed=True)
+            self.assertNotIn(str(private), str(exc.exception))
+
     def test_model_inspection_is_metadata_only_and_never_loads_backend(self):
         with mock.patch('athenz.voice._load_engine',
                         side_effect=AssertionError('No native model import allowed')):

@@ -10,6 +10,8 @@ import argparse
 import hashlib
 import json
 import os
+import re
+import unicodedata
 from pathlib import Path
 import stat
 import wave
@@ -19,6 +21,9 @@ MAX_MODEL_BYTES = 12 * 1024**3
 MAX_SECONDS = 90
 MAX_TRANSCRIPT_CHARS = 16000
 MAX_SEGMENTS = 500
+MAX_REFERENCE_BYTES = 16 * 1024
+MAX_EVAL_WORDS = 1100
+MAX_EVAL_CHARS = 4096
 
 
 class VoiceError(ValueError):
@@ -254,6 +259,115 @@ def transcribe_wav(path: Path, model_dir: Path, *,
             'duration_seconds': evidence['duration_seconds']}
 
 
+def _private_reference(path: Path) -> str:
+    """Bounded, no-follow owner reference read without returning paths or bytes.
+
+    Reading is only permitted after explicit evaluation consent. The caller
+    must never put the text into generated reports, memory or public logs.
+    """
+    selected = Path(path).expanduser().absolute()
+    try:
+        if selected.is_symlink() or selected.suffix.lower() != '.txt':
+            raise VoiceError('Select a private local UTF-8 .txt reference file')
+        flags = os.O_RDONLY | getattr(os, 'O_BINARY', 0) | getattr(os, 'O_NOFOLLOW', 0)
+        with os.fdopen(os.open(selected, flags), 'rb') as handle:
+            opened = os.fstat(handle.fileno())
+            named = selected.lstat()
+            if (not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1
+                    or not stat.S_ISREG(named.st_mode) or named.st_nlink != 1
+                    or (opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino)
+                    or not 0 < opened.st_size <= MAX_REFERENCE_BYTES):
+                raise VoiceError('Reference must be a bounded private regular file')
+            payload = handle.read(MAX_REFERENCE_BYTES + 1)
+            final = os.fstat(handle.fileno())
+            if (len(payload) != opened.st_size
+                    or (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns)
+                    != (final.st_dev, final.st_ino, final.st_size, final.st_mtime_ns)):
+                raise VoiceError('Reference text changed during local inspection')
+        text = payload.decode('utf-8-sig', errors='strict')
+        if any(ord(char) < 32 and char not in '\n\r\t' for char in text):
+            raise VoiceError('Reference contains unsupported control characters')
+        return text
+    except VoiceError:
+        raise
+    except (OSError, UnicodeError, ValueError):
+        raise VoiceError('Private reference text is unavailable or malformed') from None
+
+
+def _word_tokens(text: str) -> list[str]:
+    normalized = unicodedata.normalize('NFKC', text).casefold()
+    # Word scoring ignores case/punctuation, preserves internal apostrophes.
+    # This tokenizer targets supported whitespace-delimited European speech,
+    # not languages without conventional word boundaries.
+    words = re.findall(r"[^\W_]+(?:['’][^\W_]+)*", normalized, re.UNICODE)
+    if len(words) > MAX_EVAL_WORDS or len(' '.join(words)) > MAX_EVAL_CHARS:
+        raise VoiceError('Transcript evaluation exceeds its bounded word/character scope')
+    return words
+
+
+def _edit_counts(reference: list[str] | str, hypothesis: list[str] | str) -> tuple[int, int, int, int]:
+    """Rolling-row Levenshtein: total edits and substitution/deletion/insertion."""
+    # Only 1100 words/4096 characters per input are accepted by the caller.
+    previous = [(i, 0, i, 0) for i in range(len(reference) + 1)]
+    for token in hypothesis:
+        row = [(previous[0][0] + 1, 0, 0, previous[0][3] + 1)]
+        for j, gold in enumerate(reference, 1):
+            if gold == token:
+                match = previous[j - 1]
+            else:
+                d = previous[j - 1]
+                match = (d[0] + 1, d[1] + 1, d[2], d[3])
+            deleted = row[j - 1]
+            deleted = (deleted[0] + 1, deleted[1], deleted[2] + 1, deleted[3])
+            inserted = previous[j]
+            inserted = (inserted[0] + 1, inserted[1], inserted[2], inserted[3] + 1)
+            row.append(min((match, deleted, inserted),
+                           key=lambda item: item[0]))
+        previous = row
+    return previous[-1]
+
+
+def score_transcript(reference: str, hypothesis: str) -> dict:
+    """Return privacy-safe WER/CER counts; no text, audio or model operations."""
+    if not isinstance(reference, str) or not isinstance(hypothesis, str):
+        raise VoiceError('Evaluation needs two local text strings')
+    gold, actual = _word_tokens(reference), _word_tokens(hypothesis)
+    if not gold:
+        raise VoiceError('Reference must contain at least one spoken word')
+    words = _edit_counts(gold, actual)
+    gold_chars, actual_chars = ' '.join(gold), ' '.join(actual)
+    characters = _edit_counts(gold_chars, actual_chars)
+    return {'schema': 1, 'metric': 'normalized-word-and-character-error',
+            'reference_words': len(gold), 'hypothesis_words': len(actual),
+            'word_substitutions': words[1], 'word_deletions': words[2],
+            'word_insertions': words[3], 'word_errors': words[0],
+            'wer_percent': round(100 * words[0] / len(gold), 2),
+            'reference_characters': len(gold_chars),
+            'character_errors': characters[0],
+            'cer_percent': round(100 * characters[0] / len(gold_chars), 2),
+            'case_and_punctuation_ignored': True,
+            'text_in_output': False, 'reference_persisted': False,
+            'independent_accuracy_certification': False}
+
+
+def evaluate_wav(path: Path, model_dir: Path, reference: Path, *,
+                 confirmed: bool = False, device: str = 'cpu',
+                 language: str = 'en') -> dict:
+    """Score a privately transcribed WAV without ever emitting its transcript."""
+    if confirmed is not True:
+        raise VoiceError('Explicit --confirm required to evaluate private speech')
+    observed = transcribe_wav(path, model_dir, confirmed=True,
+                             device=device, language=language)
+    gold = _private_reference(reference)
+    metrics = score_transcript(gold, observed['transcript'])
+    return {**metrics, 'evaluation_status': 'scored-local-speech',
+            'device_requested': device, 'language_requested': language,
+            'audio_fingerprint_stable': observed['audio_fingerprint_stable'],
+            'model_files_stable': observed['model_files_stable'],
+            'transcript_returned': False, 'audio_uploaded': False,
+            'model_downloaded': False, 'training_authorized': False}
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         prog='athenz-voice', description='Offline, opt-in transcription of an existing local WAV')
@@ -270,11 +384,24 @@ def main(argv: list[str] | None = None) -> None:
     work.add_argument('--device', choices=['cpu', 'cuda'], default='cpu')
     work.add_argument('--language', choices=['en', 'fr', 'es', 'de'], default='en')
     work.add_argument('--confirm', action='store_true')
+    score = sub.add_parser('evaluate',
+                           help='Private WAV/reference accuracy scores; NEVER print speech or reference text')
+    score.add_argument('wav', type=Path)
+    score.add_argument('--model', type=Path, required=True)
+    score.add_argument('--reference', type=Path, required=True,
+                       help='Owner-written local UTF-8 .txt transcript reference')
+    score.add_argument('--device', choices=['cpu', 'cuda'], default='cpu')
+    score.add_argument('--language', choices=['en', 'fr', 'es', 'de'], default='en')
+    score.add_argument('--confirm', action='store_true')
     args = parser.parse_args(argv)
     if args.command == 'inspect':
         report = inspect_wav(args.wav)
     elif args.command == 'inspect-model':
         report = inspect_local_model(args.model)
+    elif args.command == 'evaluate':
+        report = evaluate_wav(args.wav, args.model, args.reference,
+                              confirmed=args.confirm, device=args.device,
+                              language=args.language)
     else:
         report = transcribe_wav(args.wav, args.model, confirmed=args.confirm,
                                 device=args.device, language=args.language)

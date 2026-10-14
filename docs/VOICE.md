@@ -102,3 +102,32 @@ files, and returns only aggregate file count and byte size (including optional
 recognized tokenizer/vocabulary sidecars). It never prints the private model
 path, filename list or model bytes. A successful inventory is **not** an
 inference, accuracy, provenance or CUDA-readiness certification.
+
+## Reference-based offline speech quality evaluation
+
+The owner can supply a short, **private, manually verified UTF-8** reference
+transcript for an existing WAV file and request local Whisper inference plus
+word/character error-rate measurement in one operation:
+
+```powershell
+athenz-voice evaluate C:\\PrivateAudio\\sample.wav --model C:\\PrivateModels\\whisper-ct2 --reference C:\\PrivateAudio\\sample-reference.txt --confirm
+```
+
+This is a **separate owner-consent action**, not part of automatic transcription
+or chat. The evaluation calls the same bounded offline speech decoder; it
+compares its *in-memory* transcript to the locally read owner reference and
+prints only aggregate normalized WER/CER percentages, substitution/deletion/
+insertion counts, and privacy indicators. Neither text, paths, audio data,
+model output, reference content, case-level examples nor model weights are
+written to AthenZ's private database or the public repository.
+
+Normalization uses Unicode NFKC, case-folding and punctuation-insensitive
+whitespace-delimited word tokens, with apostrophes retained. WER and CER are
+Levenshtein edit errors divided by reference word and character counts,
+respectively, so results can exceed 100% for excessive insertions. Empty
+spoken references are refused, while a missing hypothesis is scored as
+100% deletion error. The reference must be a non-symlinked, non-hardlinked,
+size-bounded regular UTF-8 `.txt` file. A malicious or outdated owner
+reference can yield misleading numbers; an observed score is **not**
+independent accuracy certification, speaker identity evidence, or universal
+quality validation. Private plaintext is still held in memory while scoring.
