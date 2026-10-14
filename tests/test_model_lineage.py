@@ -199,10 +199,9 @@ class ModelLineageAuditTests(unittest.TestCase):
         class ChangingLocalModel:
             def generate(self, messages, **kwargs):
                 cp = store.get_checkpoint('ollama_import_' + run_id)
-                with store.db:
-                    store.db.execute(
-                        "UPDATE checkpoints SET status='paused' WHERE id=?",
-                        (cp['id'],))
+                store.checkpoint(
+                    'ollama_import_' + run_id, cp['task'], cp['state'],
+                    status='paused', expected_revision=cp['revision'])
                 return 'synthetic greeting'
         with mock.patch('athenz.runtime.model_digest',
                         side_effect=lambda tag, **kw: self.tags[tag]):
