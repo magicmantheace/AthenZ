@@ -53,7 +53,7 @@ def _overlap(query: set[str], text: str) -> int:
 
 
 def _selected_identity(rows: list[dict], query: str) -> list[dict]:
-    """Keep a small global style/value backbone plus topic-specific facts.
+    """Keep a small style/value/preference backbone plus topic-specific facts.
 
     A source is already owner approved when it arrives from store.context().
     A lexical match is a relevance hint, never a truth or contradiction test.
@@ -62,7 +62,7 @@ def _selected_identity(rows: list[dict], query: str) -> list[dict]:
     direct_bio = bool(re.search(
         r"\b(who am i|describe me|about me|my background|my profile)\b",
         query.lower()))
-    global_rows = [r for r in rows if r["kind"] in {"style", "value"}]
+    global_rows = [r for r in rows if r["kind"] in {"style", "value", "preference"}]
     global_rows.sort(key=lambda r: (
         _overlap(terms, r["text"]), r["confidence"], r["id"]), reverse=True)
     baseline = global_rows[:5]
