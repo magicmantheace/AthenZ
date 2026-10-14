@@ -59,7 +59,7 @@ def _checkpoint(store: ExperienceStore, session_id: str) -> dict:
             or not isinstance(s.get('reference_sha256'), str)
             or not _SHA.fullmatch(s['reference_sha256'])):
         raise LearningSessionError('Stored session metadata is invalid')
-    if s['schema'] == 2 and s['stage'] in {'baselined', 'trained', 'evaluated', 'closed'}:
+    if s['schema'] in (2, 3) and s['stage'] in {'baselined', 'trained', 'evaluated', 'closed'}:
         observed_cases = s.get('baseline_cases')
         observed_correct = s.get('baseline_correct')
         if (type(observed_cases) is not int or not s['min_cases'] <= observed_cases <= s['limit']
@@ -129,7 +129,7 @@ def _evidence_is_current(store: ExperienceStore, state: dict) -> bool:
             dataset_sha256=state['dataset_sha256'])
         if not ready['ready_for_manual_model_comparison']:
             return False
-        if state['schema'] == 2 and state.get('baseline_digest'):
+        if state['schema'] in (2, 3) and state.get('baseline_digest'):
             if (state['baseline_reference_sha256'] != state['reference_sha256']
                     or state['baseline_heldout_sha256'] !=
                     _heldout_fingerprint(store, state['split'], state['baseline_cases'])):
