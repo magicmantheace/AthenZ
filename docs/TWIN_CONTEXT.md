@@ -43,7 +43,10 @@ and independent accuracy/latency evaluation.
 
 Adding or approving new writing, including entries not selected for a
 particular prompt, now changes the protected Twin reference fingerprint.
-Unresolved episode disputes also invalidate it. **All** approved human
+Episode disputes also invalidate it. When neither new evidence category is
+present, the fingerprint retains the historical three-table representation
+so existing clean-profile reviews are not invalidated merely by upgrading.
+**All** approved human
 records are checked for literal/normalized lexical contamination with
 held-out decisions, even when a particular query prunes those records.
 These checks are deliberately conservative; they detect neither semantic
