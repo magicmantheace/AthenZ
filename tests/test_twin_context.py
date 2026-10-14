@@ -174,6 +174,90 @@ class TwinContextTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "reference evidence changed"):
             evaluate_decisions(store, AlteringLocalModel(), split="test")
 
+    def test_old_approved_identity_beyond_200_is_retrieved_without_context_window(self):
+        self.store.propose(
+            "identity", "SYNTHETIC_ANCIENT_LIDAR developed precision inertial navigation",
+            source="synthetic", approved=True)
+        for i in range(310):
+            self.store.propose(
+                "identity", "Unrelated synthetic ceramic pottery detail " + str(i),
+                source="synthetic", approved=True)
+        from unittest.mock import patch
+        with patch.object(self.store, "context",
+                          side_effect=AssertionError("No latest-200 context shortcut")):
+            result = profile(self.store, "What did I develop for inertial navigation?")
+        self.assertIn("SYNTHETIC_ANCIENT_LIDAR", json.dumps(result))
+        self.assertNotIn("ceramic pottery", json.dumps(result))
+
+    def test_old_decisions_beyond_latest_200_and_no_heldout_leak(self):
+        self.store.add_decision(
+            "Should we calibrate our inertial guidance sensors?",
+            "Calibrate sensors", "synthetic confidence in navigation calibration",
+            source="synthetic", approved=True)
+        self.store.add_decision(
+            "Should we calibrate our inertial guidance prototype?",
+            "No", "PRIVATE_TEST_GOLD_UNAVAILABLE", source="synthetic",
+            options=["No", "Yes"], split="test", approved=True)
+        for i in range(315):
+            self.store.add_decision(
+                "Where should we store the synthetic orchard crates number " + str(i) + "?",
+                "In barn", "synthetic garden harvest logistics",
+                source="synthetic", approved=True)
+        selected = profile(
+            self.store, "How would I handle inertial navigation sensor calibration?")
+        self.assertIn("Calibrate sensors", json.dumps(selected))
+        self.assertNotIn("PRIVATE_TEST_GOLD_UNAVAILABLE", json.dumps(selected))
+        self.assertNotIn("garden harvest logistics", json.dumps(selected))
+
+    def test_old_reviewed_writing_snippet_finds_match_beyond_opening(self):
+        sample = self.store.add_sample(
+            ("Synthetic filler prose for an approved style sample. " * 20) +
+            "microphonetics grounded precise explanations for this topic",
+            source="synthetic:older")
+        self.store.set_review("writing_samples", sample, "approved")
+        for i in range(225):
+            other = self.store.add_sample(
+                "Newer approved plant and fertilizer sample " + str(i),
+                source="synthetic:newer")
+            self.store.set_review("writing_samples", other, "approved")
+        messages = profile(self.store, "Explain microphonetics in my style")
+        samples = messages["approved_writing_examples"]
+        self.assertTrue(any("microphonetics" in x["excerpt"] for x in samples))
+        self.assertTrue(all(len(x["excerpt"]) <= 700 for x in samples))
+        self.assertTrue(any(x["excerpt_truncated"] for x in samples))
+        self.assertLessEqual(len(build_messages(
+            self.store, "Explain microphonetics in my style", "twin")[1]["content"]),
+            MAX_PROFILE_CHARS + 32)
+
+    def test_revoked_older_approval_excluded_immediately(self):
+        item = self.store.propose(
+            "identity", "SYNTHETIC_OLD_PRIVATE_EXAMPLE archaeological ocean research",
+            source="synthetic", approved=True)
+        for i in range(210):
+            self.store.propose(
+                "identity", "Noisy unrelated synthetic building fixture " + str(i),
+                source="synthetic", approved=True)
+        self.assertIn("SYNTHETIC_OLD_PRIVATE_EXAMPLE", json.dumps(
+            profile(self.store, "archaeological ocean research")))
+        self.store.status(item, "rejected")
+        self.assertNotIn("SYNTHETIC_OLD_PRIVATE_EXAMPLE", json.dumps(
+            profile(self.store, "archaeological ocean research")))
+
+    def test_tie_order_and_profile_budget_stable_over_full_history(self):
+        for i in range(270):
+            self.store.propose(
+                "preference", "synthetic reviewable analysis " + str(i),
+                source="synthetic", approved=True)
+        once = build_messages(self.store, "reviewable analysis", "twin")
+        twice = build_messages(self.store, "reviewable analysis", "twin")
+        self.assertEqual(once, twice)
+        content = once[1]["content"].split("\n", 1)[1]
+        self.assertLessEqual(len(content), MAX_PROFILE_CHARS)
+        selected = json.loads(content)["approved_identity"]
+        self.assertLessEqual(len(selected), 20)
+        self.assertIn("synthetic reviewable analysis 269", str(selected))
+        self.assertNotIn("synthetic reviewable analysis 0", str(selected))
+
     def test_input_without_evidence_abstains_from_personal_claims(self):
         p = profile(self.store, "What would my position be on this?")
         self.assertEqual(p["approved_identity"], [])
