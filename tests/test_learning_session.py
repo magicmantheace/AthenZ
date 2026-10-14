@@ -3,6 +3,7 @@ import hashlib
 import json
 from pathlib import Path
 import tempfile
+import traceback
 import unittest
 from unittest import mock
 
@@ -164,6 +165,21 @@ class LearningSessionTests(unittest.TestCase):
                             call[1].get('temperature') == 0.0
                             for call in model.calls))
         self.assertNotIn('base-local', json.dumps(result))
+
+    def test_backend_failure_never_prints_protected_case_in_traceback(self):
+        session = self.begin()
+        class FailingLocalModel:
+            model = 'base-local'
+            def generate(self, messages, **kwargs):
+                raise RuntimeError('PRIVATE_HELDOUT_PROMPT_DO_NOT_ECHO')
+        with mock.patch('athenz.runtime.model_digest', return_value='a'*64):
+            with self.assertRaisesRegex(LearningSessionError, 'Baseline evaluation failed') as caught:
+                record_baseline(self.store, session['session_id'], FailingLocalModel(),
+                                expected_revision=session['revision'], confirmed=True)
+        self.assertNotIn('PRIVATE_HELDOUT_PROMPT_DO_NOT_ECHO',
+                         ''.join(traceback.format_exception(caught.exception)))
+        self.assertEqual(session_status(self.store, session['session_id'])['stage'],
+                         'prepared')
 
     def test_baseline_changed_model_digest_never_advances(self):
         session = self.begin()
