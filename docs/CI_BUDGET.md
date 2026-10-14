@@ -1,6 +1,13 @@
 # GitHub Actions usage containment — offline review patch
 
-**Current rule: do not run, rerun, or automatically trigger GitHub Actions.**
+**Historical emergency budget policy (superseded for approved public runners):**
+The temporary prohibition below applied before the owner's 2026-10-12
+authorization. The currently approved isolated public-runner process is
+documented under [Public-repository GitHub Actions validation](#public-repository-github-actions-validation-2026-10-12).
+Do not turn on automatic Actions triggers in the archive or in `main`
+as part of this consolidation.
+
+**Original budget emergency rule: do not run, rerun, or automatically trigger GitHub Actions.**
 The owner's Actions allowance was exhausted. This change is archived on a
 non-triggering `archive/` source branch only. GitHub `main` still contains
 its prior automatic workflow triggers until a separately reviewed transition.
