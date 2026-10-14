@@ -11,8 +11,8 @@ from athenz.evaluation import _reference_fingerprint
 from athenz.experience import ExperienceStore
 from athenz.finetune import create_run, execute_run
 from athenz.learning_session import (
-    LearningSessionError, start_session, session_status, link_completed_run,
-    link_comparison, close_session, cancel_session)
+    LearningSessionError, start_session, session_status, record_baseline,
+    link_completed_run, link_comparison, close_session, cancel_session)
 from athenz.model_gate import (
     _approved_heldout_population, _heldout_fingerprint, save_report)
 from athenz.training import build_dataset
@@ -46,7 +46,28 @@ class LearningSessionTests(unittest.TestCase):
     def begin(self):
         return start_session(self.store, self.dataset, limit=12, confirmed=True)
 
+    def baselined(self, session):
+        class LocalSyntheticModel:
+            model = 'base-local'
+            calls = []
+            def generate(self, messages, **kwargs):
+                self.calls.append((messages, kwargs))
+                return json.dumps({'choice_letter': 'A'})
+        model = LocalSyntheticModel()
+        with mock.patch('athenz.runtime.model_digest', return_value='a'*64):
+            result = record_baseline(
+                self.store, session['session_id'], model,
+                expected_revision=session['revision'], confirmed=True)
+        self.assertEqual(result['stage'], 'baselined')
+        self.assertTrue(result['baseline_observed'])
+        self.assertEqual(len(model.calls), 12)
+        self.assertFalse(result['baseline_model_installed_verified'])
+        self.baseline_count = self.store.get_checkpoint(
+            'learning_session_' + session['session_id'])['state']['baseline_correct']
+        return result
+
     def trained(self, session):
+        session = self.baselined(session)
         run = create_run(self.store, self.dataset, self.base, confirmed=True)
         def backend(recipe, folder, dataset, *, resume):
             adapter = folder / 'adapter'
@@ -65,7 +86,9 @@ class LearningSessionTests(unittest.TestCase):
         ids = [r[0] for r in self.store.db.execute(
             "SELECT id FROM decisions WHERE status='approved' AND split='calibration' ORDER BY id")]
         total, population = _approved_heldout_population(self.store, 'calibration')
-        base, cand = (5,9) if better else (9,5)
+        base = self.baseline_count
+        cand = base + 1 if better else base - 1
+        self.assertTrue(0 <= cand <= 12)
         report = {
             'schema':2, 'dataset_sha256':self.dataset, 'split':'calibration',
             'seed':42, 'cases':12, 'requested_case_limit':12,
@@ -75,10 +98,10 @@ class LearningSessionTests(unittest.TestCase):
             'baseline_correct':base, 'candidate_correct':cand,
             'baseline_accuracy':base/12, 'candidate_accuracy':cand/12,
             'accuracy_gain':round((cand-base)/12,8),
-            'paired_improved':4 if better else 0,
-            'paired_regressed':0 if better else 4,
-            'paired_unchanged':8,
-            'paired_one_sided_p_value':0.0625 if better else 1.0,
+            'paired_improved':1 if better else 0,
+            'paired_regressed':0 if better else 1,
+            'paired_unchanged':11,
+            'paired_one_sided_p_value':0.5 if better else 1.0,
             'chance_expected':0.5, 'eligible_for_review':better,
             'case_ids_sha256':hashlib.sha256(json.dumps(ids).encode()).hexdigest(),
             'heldout_fingerprint':_heldout_fingerprint(self.store, 'calibration', 12),
@@ -138,16 +161,16 @@ class LearningSessionTests(unittest.TestCase):
                                expected_revision=cancelled['revision'], confirmed=True)
 
     def test_review_revocation_fences_training_link(self):
-        session = self.begin()
+        session = self.baselined(self.begin())
         self.store.set_review('train_pairs', self.pair, 'rejected')
         self.assertFalse(session_status(self.store, session['session_id'])['evidence_current'])
         with self.assertRaisesRegex(LearningSessionError, 'Source evidence changed'):
             link_completed_run(self.store, session['session_id'], '0'*24,
                                expected_revision=session['revision'], confirmed=True)
-        self.assertEqual(session_status(self.store, session['session_id'])['revision'], 1)
+        self.assertEqual(session_status(self.store, session['session_id'])['revision'], 2)
 
     def test_unregistered_run_cannot_be_attached(self):
-        session = self.begin()
+        session = self.baselined(self.begin())
         run = create_run(self.store, self.dataset, self.base, confirmed=True)
         with self.assertRaisesRegex(LearningSessionError, 'not verifiable'):
             link_completed_run(self.store, session['session_id'], run['run_id'],
