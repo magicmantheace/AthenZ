@@ -158,16 +158,47 @@ def _heldout_rows(store: IdentityStore, split: str, limit: int) -> list[list]:
 def _reference_fingerprint(store: IdentityStore) -> str:
     """Snapshot all approved Twin prompt data, without exposing private rows."""
     evidence = []
+    # Preserve the historical three-table digest when no newly supported
+    # evidence exists: an unchanged profile must not invalidate all previous
+    # reviewed benchmarks purely because AthenZ updated.
     for table, predicate in (
         ('identity', "status='approved'"),
         ('decisions', "status='approved' AND split='train'"),
         ('episodes', "status='approved'"),
+        ('writing_samples', "status='approved'"),
+        ('episode_disputes', "1=1"),
     ):
         # Table names and predicates are constants here, never user input.
         rows = [list(row) for row in store.db.execute(
             f'SELECT * FROM {table} WHERE {predicate} ORDER BY id')]
-        evidence.append([table, rows])
+        if rows or table in {'identity', 'decisions', 'episodes'}:
+            evidence.append([table, rows])
     return _fingerprint(evidence)
+
+
+def _collides_with_approved_reference(store: IdentityStore, scenario: str,
+                                     rationale: str) -> bool:
+    """Check ALL approved source records, including ones pruned by retrieval.
+
+    Relevance-ranking must not create a loophole in train/held-out separation:
+    evidence may be hidden by one topical query but exposed by another later.
+    """
+    for sql in (
+        "SELECT text FROM identity WHERE status='approved'",
+        "SELECT text FROM writing_samples WHERE status='approved'",
+        "SELECT topic || ' ' || detail FROM episodes WHERE status='approved'",
+        "SELECT scenario || ' ' || rationale FROM decisions "
+        "WHERE status='approved' AND split='train'",
+    ):
+        for row in store.db.execute(sql):
+            reference = row[0].casefold()
+            if (scenario.strip().casefold() in reference
+                    or (len(rationale.strip()) >= 16
+                        and rationale.strip().casefold() in reference)
+                    or _normalized_overlap(scenario, reference)
+                    or _normalized_overlap(rationale, reference)):
+                return True
+    return False
 
 
 def _heldout_prompt_messages(store: IdentityStore, item: list, seed: int) -> tuple[list[dict], list[str]]:
@@ -205,7 +236,8 @@ def _heldout_prompt_messages(store: IdentityStore, item: list, seed: int) -> tup
         raise ValueError('Twin reference context changed; evaluation refused')
     reference_profile = messages[2]['content'].casefold()
     rationale = item[4].strip()
-    if (scenario.strip().casefold() in reference_profile
+    if (_collides_with_approved_reference(store, scenario, rationale)
+            or scenario.strip().casefold() in reference_profile
             or (len(rationale) >= 16 and rationale.casefold() in reference_profile)
             or _normalized_overlap(scenario, reference_profile)
             or _normalized_overlap(rationale, reference_profile)):

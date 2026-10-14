@@ -12,6 +12,11 @@ feedback, episodic memory and the review-gated foreground controller are
 implemented. There is no unattended daemon, automatic cloud publishing, automatic
 model promotion, or verified GPU fine-tuning on the target Windows/WSL2 system.
 
+The current Twin-first relevance work includes
+[approved personality, decision and writing-style retrieval](docs/TWIN_CONTEXT.md).
+This is deterministic prompt preparation, not evidence of measured owner
+similarity or independent model improvement.
+
 ## Setup
 
 ```sh
