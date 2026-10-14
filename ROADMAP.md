@@ -453,3 +453,27 @@ owner profile data or unattended coding action implied by this milestone.
   sidecars cannot silently change during a transcription operation.
 - [ ] Real CPU/CUDA speech quality, Windows native CTranslate2 dependencies,
   multilingual comprehension and accessible voice controls remain unverified.
+
+### 2026-10-13 — Offline voice file and native-free inventory safety checkpoint
+
+- [x] WAV metadata inspection opens the selected PCM file via a no-follow
+  handle where supported and verifies file identity/size/mtime rather than
+  reopening an unchecked filename after path validation.
+- [x] Existing local speech model weights/configuration and any recognized
+  tokenizer sidecars have stable file identities before/after explicit native
+  inference. Changed files prevent an outdated transcript from being returned.
+- [x] `athenz-voice inspect-model --model <local-model-directory>` provides
+  bounded selected-file count and aggregate size without importing native
+  libraries, loading model weights, reading audio, or disclosing owner paths.
+- [x] Windows Git CRLF synthetic regression fixture records the entire
+  test checkout with autocrlf disabled before demanding a clean source tree;
+  worktree cleanliness protections remain enabled.
+- [x] Source `f8035736936614548f3adc8f88b176cb5481dffa`
+  passed **541 tests** on Linux Python 3.12 and 3.13 (four skipped each), plus
+  Windows unsigned portable executable/GUI startup in public CI
+  [38495755717](https://github.com/magicmantheace/AthenZ/actions/runs/38495755717).
+- [ ] The complete Windows/Linux Python 3.11 regression run
+  [38495761979](https://github.com/magicmantheace/AthenZ/actions/runs/38495761979)
+  must finish separately before full native CI can be marked successful.
+- [ ] Real owner-device WAV/model accuracy, native CTranslate2/RTX 3060 CUDA
+  support and voice accessibility still need supervised acceptance.

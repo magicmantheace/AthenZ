@@ -323,3 +323,19 @@ and [full Linux/Windows Python 3.11 run
 check the pinned source using synthetic generated PCM WAV and mocked model
 segments. Run conclusions must be verified independently; native hardware
 voice support and runtime package compatibility remain unverified.
+
+### 2026-10-13 — Voice stability and no-model-load inventory acceptance
+
+Pinned implementation `f8035736936614548f3adc8f88b176cb5481dffa`
+adds no-follow selected WAV metadata inspection, local speech-model stability
+checks and a native-free `athenz-voice inspect-model` command. Synthetic
+[Python 3.12/3.13 + Windows portable
+38495755717](https://github.com/magicmantheace/AthenZ/actions/runs/38495755717)
+**completed successfully**: Linux Python 3.12 and 3.13 both ran 541 tests
+with four skips each, no failures/errors; the unsigned Windows portable app
+also passed packaging, executable self-test and GUI startup smoke. Full
+[Linux/Windows Python 3.11 run
+38495761979](https://github.com/magicmantheace/AthenZ/actions/runs/38495761979)
+is a separate longer regression and requires a completed success conclusion.
+All tests use synthetic WAVs and fake local inference; no owner audio, trained
+weights, secrets or private SQLite files were uploaded.
