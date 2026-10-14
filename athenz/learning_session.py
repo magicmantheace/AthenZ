@@ -264,10 +264,10 @@ def record_baseline(store: ExperienceStore, session_id: str, model, *,
         raise LearningSessionError('Explicit --confirm required before baseline inference')
     item = _checkpoint(store, session_id)
     state = item['state']
-    if state['schema'] != 2 or state['stage'] != 'prepared':
-        raise LearningSessionError('Only a new prepared session can record its baseline')
     if type(expected_revision) is not int or expected_revision != item['revision']:
         raise LearningSessionError('Session revision changed; reload before inference')
+    if state['schema'] != 2 or state['stage'] != 'prepared':
+        raise LearningSessionError('Only a new prepared session can record its baseline')
     tag = getattr(model, 'model', None)
     if type(tag) is not str or not ALIAS.fullmatch(tag):
         raise LearningSessionError('Select one explicitly named local baseline model')
