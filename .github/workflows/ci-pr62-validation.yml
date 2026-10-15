@@ -1,4 +1,4 @@
-name: AthenZ PR62 isolated validation
+name: AthenZ PR62 isolated Windows validation
 
 # Disposable branch-scoped CI for explicit owner-authorized validation.
 # Never merge this workflow into main.
@@ -16,8 +16,8 @@ concurrency:
 
 jobs:
   core-tests:
-    name: Complete Python 3.11 regression suite
-    runs-on: ubuntu-latest
+    name: Full Windows Python 3.11 regression suite
+    runs-on: windows-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
