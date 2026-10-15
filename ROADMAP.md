@@ -140,6 +140,9 @@ See [docs/TWIN_CONTEXT.md](docs/TWIN_CONTEXT.md).
   privacy-suppressed category comparison (synthetic evidence only).
 - [x] Bind family reviews to the full approved decision record set and
   support explicit, offline review validation without model inference.
+- [x] Add an opt-in held-out category-diversity gate (three reviewed
+  categories, >=5 cases each, <=60% dominance) before any inference,
+  plus macro-averaged Twin-vs-neutral accuracy with privacy thresholds.
 - [ ] Actually calibrate uncertainty or abstention on real owner-labelled
   data; independently validate semantic group labels, topic-family
   generalization and owner decision variability benchmarks.

@@ -63,6 +63,10 @@ broad categories, first use `--family-check --confirm` to validate the
 owner-private full-evidence fingerprint without loading a local model.
 Then use `--family-audit` to reject semantically related train/held-out
 decisions and suppress undersized category reports.
+For category-balanced evaluation, `--family-audit --require-category-diversity`
+enforces three adequately represented
+independent reviewed categories before inference, and the aggregate report
+shows a macro-averaged Twin-versus-neutral difference when enough cases exist.
 This human review is not automatic semantic similarity detection.
 A real on-device held-out improvement has not yet been demonstrated.
 
