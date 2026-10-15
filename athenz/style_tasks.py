@@ -130,18 +130,24 @@ class StyleTaskBank:
             "approved_stale_unused": 0,
             "rejected": 0,
             "consumed": 0,
+            "already_compared_outside_bank": 0,
             "private_task_text_returned": False,
         }
         try:
             rows = self.db.execute(
                 "SELECT t.id,t.status,t.training_digest,t.heldout_digest,"
-                "u.task_id AS consumed_id FROM style_tasks t "
-                "LEFT JOIN style_task_uses u ON u.task_id=t.id").fetchall()
+                "u.task_id AS consumed_id,c.id AS compared_id "
+                "FROM style_tasks t "
+                "LEFT JOIN style_task_uses u ON u.task_id=t.id "
+                "LEFT JOIN comparisons c ON c.task_digest=t.task_digest"
+            ).fetchall()
         except sqlite3.OperationalError:
             return result
         for row in rows:
             if row["consumed_id"] is not None:
                 result["consumed"] += 1
+            elif row["compared_id"] is not None:
+                result["already_compared_outside_bank"] += 1
             elif row["status"] == "pending":
                 result["pending"] += 1
             elif row["status"] == "rejected":
