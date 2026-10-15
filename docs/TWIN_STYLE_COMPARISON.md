@@ -84,3 +84,52 @@ add adjudicated hidden references or an independent blind reviewer,
 and compare Twin and neutral responses over sufficiently numerous
 unseen tasks. Track qualitative style similarity, factual invention,
 uncertainty, decision accuracy and inference cost separately.
+
+## Reviewed independent writing-task bank (Twin-first follow-up)
+
+The earlier `start "task" --confirm` flow remains available for exploratory
+personalization checks. For more reproducible evaluation, prepare independent
+writing prompts **before** inference and approve them separately from writing
+examples:
+
+```sh
+athenz-style-compare task-add "Write a sincere apology for missing a meeting." --confirm
+athenz-style-compare task-add "Write a short welcoming note to a new neighbor." --confirm
+athenz-style-compare tasks
+athenz-style-compare task-review 1 approved --confirm
+athenz-style-compare task-review 2 approved --confirm
+athenz-style-compare start-next --confirm
+athenz-style-compare show 1
+athenz-style-compare rate 1 A --confirm
+athenz-style-compare report
+```
+
+The task bank uses the **same** private comparison SQLite archive. New tasks
+are pending until explicitly approved; unapproved/rejected tasks never reach
+the model. Approval checks the independently approved train/test sample
+readiness and refuses obvious direct copies of withheld writing. An approved
+task is bound to both training-evidence and withheld-evidence fingerprints;
+changes invalidate its approval for current use until the owner reviews it
+again. The oldest currently approved, unused task is selected. Results are
+linked to the approved task in the same SQLite commit, preventing reuse or
+silently labeling an old ad hoc comparison as independent study evidence.
+
+`tasks` returns **counts only**, never owner prose; the report also
+distinguishes rated, approved task-bank cases from exploratory ad hoc cases.
+After starting a comparison, the owner still sees **unlabeled A/B responses**
+and must explicitly rate them. Using multiple tasks, hiding model identity
+and saving consistent prompts reduces bias but **does not ensure scientific
+blinding, task independence, objective style similarity or model reliability**.
+The same owner prepares and reviews tasks, and the heuristic contamination
+check does not detect paraphrased test-writing leakage.
+
+Use `athenz-style-compare task-review TASK_ID rejected --confirm` to withdraw
+an unused task. `athenz-style-compare task-delete TASK_ID --confirm` removes
+the private task text **and any linked generated pair/rating**. Deleting
+private SQLite content is not guaranteed forensic erasure; backup snapshots
+and filesystem copies may preserve old bytes. Previous ad hoc tasks stay
+exploratory even if someone later approves an identical task for the bank.
+
+The task bank has no connection to AthenZ training datasets and does not
+auto-promote a model, add a memory or alter Twin policy. Actual on-device
+pilot evaluations and independent human judgments remain outstanding.
