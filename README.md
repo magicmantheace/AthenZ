@@ -52,8 +52,11 @@ approved Twin evidence versus a neutral no-personalization baseline. It
 reports aggregate Twin/neutral accuracy, an exact matched-pairs
 comparison, disagreements, chance expectation and descriptive uncertainty.
 Use --allow-abstain on calibration cases to measure explicit uncertainty,
-answer coverage and accuracy among answered cases; abstentions are distinct
-from malformed responses. No private choices or model responses are returned. [Method and limitations](docs/TWIN_DECISION_COMPARISON.md).
+answer coverage and accuracy among answered cases. Alternatively, use
+--score-confidence for ten-bin aggregate calibration error and a binary
+chosen-answer Brier score. The two options are mutually exclusive. Neither
+mode asserts calibrated confidence, and no private choices, individual
+probabilities or model responses are returned. [Method and limitations](docs/TWIN_DECISION_COMPARISON.md).
 A real on-device held-out improvement has not yet been demonstrated.
 
 ## Setup

@@ -25,6 +25,8 @@ athenz-decision-compare --split calibration --limit 12 --confirm
 athenz-decision-compare --split test --limit 30 --confirm
 # Optional exploratory uncertainty measurement, same rule for both arms:
 athenz-decision-compare --split calibration --limit 30 --allow-abstain --confirm
+# Separately assess subjective confidence (not calibrated prediction):
+athenz-decision-compare --split calibration --limit 30 --score-confidence --confirm
 ```
 
 Optional `--home /private/profile`, `--model installed-local-tag`
@@ -39,6 +41,16 @@ interpret answering more often as being more correct. Fix the evaluation
 settings using calibration data before touching a final test split. The
 baseline keeps the same lack of owner evidence, and both arms share the
 ABSTAIN rule when enabled. Default runs remain choice-only.
+
+Alternatively, use `--score-confidence` to request a JSON choice plus the
+model's own probability that its selected answer matches the owner's choice.
+This mode **cannot** be combined with `--allow-abstain`: confidence and
+abstention require separate experimental protocols. Both model arms receive
+an equivalent confidence-format contract. Any missing, nonnumeric,
+out-of-range, non-finite or additional output fields invalidate the answer.
+A refusal or malformed response is never a valid scored probability.
+The private evaluator accumulates **only** fixed-size numeric summaries;
+it never retains or exports case-level confidence or outcomes.
 
 The report contains **counts only**, source fingerprints and the local model
 tag. It includes:
@@ -57,6 +69,12 @@ tag. It includes:
   count as not-correct overall, but separately from malformed outputs. Report
   coverage and accuracy among answered cases; zero answered means null.
   Invalid outputs also reduce coverage, but are not intentional abstentions.
+- In confidence mode, **samples**, mean claimed probability, correctness
+  among scored predictions, **binary chosen-answer Brier score**, and fixed
+  ten-bin **expected calibration error (ECE)** for each arm. Both error
+  measures are better when lower; ECE is highly sample-size sensitive.
+  These are **not** full multiclass probability-distribution scores. A zero
+  sample count produces null metrics instead of a claim of calibration.
 
 No per-case scenario, correct answer, rationale, model response or choice
 letter is returned or persisted. Results should be kept private because the
@@ -88,6 +106,13 @@ owner's consciousness, a mind transfer or an accurate digital copy of
 the person. Decisions may vary over time, and owner-labeled examples may
 contain uncertainty. Report sample size, options per question, failure
 rates, family-level diversity and owner-device latency separately.
+
+Self-reported probabilities are uncalibrated model statements, not objective
+certainty. The scoring tools measure evidence of calibration but do not
+produce or validate a learned correction rule. Never tune the confidence
+policy or thresholds using the untouched test split: use calibration
+examples only, then assess the frozen protocol on new independent test
+examples and report selection and sample-size limitations.
 
 A credible v1.0 decision-fidelity claim still requires larger frozen,
 independently reviewed scenarios; multiple runs and models; explicit

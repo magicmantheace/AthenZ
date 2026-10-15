@@ -43,6 +43,14 @@ class PairedModel:
         return json.dumps({"choice_letter": inverse[choice]})
 
 
+class ConfidenceModel(PairedModel):
+    def generate(self, messages, **kwargs):
+        raw = super().generate(messages, **kwargs)
+        payload = json.loads(raw)
+        payload["confidence"] = 0.5
+        return json.dumps(payload)
+
+
 class PairedDecisionTests(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
@@ -206,6 +214,59 @@ class PairedDecisionTests(unittest.TestCase):
         self.assertEqual(result["twin_coverage"], 0.0)
         self.assertFalse(result["allow_abstain"])
 
+    def test_opt_in_confidence_reports_aggregate_calibration_only(self):
+        model = ConfidenceModel()
+        report = self.evaluate(model, score_confidence=True)
+        self.assertEqual(report["schema"], 3)
+        self.assertTrue(report["score_confidence"])
+        self.assertEqual(report["total"], 4)
+        self.assertEqual(report["model_requests"], 8)
+        self.assertEqual(report["twin_invalid_predictions"], 0)
+        self.assertEqual(report["neutral_invalid_predictions"], 0)
+        for arm in ("twin", "neutral"):
+            scores = report["confidence_calibration"][arm]
+            self.assertEqual(scores["samples"], 4)
+            self.assertEqual(scores["mean_reported_confidence"], 0.5)
+            self.assertEqual(scores["accuracy_on_scored_responses"], 0.5)
+            self.assertAlmostEqual(scores["chosen_answer_brier_score"], 0.25)
+            self.assertAlmostEqual(scores["expected_calibration_error_10bins"], 0.0)
+        self.assertTrue(all("confidence" in str(c[0]) for c in model.calls))
+        self.assertNotIn("PRIVATE_GOLD_REASON", str(model.calls))
+        self.assertNotIn("parser patch", json.dumps(report))
+        self.assertNotIn("confidence", str(self.store.db.execute(
+            "SELECT rationale FROM decisions LIMIT 1").fetchone()[0]))
+
+    def test_confidence_mode_rejects_missing_or_untrusted_probabilities(self):
+        invalid = [
+            '{"choice_letter":"A"}',
+            '{"choice_letter":"A","confidence":"0.9"}',
+            '{"choice_letter":"A","confidence":true}',
+            '{"choice_letter":"A","confidence":NaN}',
+            '{"choice_letter":"A","confidence":Infinity}',
+            '{"choice_letter":"A","confidence":-0.01}',
+            '{"choice_letter":"A","confidence":1.01}',
+            '{"choice_letter":"A","confidence":0.5,"rationale":"private"}',
+            '{"choice_letter":"ABSTAIN","confidence":0.3}',
+        ]
+        for response in invalid:
+            with self.subTest(response=response):
+                report = self.evaluate(PairedModel(response=response),
+                                       score_confidence=True)
+                self.assertEqual(report["twin_invalid_predictions"], 4)
+                self.assertEqual(report["neutral_invalid_predictions"], 4)
+                self.assertEqual(report["twin_correct"], 0)
+                self.assertEqual(report["twin_coverage"], 0.0)
+                self.assertEqual(report["confidence_calibration"]["twin"]["samples"], 0)
+                self.assertIsNone(report["confidence_calibration"]["twin"][
+                    "expected_calibration_error_10bins"])
+
+    def test_default_ignores_confidence_field_in_optional_model_output(self):
+        report = self.evaluate(ConfidenceModel())
+        self.assertFalse(report["score_confidence"])
+        self.assertEqual(report["twin_correct"], 2)
+        self.assertEqual(report["neutral_correct"], 2)
+        self.assertEqual(report["confidence_calibration"]["twin"]["samples"], 0)
+
     def test_preflight_rejects_late_case_leak_before_any_model_call(self):
         row = self.store.db.execute(
             "SELECT scenario FROM decisions WHERE id=?", (self.ids[-1],)).fetchone()
@@ -263,7 +324,8 @@ class PairedDecisionTests(unittest.TestCase):
         model = PairedModel()
         for options in ({"split":"train"}, {"split":""}, {"limit":0},
                         {"limit":1001}, {"seed":-1}, {"seed":True},
-                        {"allow_abstain": 1}):
+                        {"allow_abstain": 1}, {"score_confidence": 1},
+                        {"allow_abstain": True, "score_confidence": True}):
             with self.subTest(options=options):
                 with self.assertRaises(ValueError):
                     self.evaluate(model, **options)
