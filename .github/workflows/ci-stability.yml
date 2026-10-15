@@ -1,0 +1,36 @@
+name: One-time Twin semantic stability validation
+on:
+  push:
+    branches:
+      - ci/athenz-stability-20261015
+permissions:
+  contents: read
+concurrency:
+  group: athenz-stability-20261015
+  cancel-in-progress: true
+jobs:
+  regression:
+    name: Python tests on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install package
+        run: python -m pip install -e .
+      - name: Remove temporary workflow from policy-test workspace
+        run: python -c "from pathlib import Path; Path('.github/workflows/ci-stability.yml').unlink()"
+      - name: Confirm manual CI budget policy
+        run: python -m unittest tests.test_ci_budget -v
+      - name: Compile changed Python
+        run: python -m compileall -q athenz/paired_stats.py athenz/paired_decisions.py tests/test_paired_stats.py tests/test_paired_decisions.py
+      - name: Focused paired stability regression
+        run: python -m unittest tests.test_paired_stats tests.test_paired_decisions -v
+      - name: Full Python suite
+        run: python -m unittest discover -s tests -v
