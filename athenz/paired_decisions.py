@@ -21,7 +21,9 @@ from .evaluation import (
     _reject_repeated_heldout_scenarios, _wilson_interval,
 )
 from .experience import ExperienceStore
-from .family_audit import CategoryScores, FamilyAudit, create_family_template
+from .family_audit import (
+    CategoryScores, FamilyAudit, category_diversity_gate, create_family_template,
+)
 from .paired_stats import (
     ConfidenceAccumulator, exact_paired_sign_test, discordant_win_interval,
 )
@@ -86,7 +88,8 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
                               seed: int = 42, model_guard=None,
                               allow_abstain: bool = False,
                               score_confidence: bool = False,
-                              family_audit: FamilyAudit | None = None) -> dict:
+                              family_audit: FamilyAudit | None = None,
+                              require_category_diversity: bool = False) -> dict:
     """Compare personalized vs neutral predictions without exposing gold data.
 
     Optional model_guard pins an installed local model's digest and reviewed
@@ -97,6 +100,8 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
             or not 0 <= seed <= 2**32 - 1
             or type(allow_abstain) is not bool
             or type(score_confidence) is not bool
+            or type(require_category_diversity) is not bool
+            or (require_category_diversity and family_audit is None)
             or (allow_abstain and score_confidence)):
         raise ValueError("Use a held-out split and bounded limit/seed")
     _reject_overlapping_decision_splits(store)
@@ -109,6 +114,8 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
         categories = family_audit.selected_categories([case[0] for case in rows])
     else:
         categories = {}
+    if require_category_diversity and not category_diversity_gate(categories):
+        raise ValueError("Reviewed decision categories lack broad independent coverage")
     category_scores = CategoryScores()
 
     def verify_evidence(case: list | None = None) -> None:
@@ -217,7 +224,7 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
     twin_answered = total - abstentions["twin"] - invalid["twin"]
     neutral_answered = total - abstentions["neutral"] - invalid["neutral"]
     return {
-        "schema": 3,
+        "schema": 4,
         "kind": "same-model-paired-twin-decision-evaluation",
         "split": split,
         "model": getattr(model, "model", "unknown"),
@@ -261,6 +268,7 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
             neutral_correct / neutral_answered if neutral_answered else None,
         "heldout_sha256": heldout_sha,
         "reference_sha256": reference_sha,
+        "require_category_diversity": require_category_diversity,
         "family_audit": (category_scores.report(family_audit.audited_records)
                          if family_audit is not None else {"enabled": False}),
         "case_text_in_report": False,
@@ -293,6 +301,8 @@ def main(argv: list[str] | None = None) -> None:
                         help="Request self-reported chosen-answer probabilities for calibration analysis")
     parser.add_argument("--family-audit", action="store_true",
                         help="Require owner-reviewed local family categories and split independence")
+    parser.add_argument("--require-category-diversity", action="store_true",
+                        help="Refuse inference without three balanced reviewed decision categories")
     parser.add_argument("--family-template", action="store_true",
                         help="Create a private family review template; no model inference")
     parser.add_argument("--family-check", action="store_true",
@@ -300,6 +310,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--confirm", action="store_true",
                         help="Owner explicitly agrees to local held-out evaluation")
     args = parser.parse_args(argv)
+    if args.require_category_diversity and not args.family_audit:
+        parser.error("--require-category-diversity requires --family-audit")
     if not args.confirm:
         parser.error("Explicit --confirm required before local model inference")
     store = ExperienceStore(args.home)
@@ -341,7 +353,8 @@ def main(argv: list[str] | None = None) -> None:
                 seed=args.seed, model_guard=current_model,
                 allow_abstain=args.allow_abstain,
                 score_confidence=args.score_confidence,
-                family_audit=audit)
+                family_audit=audit,
+                require_category_diversity=args.require_category_diversity)
         except (ValueError, RoutingError, OSError):
             # Never report exception details containing private heldout text.
             raise SystemExit("Paired decision evaluation refused; check "
