@@ -133,3 +133,34 @@ exploratory even if someone later approves an identical task for the bank.
 The task bank has no connection to AthenZ training datasets and does not
 auto-promote a model, add a memory or alter Twin policy. Actual on-device
 pilot evaluations and independent human judgments remain outstanding.
+
+
+## Evaluation-integrity checks (2026-10-15)
+
+Writing task approval and the inference preflight now reject **substantial
+lexical near-copies** of either approved training writing or protected
+test/calibration writing. This reduces two biases: inadvertently revealing
+withheld source prose to the comparison model, and letting the personalized
+arm win by echoing a training example that appears inside the task. The
+screen checks normalized Unicode and words, long contiguous passages and
+large overlapping word-bigram sets. Owner review also rejects near-duplicate
+writing that crosses training/test/calibration splits. The safeguards remain
+lexical: they **cannot** detect all semantic paraphrases, translations,
+conceptual overlap, or leakage already embedded in model weights.
+
+An A/B study uses **one exact recorded model identity** (local model tag
+plus its SHA-256 digest). Multiple models or model versions can now coexist
+in the private archive without being silently pooled. The aggregate report
+continues to show descriptive preference totals but **suppresses a combined
+win rate and confidence interval across different model cohorts**. It
+provides a list of anonymized cohort-level rates/intervals and reviewed-bank
+versus exploratory ratings. Cohort IDs are truncated SHA-256 fingerprints of
+recorded model identities; raw model tags, digests and owner writing are
+not exposed in the aggregate. Unrated and stale records do not create an
+active rated cohort.
+
+`report` is still an offline read-only operation. It **does not call Ollama
+or independently reverify that model weights still match their recorded
+digest**. The local model is checked at comparison-generation time, not
+when reporting. Cohort-specific preference counts are experimental evidence,
+not proof of an owner's identity, objective style accuracy or consciousness.
