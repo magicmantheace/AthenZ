@@ -213,7 +213,10 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
                 # Compare the *option text*, not the shuffled letter. The
                 # private per-case selection is discarded after this case.
                 if stability_trials > 1:
-                    semantic = (options[_LETTERS.index(predicted)]
+                    # A valid option can itself be named "ABSTAIN".
+                    # Namespace semantic choices so they cannot collide with
+                    # the deliberate-abstention or invalid-output sentinels.
+                    semantic = ("OPTION:" + options[_LETTERS.index(predicted)]
                                 if len(predicted) == 1 and predicted in _LETTERS
                                 else predicted)
                     trial_semantics[arm].append(semantic)
