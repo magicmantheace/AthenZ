@@ -100,3 +100,64 @@ class ConfidenceAccumulator:
             "chosen_answer_brier_score": self._sum_squared_error / n,
             "expected_calibration_error_10bins": ece,
         }
+
+
+
+class ChoiceStabilityCounter:
+    """Within-case semantic choice agreement; only aggregate counters persist.
+
+    The transient list handed to add_choices is discarded by the evaluator
+    after each case. An ABSTAIN or invalid answer cannot count as agreement.
+    This is descriptive stability, not owner-choice accuracy or independence.
+    """
+
+    def __init__(self) -> None:
+        self.cases = 0
+        self.all_valid_cases = 0
+        self.unanimous_cases = 0
+        self.valid_pair_comparisons = 0
+        self.agreeing_pairs = 0
+        self.valid_trials = 0
+        self.invalid_trials = 0
+        self.abstention_trials = 0
+
+    def add_choices(self, choices: list[str]) -> None:
+        if (not isinstance(choices, list) or len(choices) not in (2, 3)
+                or any(not isinstance(x, str) for x in choices)
+                or self.cases >= 1000):
+            raise ValueError("Invalid bounded stability trial results")
+        self.cases += 1
+        valid = [value for value in choices if value and value != "ABSTAIN"]
+        self.valid_trials += len(valid)
+        self.invalid_trials += sum(value == "" for value in choices)
+        self.abstention_trials += sum(value == "ABSTAIN" for value in choices)
+        if len(valid) == len(choices):
+            self.all_valid_cases += 1
+            if all(value == valid[0] for value in valid):
+                self.unanimous_cases += 1
+        for i, value in enumerate(choices):
+            if not value or value == "ABSTAIN":
+                continue
+            for candidate in choices[i + 1:]:
+                if not candidate or candidate == "ABSTAIN":
+                    continue
+                self.valid_pair_comparisons += 1
+                self.agreeing_pairs += int(value == candidate)
+
+    def report(self) -> dict:
+        return {
+            "cases": self.cases,
+            "cases_with_all_valid_choices": self.all_valid_cases,
+            "unanimous_cases": self.unanimous_cases,
+            "unanimous_rate_on_fully_answered_cases": (
+                self.unanimous_cases / self.all_valid_cases
+                if self.all_valid_cases else None),
+            "valid_pair_comparisons": self.valid_pair_comparisons,
+            "agreeing_pairs": self.agreeing_pairs,
+            "pairwise_semantic_agreement": (
+                self.agreeing_pairs / self.valid_pair_comparisons
+                if self.valid_pair_comparisons else None),
+            "valid_trials": self.valid_trials,
+            "invalid_trials": self.invalid_trials,
+            "abstention_trials": self.abstention_trials,
+        }

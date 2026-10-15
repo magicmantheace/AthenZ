@@ -217,7 +217,7 @@ class PairedDecisionTests(unittest.TestCase):
     def test_opt_in_confidence_reports_aggregate_calibration_only(self):
         model = ConfidenceModel()
         report = self.evaluate(model, score_confidence=True)
-        self.assertEqual(report["schema"], 4)
+        self.assertEqual(report["schema"], 5)
         self.assertTrue(report["score_confidence"])
         self.assertEqual(report["total"], 4)
         self.assertEqual(report["model_requests"], 8)
@@ -266,6 +266,113 @@ class PairedDecisionTests(unittest.TestCase):
         self.assertEqual(report["twin_correct"], 2)
         self.assertEqual(report["neutral_correct"], 2)
         self.assertEqual(report["confidence_calibration"]["twin"]["samples"], 0)
+
+    def test_stability_repeats_compare_semantic_options_not_letters(self):
+        base = self.evaluate(PairedModel())
+        model = PairedModel()
+        report = self.evaluate(model, stability_trials=2)
+        self.assertEqual(report["schema"], 5)
+        self.assertEqual(report["total"], 4)
+        self.assertEqual(report["model_requests"], 16)
+        self.assertEqual(len(model.calls), 16)
+        self.assertEqual({call[1]["seed"] for call in model.calls},
+                         {19, 19 + 1_000_003})
+        for field in ("twin_correct", "neutral_correct",
+                      "paired_accuracy_difference", "discordant_pairs",
+                      "exact_mcnemar_two_sided_p", "heldout_sha256"):
+            self.assertEqual(report[field], base[field])
+        stability = report["stability"]
+        self.assertTrue(stability["enabled"])
+        self.assertEqual(stability["trials_per_case"], 2)
+        self.assertFalse(stability["repeated_trials_count_as_independent_cases"])
+        for arm in ("twin", "neutral"):
+            self.assertEqual(stability[arm]["cases"], 4)
+            self.assertEqual(stability[arm]["valid_pair_comparisons"], 4)
+            self.assertEqual(stability[arm]["agreeing_pairs"], 4)
+            self.assertEqual(stability[arm]["unanimous_rate_on_fully_answered_cases"], 1.0)
+        self.assertNotIn("PRIVATE_GOLD_REASON", str(model.calls))
+        self.assertNotIn("parser patch", json.dumps(report))
+        self.assertNotIn('"cases": [', json.dumps(report))
+
+    def test_stability_detects_seed_sensitive_semantic_choice_changes(self):
+        class SeedSensitiveModel(PairedModel):
+            def generate(self, messages, **kwargs):
+                self.calls.append((messages, kwargs))
+                choices = list(dict(re.findall(
+                    r"(?m)^([A-F])\. ([^\n]+)$", messages[-1]["content"])).items())
+                # Never use the shuffled LETTER as a stable target.
+                target = sorted(value for _, value in choices)[kwargs["seed"] % 2]
+                return json.dumps({"choice_letter": dict(
+                    (value, letter) for letter, value in choices)[target]})
+
+        report = self.evaluate(SeedSensitiveModel(), stability_trials=2)
+        for arm in ("twin", "neutral"):
+            self.assertEqual(report["stability"][arm]["valid_pair_comparisons"], 4)
+            self.assertEqual(report["stability"][arm]["agreeing_pairs"], 0)
+            self.assertEqual(report["stability"][arm]["unanimous_rate_on_fully_answered_cases"], 0.0)
+
+    def test_invalid_and_abstention_trials_are_not_stable_choices(self):
+        for response, abstain in (('{"choice_letter":"Z"}', False),
+                                  ('{"choice_letter":"ABSTAIN"}', True)):
+            with self.subTest(response=response):
+                result = self.evaluate(
+                    PairedModel(response=response), stability_trials=2,
+                    allow_abstain=abstain)
+                for arm in ("twin", "neutral"):
+                    data = result["stability"][arm]
+                    self.assertEqual(data["cases_with_all_valid_choices"], 0)
+                    self.assertEqual(data["valid_pair_comparisons"], 0)
+                    self.assertIsNone(data["pairwise_semantic_agreement"])
+                    self.assertIsNone(data["unanimous_rate_on_fully_answered_cases"])
+                    self.assertEqual(data["abstention_trials"], 8 if abstain else 0)
+                    self.assertEqual(data["invalid_trials"], 0 if abstain else 8)
+
+    def test_valid_option_named_abstain_is_not_a_refusal(self):
+        # This is a real choice option, not the model's opt-in ABSTAIN token.
+        with self.store.db:
+            self.store.db.execute(
+                "UPDATE decisions SET choice=?, options_json=? WHERE id=?",
+                ("ABSTAIN", json.dumps(["ABSTAIN", "Wait for tests"]),
+                 self.ids[0]))
+
+        class ChooseNamedOption(PairedModel):
+            def generate(self, messages, **kwargs):
+                self.calls.append((messages, kwargs))
+                options = dict(re.findall(
+                    r"(?m)^([A-F])\. ([^\n]+)$", messages[-1]["content"]))
+                selected = next(letter for letter, option in options.items()
+                                if option == "ABSTAIN")
+                return json.dumps({"choice_letter": selected})
+
+        model = ChooseNamedOption()
+        result = self.evaluate(model, limit=1, stability_trials=2,
+                               allow_abstain=True)
+        self.assertEqual(result["twin_abstentions"], 0)
+        self.assertEqual(result["neutral_abstentions"], 0)
+        for arm in ("twin", "neutral"):
+            self.assertEqual(result["stability"][arm]["valid_trials"], 2)
+            self.assertEqual(result["stability"][arm]["abstention_trials"], 0)
+            self.assertEqual(result["stability"][arm]["agreeing_pairs"], 1)
+            self.assertEqual(result["stability"][arm]["unanimous_cases"], 1)
+
+    def test_repeat_guard_invalidates_everything_on_consent_revocation(self):
+        def revoke(call):
+            if call == 3:
+                self.store.decision_status(self.ids[0], "rejected")
+        model = PairedModel(callback=revoke)
+        with self.assertRaisesRegex(ValueError, "evidence changed|Held-out decision changed"):
+            self.evaluate(model, stability_trials=2)
+        self.assertEqual(len(model.calls), 3)
+
+    def test_repeat_settings_fail_closed_before_any_inference(self):
+        model = PairedModel()
+        for kw in ({"stability_trials": 0}, {"stability_trials": 4},
+                   {"stability_trials": True}, {"stability_trials": "2"},
+                   {"stability_trials": 2, "limit": 151},
+                   {"stability_trials": 3, "limit": 101}):
+            with self.subTest(kw=kw), self.assertRaises(ValueError):
+                self.evaluate(model, **kw)
+        self.assertEqual(model.calls, [])
 
     def test_preflight_rejects_late_case_leak_before_any_model_call(self):
         row = self.store.db.execute(

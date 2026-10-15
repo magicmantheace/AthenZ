@@ -27,6 +27,8 @@ athenz-decision-compare --split test --limit 30 --confirm
 athenz-decision-compare --split calibration --limit 30 --allow-abstain --confirm
 # Separately assess subjective confidence (not calibrated prediction):
 athenz-decision-compare --split calibration --limit 30 --score-confidence --confirm
+# Exploratory same-case decision stability (two seeded trials per case):
+athenz-decision-compare --split calibration --limit 30 --stability-trials 2 --confirm
 ```
 
 Optional `--home /private/profile`, `--model installed-local-tag`
@@ -151,6 +153,38 @@ labels nor turn correlated or sparse samples into independent evidence.
 compatibility and has no claim to automatic semantic understanding:
 misclassified relationships, external pretraining contamination, and
 non-independent decisions can still survive manual review.
+
+## Repeated within-case decision consistency (optional)
+
+`--stability-trials 2` or `--stability-trials 3` repeats **the same
+held-out cases** with reproducible but different seeds. The local model is
+asked the same question; option order is reshuffled deterministically per
+trial (some shuffles can coincide by chance). The report measures agreement
+of the **actual selected option text**, never a shuffled A-F letter.
+
+Only the first trial is used for accuracy, exact paired comparison, Wilson
+intervals, confidence, and category statistics. Repeated responses are
+correlated observations and **never** increase the independent held-out case
+count or provide additional evidence for a smaller p-value. Repeated answers
+do not establish decision accuracy or long-term human consistency.
+
+Stability is reported only as aggregate counts and ratios per arm:
+- Count and fraction of cases with valid answers on every trial that remain
+  unanimous; invalid responses and deliberate abstentions are excluded.
+- Within-case pairwise semantic agreement among valid trial pairs.
+- Invalid/abstaining/valid trial counts, without case texts, predictions or
+  option strings.
+
+This mode is opt-in, with 1 trial as the historical default. The bound
+`limit × stability-trials <= 300` prevents unexpectedly large numbers of
+owner-device model requests. Every case is preflighted against **every**
+proposed trial seed before inference, and private evidence, reviewed family
+labels and model digest are checked before and after each model call. A
+mid-run change invalidates the whole report.
+
+**This is short-term repeat consistency, not time-separated human decision
+variability**. A later longitudinal study will need owner-approved decisions
+recorded at different times and must control for genuine preference changes.
 
 ## Fail-closed conditions
 

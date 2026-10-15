@@ -143,6 +143,9 @@ See [docs/TWIN_CONTEXT.md](docs/TWIN_CONTEXT.md).
 - [x] Add an opt-in held-out category-diversity gate (three reviewed
   categories, >=5 cases each, <=60% dominance) before any inference,
   plus macro-averaged Twin-vs-neutral accuracy with privacy thresholds.
+- [x] Add opt-in within-case repeated decision stability over changed
+  deterministic model seeds and option permutations, count semantic-option
+  agreement only, and keep primary paired accuracy/stats independent.
 - [ ] Actually calibrate uncertainty or abstention on real owner-labelled
   data; independently validate semantic group labels, topic-family
   generalization and owner decision variability benchmarks.

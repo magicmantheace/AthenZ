@@ -2,7 +2,8 @@
 import unittest
 
 from athenz.paired_stats import (
-    ConfidenceAccumulator, exact_paired_sign_test, discordant_win_interval,
+    ChoiceStabilityCounter, ConfidenceAccumulator,
+    exact_paired_sign_test, discordant_win_interval,
 )
 
 
@@ -67,6 +68,34 @@ class PairedStatsTests(unittest.TestCase):
                     ConfidenceAccumulator().add(prob, correct=True)
         with self.assertRaises(ValueError):
             ConfidenceAccumulator().add(0.5, correct=1)
+
+    def test_choice_stability_pairwise_and_unanimity_differ(self):
+        acc = ChoiceStabilityCounter()
+        acc.add_choices(["One", "One", "Two"])
+        acc.add_choices(["Two", "Two", "Two"])
+        acc.add_choices(["One", "", "One"])
+        result = acc.report()
+        self.assertEqual(result["cases"], 3)
+        self.assertEqual(result["cases_with_all_valid_choices"], 2)
+        self.assertEqual(result["unanimous_cases"], 1)
+        self.assertEqual(result["unanimous_rate_on_fully_answered_cases"], 0.5)
+        self.assertEqual(result["valid_pair_comparisons"], 7)
+        self.assertEqual(result["agreeing_pairs"], 5)
+        self.assertAlmostEqual(result["pairwise_semantic_agreement"], 5/7)
+        self.assertEqual(result["invalid_trials"], 1)
+
+    def test_choice_stability_never_scores_abstentions_as_agreement(self):
+        acc = ChoiceStabilityCounter()
+        acc.add_choices(["ABSTAIN", "ABSTAIN"])
+        acc.add_choices(["", ""])
+        result = acc.report()
+        self.assertEqual(result["abstention_trials"], 2)
+        self.assertEqual(result["invalid_trials"], 2)
+        self.assertIsNone(result["pairwise_semantic_agreement"])
+        self.assertIsNone(result["unanimous_rate_on_fully_answered_cases"])
+        for value in ([], ["only"], ["one"] * 4, ["one", None]):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                acc.add_choices(value)
 
 
 if __name__ == '__main__':
