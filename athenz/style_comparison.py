@@ -200,11 +200,27 @@ class ComparisonArchive:
             else:
                 counts["neutral"] += 1
         decisions = counts["twin"] + counts["neutral"]
+        # Historical ad-hoc archives do not have task-bank tables. Treat
+        # their preferences as exploratory, not preapproved-test evidence.
+        bank_ratings = 0
+        has_bank = self.db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' "
+            "AND name='style_task_uses'").fetchone() is not None
+        if has_bank:
+            for r in self.db.execute(
+                "SELECT c.chosen,c.training_digest,c.heldout_digest "
+                "FROM style_task_uses u "
+                "JOIN comparisons c ON c.id=u.comparison_id"):
+                if (r["chosen"] is not None
+                        and (r["training_digest"], r["heldout_digest"]) == current):
+                    bank_ratings += 1
         return {
             "schema": 1, "kind": "blinded-owner-style-preference-pilot",
             "total_cases": total, "stale_cases": stale,
             "unrated_current_cases": unrated,
             "valid_owner_ratings": sum(counts.values()),
+            "reviewed_task_bank_ratings": bank_ratings,
+            "ad_hoc_exploratory_ratings": sum(counts.values()) - bank_ratings,
             "twin_preferred": counts["twin"],
             "neutral_preferred": counts["neutral"],
             "ties": counts["tie"],
@@ -309,6 +325,20 @@ def main(argv: list[str] | None = None) -> None:
     start.add_argument("task", help="Independent writing task, NOT held-out prose")
     start.add_argument("--model", help="Explicit installed Ollama model (optional)")
     start.add_argument("--confirm", action="store_true")
+    new_task = sub.add_parser("task-add")
+    new_task.add_argument("task", help="Independent writing prompt, stored pending")
+    new_task.add_argument("--confirm", action="store_true")
+    review_task = sub.add_parser("task-review")
+    review_task.add_argument("id", type=int)
+    review_task.add_argument("decision", choices=("approved", "rejected"))
+    review_task.add_argument("--confirm", action="store_true")
+    task_delete = sub.add_parser("task-delete")
+    task_delete.add_argument("id", type=int)
+    task_delete.add_argument("--confirm", action="store_true")
+    sub.add_parser("tasks")
+    queued = sub.add_parser("start-next")
+    queued.add_argument("--model", help="Explicit installed local Ollama model")
+    queued.add_argument("--confirm", action="store_true")
     show = sub.add_parser("show")
     show.add_argument("id", type=int)
     rate = sub.add_parser("rate")
@@ -323,9 +353,32 @@ def main(argv: list[str] | None = None) -> None:
     store = ExperienceStore(args.home)
     try:
         try:
-            if args.command == "start":
-                number = create_comparison(
-                    store, args.task, confirmed=args.confirm, model_tag=args.model)
+            if args.command in {"task-add", "task-review", "task-delete", "tasks"}:
+                from .style_tasks import StyleTaskBank
+                bank = StyleTaskBank(store, create=args.command == "task-add")
+                try:
+                    if args.command == "task-add":
+                        number = bank.add(args.task, confirmed=args.confirm)
+                        print(f"Private task #{number} is pending owner review")
+                    elif args.command == "task-review":
+                        bank.review(store, args.id, args.decision, confirmed=args.confirm)
+                        print("Private task review updated")
+                    elif args.command == "task-delete":
+                        bank.delete(args.id, confirmed=args.confirm)
+                        print("Private task and any linked comparison deleted")
+                    else:
+                        print(json.dumps(bank.summary(store), sort_keys=True))
+                finally:
+                    bank.close()
+            elif args.command in {"start", "start-next"}:
+                if args.command == "start":
+                    number = create_comparison(
+                        store, args.task, confirmed=args.confirm,
+                        model_tag=args.model)
+                else:
+                    from .style_tasks import start_next
+                    number = start_next(
+                        store, confirmed=args.confirm, model_tag=args.model)
                 print(f"Private blinded comparison #{number} saved; "
                       f"review with athenz-style-compare show {number}")
             else:
