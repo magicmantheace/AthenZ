@@ -139,7 +139,7 @@ class BlindedStyleTests(unittest.TestCase):
     def test_normalized_duplicate_task_is_refused(self):
         self.run_case()
         with self.assertRaisesRegex(ValueError, "already been compared"):
-            self.run_case(task="WRITE a friendly note about caring for a neighbors garden!")
+            self.run_case(task="WRITE a friendly note about caring for a neighbor's garden!")
 
     def test_heldout_copy_is_refused_before_any_model_call(self):
         example = self.store.db.execute(
