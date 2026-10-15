@@ -163,6 +163,29 @@ Details: [docs/TWIN_STYLE_COMPARISON.md](docs/TWIN_STYLE_COMPARISON.md).
 This pilot measures owner preference only, not an authenticated personality
 copy or objectively proven style match.
 
+### 2026-10-14 — Owner-reviewed independent Twin writing task bank
+
+- [x] Create privacy-scoped, individually owner-reviewed and explicitly
+  confirmed independent writing prompts before local A/B inference.
+- [x] Use only currently approved tasks, bind approvals to training and
+  withheld-reference snapshots, and prevent one prompt from being counted
+  more than once in a blinded evaluation.
+- [x] Atomically link approved task consumption to the saved A/B pair,
+  preserving the unpersonalized and Twin arm distinction privately.
+- [x] Distinguish owner-rated approved task-bank cases from ad hoc,
+  exploratory cases in the aggregate (never publish private writing).
+- [x] Reject task or consent changes during inference, and support
+  owner-confirmed deletion of a task and all its derived paired output.
+- [ ] Validate independent task authoring and genuinely blind rating
+  against the owner's local installed model, with enough diverse scenarios.
+- [ ] Compare Twin-vs-neutral **style**, **factual integrity**, **decision
+  accuracy**, and uncertainty as separate metrics before claiming fidelity.
+
+Details: [docs/TWIN_STYLE_COMPARISON.md](docs/TWIN_STYLE_COMPARISON.md).
+The reviewed task bank improves repeatability and provenance but is **not**
+a psychometric assessment, semantic-contamination guarantee, or proof of
+a conscious/digitally continuous self.
+
 ## Next critical path
 1. Record and evaluate user decisions with reproducible train/test splits (#3).
 2. Complete v0.3 event ledger with replay-safe checkpoints, indexed evidence,

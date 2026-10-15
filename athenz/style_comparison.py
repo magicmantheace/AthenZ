@@ -113,9 +113,24 @@ class ComparisonArchive:
         self.db.close()
 
     def save(self, *, task: str, options: tuple[str, str], twin_option: str,
-             model_tag: str, model_digest: str, evidence: tuple[str, str]) -> int:
+             model_tag: str, model_digest: str, evidence: tuple[str, str],
+             task_id: int | None = None) -> int:
         digest = hashlib.sha256(_normalized(task).encode("utf-8")).hexdigest()
         with self.db:
+            if task_id is not None:
+                # Review/consumption check and insertion are one transaction
+                # in the SAME private SQLite database as the task bank.
+                approved = self.db.execute(
+                    "SELECT status,task_digest,training_digest,heldout_digest "
+                    "FROM style_tasks WHERE id=?", (task_id,)).fetchone()
+                if (approved is None or approved["status"] != "approved"
+                        or approved["task_digest"] != digest
+                        or (approved["training_digest"],
+                            approved["heldout_digest"]) != evidence
+                        or self.db.execute(
+                            "SELECT 1 FROM style_task_uses WHERE task_id=?",
+                            (task_id,)).fetchone()):
+                    raise ValueError("Reviewed writing task changed or was used")
             cursor = self.db.execute(
                 """INSERT INTO comparisons
                 (task,task_digest,option_a,option_b,twin_option,model_tag,
@@ -123,6 +138,10 @@ class ComparisonArchive:
                  VALUES (?,?,?,?,?,?,?,?,?,?)""",
                 (task.strip(), digest, *options, twin_option, model_tag,
                  model_digest, *evidence, utc_now()))
+            if task_id is not None:
+                self.db.execute(
+                    "INSERT INTO style_task_uses(task_id,comparison_id) "
+                    "VALUES (?,?)", (task_id, cursor.lastrowid))
         return int(cursor.lastrowid)
 
     def show(self, case_id: int) -> dict:
@@ -181,11 +200,27 @@ class ComparisonArchive:
             else:
                 counts["neutral"] += 1
         decisions = counts["twin"] + counts["neutral"]
+        # Historical ad-hoc archives do not have task-bank tables. Treat
+        # their preferences as exploratory, not preapproved-test evidence.
+        bank_ratings = 0
+        has_bank = self.db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' "
+            "AND name='style_task_uses'").fetchone() is not None
+        if has_bank:
+            for r in self.db.execute(
+                "SELECT c.chosen,c.training_digest,c.heldout_digest "
+                "FROM style_task_uses u "
+                "JOIN comparisons c ON c.id=u.comparison_id"):
+                if (r["chosen"] is not None
+                        and (r["training_digest"], r["heldout_digest"]) == current):
+                    bank_ratings += 1
         return {
             "schema": 1, "kind": "blinded-owner-style-preference-pilot",
             "total_cases": total, "stale_cases": stale,
             "unrated_current_cases": unrated,
             "valid_owner_ratings": sum(counts.values()),
+            "reviewed_task_bank_ratings": bank_ratings,
+            "ad_hoc_exploratory_ratings": sum(counts.values()) - bank_ratings,
             "twin_preferred": counts["twin"],
             "neutral_preferred": counts["neutral"],
             "ties": counts["tie"],
@@ -204,10 +239,15 @@ class ComparisonArchive:
 def create_comparison(store: ExperienceStore, task: str, *,
                       confirmed: bool = False, model_tag: str | None = None,
                       client_factory=None, digest_fn=None,
-                      route_fn=None, chooser=None) -> int:
+                      route_fn=None, chooser=None, task_id: int | None = None,
+                      task_guard=None) -> int:
     """Generate both arms before saving; no partial result after model failure."""
     if not confirmed:
         raise ValueError("Owner confirmation required before local inference")
+    if task_id is not None and task_guard is None:
+        raise ValueError("Reviewed style task requires a private task guard")
+    if task_guard is not None:
+        task_guard()
     _validate_task(store, task)
     from .runtime import checked_active_tag, model_digest
     route = route_fn or checked_active_tag
@@ -220,6 +260,13 @@ def create_comparison(store: ExperienceStore, task: str, *,
     model_sha = digest(chosen_tag)
     model = (client_factory or (lambda tag: OllamaClient(model=tag)))(chosen_tag)
     twin_messages = build_messages(store, task, mode="twin")
+    # A concurrent consent or task-review change must not get a stale
+    # personalized prompt sent to the local model.
+    if task_guard is not None:
+        task_guard()
+    if (_evidence_state(store) != before or route(store) != active_tag
+            or digest(chosen_tag) != model_sha):
+        raise ValueError("Source or local model changed before model inference")
     neutral_messages = [
         {"role": "system", "content": _BASELINE_POLICY},
         {"role": "user", "content": task.strip()}]
@@ -229,6 +276,8 @@ def create_comparison(store: ExperienceStore, task: str, *,
     except Exception:
         # A local model may echo a private prompt in an exception string.
         raise ValueError("Local blinded comparison inference failed") from None
+    if task_guard is not None:
+        task_guard()
     if (_evidence_state(store) != before or route(store) != active_tag
             or digest(chosen_tag) != model_sha):
         raise ValueError("Source or local model changed during blinded comparison")
@@ -236,6 +285,8 @@ def create_comparison(store: ExperienceStore, task: str, *,
         twin = model.generate(twin_messages, temperature=0.3, seed=11)
     except Exception:
         raise ValueError("Local blinded comparison inference failed") from None
+    if task_guard is not None:
+        task_guard()
     if (_evidence_state(store) != before or route(store) != active_tag
             or digest(chosen_tag) != model_sha):
         raise ValueError("Source or local model changed during blinded comparison")
@@ -249,13 +300,16 @@ def create_comparison(store: ExperienceStore, task: str, *,
     try:
         # Recheck after opening the separate private archive: the source can
         # be revoked while SQLite is establishing the comparison database.
+        if task_guard is not None:
+            task_guard()
         if (_evidence_state(store) != before or route(store) != active_tag
                 or digest(chosen_tag) != model_sha):
             raise ValueError("Source or local model changed before comparison save")
         try:
             return archive.save(
                 task=task, options=options, twin_option="A" if twin_first else "B",
-                model_tag=chosen_tag, model_digest=model_sha, evidence=before)
+                model_tag=chosen_tag, model_digest=model_sha, evidence=before,
+                task_id=task_id)
         except sqlite3.IntegrityError:
             raise ValueError("This normalized writing task has already been compared") from None
     finally:
@@ -271,6 +325,20 @@ def main(argv: list[str] | None = None) -> None:
     start.add_argument("task", help="Independent writing task, NOT held-out prose")
     start.add_argument("--model", help="Explicit installed Ollama model (optional)")
     start.add_argument("--confirm", action="store_true")
+    new_task = sub.add_parser("task-add")
+    new_task.add_argument("task", help="Independent writing prompt, stored pending")
+    new_task.add_argument("--confirm", action="store_true")
+    review_task = sub.add_parser("task-review")
+    review_task.add_argument("id", type=int)
+    review_task.add_argument("decision", choices=("approved", "rejected"))
+    review_task.add_argument("--confirm", action="store_true")
+    task_delete = sub.add_parser("task-delete")
+    task_delete.add_argument("id", type=int)
+    task_delete.add_argument("--confirm", action="store_true")
+    sub.add_parser("tasks")
+    queued = sub.add_parser("start-next")
+    queued.add_argument("--model", help="Explicit installed local Ollama model")
+    queued.add_argument("--confirm", action="store_true")
     show = sub.add_parser("show")
     show.add_argument("id", type=int)
     rate = sub.add_parser("rate")
@@ -285,9 +353,34 @@ def main(argv: list[str] | None = None) -> None:
     store = ExperienceStore(args.home)
     try:
         try:
-            if args.command == "start":
-                number = create_comparison(
-                    store, args.task, confirmed=args.confirm, model_tag=args.model)
+            if args.command in {"task-add", "task-review", "task-delete", "tasks"}:
+                if args.command != "tasks" and not args.confirm:
+                    raise ValueError("Explicit owner confirmation required before task change")
+                from .style_tasks import StyleTaskBank
+                bank = StyleTaskBank(store, create=args.command == "task-add")
+                try:
+                    if args.command == "task-add":
+                        number = bank.add(args.task, confirmed=args.confirm)
+                        print(f"Private task #{number} is pending owner review")
+                    elif args.command == "task-review":
+                        bank.review(store, args.id, args.decision, confirmed=args.confirm)
+                        print("Private task review updated")
+                    elif args.command == "task-delete":
+                        bank.delete(args.id, confirmed=args.confirm)
+                        print("Private task and any linked comparison deleted")
+                    else:
+                        print(json.dumps(bank.summary(store), sort_keys=True))
+                finally:
+                    bank.close()
+            elif args.command in {"start", "start-next"}:
+                if args.command == "start":
+                    number = create_comparison(
+                        store, args.task, confirmed=args.confirm,
+                        model_tag=args.model)
+                else:
+                    from .style_tasks import start_next
+                    number = start_next(
+                        store, confirmed=args.confirm, model_tag=args.model)
                 print(f"Private blinded comparison #{number} saved; "
                       f"review with athenz-style-compare show {number}")
             else:
