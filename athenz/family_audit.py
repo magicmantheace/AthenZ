@@ -175,7 +175,8 @@ def category_diversity_gate(categories: dict[int, str]) -> bool:
     """
     if not isinstance(categories, dict):
         raise ValueError("Invalid category selection")
-    if any(type(i) is not int or category not in _CATEGORIES
+    if any(type(i) is not int or type(category) is not str
+           or category not in _CATEGORIES
            for i, category in categories.items()):
         raise ValueError("Invalid reviewed category labels")
     totals = Counter(categories.values())
