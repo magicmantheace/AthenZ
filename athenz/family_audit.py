@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import re
 import stat
+from collections import Counter
 
 from .store import IdentityStore, private_home_path
 
@@ -165,6 +166,26 @@ class FamilyAudit:
         return {i: self.by_id[i] for i in case_ids}
 
 
+def category_diversity_gate(categories: dict[int, str]) -> bool:
+    """Opt-in broad, reviewed held-out category coverage requirement.
+
+    At least three non-catchall categories with five independent cases each;
+    no sparse tail categories, and no category exceeds 60% of selected cases.
+    This is a study-design safeguard, not a claim of personality fidelity.
+    """
+    if not isinstance(categories, dict):
+        raise ValueError("Invalid category selection")
+    if any(type(i) is not int or category not in _CATEGORIES
+           for i, category in categories.items()):
+        raise ValueError("Invalid reviewed category labels")
+    totals = Counter(categories.values())
+    n = len(categories)
+    return (n >= 15 and len(totals) >= 3
+            and "other" not in totals
+            and all(size >= _MIN_REPORT for size in totals.values())
+            and max(totals.values(), default=0) * 5 <= n * 3)
+
+
 class CategoryScores:
     """Aggregate category scores, with small categories always suppressed."""
 
@@ -186,9 +207,28 @@ class CategoryScores:
             for category, (n, twin, neutral) in sorted(self._groups.items())
             if n >= _MIN_REPORT
         }
+        # Equal category weight guards against a large topic dominating micro
+        # accuracy. Only published categories with >=5 cases contribute.
+        eligible = list(visible.values())
+        macro_twin = (sum(v["twin_accuracy"] for v in eligible) / len(eligible)
+                      if len(eligible) >= 3 else None)
+        macro_neutral = (sum(v["neutral_accuracy"] for v in eligible) / len(eligible)
+                         if len(eligible) >= 3 else None)
+        groups = {name: totals[0] for name, totals in self._groups.items()}
+        selected = sum(groups.values())
+        broad = (selected >= 15 and len(groups) >= 3
+                 and "other" not in groups
+                 and all(count >= _MIN_REPORT for count in groups.values())
+                 and max(groups.values(), default=0) * 5 <= selected * 3)
         return {
             "enabled": True,
             "approved_records_audited": audited_records,
+            "broad_coverage_gate_met": broad,
+            "eligible_category_count": len(eligible),
+            "macro_twin_accuracy": macro_twin,
+            "macro_neutral_accuracy": macro_neutral,
+            "macro_paired_accuracy_difference": (
+                macro_twin - macro_neutral if macro_twin is not None else None),
             "selected_cases": sum(x[0] for x in self._groups.values()),
             "category_metrics_minimum_cases": _MIN_REPORT,
             "category_metrics": visible,
