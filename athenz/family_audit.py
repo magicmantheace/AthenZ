@@ -76,7 +76,8 @@ def create_family_template(store: IdentityStore) -> None:
     rows = _approved_rows(store)
     if not rows:
         raise ValueError("No approved decisions available for family review")
-    payload = {"schema": 1, "cases": [
+    payload = {"schema": 2, "approved_source_sha256": _digest(rows),
+               "cases": [
         {"id": row["id"], "scenario": row["scenario"],
          "scenario_sha256": _digest(row["scenario"]), "split": row["split"],
          "family": "", "category": ""}
@@ -112,8 +113,10 @@ class FamilyAudit:
             manifest = json.loads(raw.decode("utf-8"))
         except (ValueError, UnicodeError):
             raise ValueError("Family audit manifest is invalid JSON") from None
-        if (not isinstance(manifest, dict) or set(manifest) != {"schema", "cases"}
-                or type(manifest["schema"]) is not int or manifest["schema"] != 1
+        if (not isinstance(manifest, dict)
+                or set(manifest) != {"schema", "cases", "approved_source_sha256"}
+                or type(manifest["schema"]) is not int or manifest["schema"] != 2
+                or manifest["approved_source_sha256"] != self.source_sha
                 or not isinstance(manifest["cases"], list)
                 or len(manifest["cases"]) != len(rows)):
             raise ValueError("Family audit manifest is incomplete or stale")

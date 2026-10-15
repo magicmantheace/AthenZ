@@ -91,8 +91,9 @@ athenz-decision-compare --family-template --confirm
 ```
 
 This creates an owner-only `decision-family-audit.json` under the local private
-AthenZ home directory. It contains the **private original scenario texts** for
-owner review, SHA-256 fingerprints, current splits, empty `family` and
+AthenZ home directory. Its schema v2 contains the **private original
+scenario texts**, current splits, scenario fingerprints and a full approved
+decision evidence fingerprint, plus empty `family` and
 `category` labels. Never commit, upload, or share this file. Assign the same
 lowercase family identifier to every scenario representing the same underlying
 decision, even if phrased differently, and choose a category from `work`,
@@ -101,11 +102,20 @@ Use distinct family identifiers for independent scenarios. The template
 is created **only once**; after adding or revoking approved decisions,
 the owner must review and regenerate a replacement private manifest.
 
-To enforce the completed review before a run:
+To validate all reviewed labels **offline without loading Ollama**, then
+enforce the completed review before a model run:
 
 ```sh
+athenz-decision-compare --family-check --confirm
 athenz-decision-compare --split test --limit 100 --family-audit --confirm
 ```
+
+The offline check returns only validity, version and approved record count.
+Any change in an approved decision's choice, rationale, provenance, split or
+scenario after template creation requires explicit re-review and regeneration
+of the private manifest, even when the scenario wording itself is unchanged.
+A prior schema-v1 template is considered stale and must also be regenerated.
+Never silently overwrite a completed family manifest.
 
 All approved decisions across train, calibration and test must have complete,
 unchanged manifest entries; **cross-split family reuse** or **two held-out
