@@ -8,7 +8,6 @@ reported. This is an owner-preference pilot, not identity certification.
 from __future__ import annotations
 
 import argparse
-from contextlib import closing
 import hashlib
 import json
 import os
