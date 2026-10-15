@@ -354,6 +354,8 @@ def main(argv: list[str] | None = None) -> None:
     try:
         try:
             if args.command in {"task-add", "task-review", "task-delete", "tasks"}:
+                if args.command != "tasks" and not args.confirm:
+                    raise ValueError("Explicit owner confirmation required before task change")
                 from .style_tasks import StyleTaskBank
                 bank = StyleTaskBank(store, create=args.command == "task-add")
                 try:
