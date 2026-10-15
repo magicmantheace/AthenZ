@@ -68,6 +68,10 @@ enforces three adequately represented
 independent reviewed categories before inference, and the aggregate report
 shows a macro-averaged Twin-versus-neutral difference when enough cases exist.
 This human review is not automatic semantic similarity detection.
+Use `athenz-decision-compare --split calibration --limit 30 --stability-trials 2 --confirm`
+to compare **semantic** choice agreement across seeded repeats without treating
+repeats as new independent cases. All repeat predictions stay ephemeral and
+the report contains aggregate stability only.
 A real on-device held-out improvement has not yet been demonstrated.
 
 ## Setup
