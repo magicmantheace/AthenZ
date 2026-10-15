@@ -85,7 +85,7 @@ class CategoryDiversityTests(unittest.TestCase):
     def test_balanced_fifteen_cases_pass_preflight_and_score(self):
         model = ConstantPredictionModel()
         report = self._eval(model=model)
-        self.assertEqual(report["schema"], 4)
+        self.assertEqual(report["schema"], 5)
         self.assertEqual(report["model_requests"], 30)
         self.assertEqual(len(model.calls), 30)
         self.assertTrue(report["require_category_diversity"])
