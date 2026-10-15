@@ -24,6 +24,16 @@ Run `python -m athenz.twin_retrieval_benchmark` to inspect aggregate
 retrieval and revocation results without accessing the owner's profile or
 calling a model. It does **not** measure real Twin personality similarity.
 
+## Private blinded Twin writing-style pilot
+
+`athenz-style-compare` runs an **opt-in, local-only, owner-blinded A/B comparison**
+using the same installed model with and without approved Twin context. It keeps
+held-out owner writing out of both model prompts and saves responses/owner
+ratings in a separate private SQLite database, not model training or public
+GitHub. See [Twin style comparison](docs/TWIN_STYLE_COMPARISON.md).
+This is a subjective owner-preference pilot, **not validated personality
+accuracy**.
+
 ## Setup
 
 ```sh
