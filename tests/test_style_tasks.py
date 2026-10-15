@@ -178,7 +178,9 @@ class IndependentWritingTaskTests(unittest.TestCase):
             chooser=lambda n: 0)
         with self.assertRaisesRegex(ValueError, "No current reviewed"):
             self.run_next()
-        self.assertEqual(self.bank.summary(self.store)["approved_ready_unused"], 1)
+        status = self.bank.summary(self.store)
+        self.assertEqual(status["approved_ready_unused"], 0)
+        self.assertEqual(status["already_compared_outside_bank"], 1)
 
     def test_delete_task_erases_derived_pair_and_owner_prose(self):
         task = self.add()
