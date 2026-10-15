@@ -220,6 +220,8 @@ class BlindedStyleTests(unittest.TestCase):
         self.assertTrue(path.is_file())
         if os.name != "nt":
             self.assertEqual(path.stat().st_mode & 0o077, 0)
+        if os.name == "nt":
+            return  # Windows symlink privileges vary by host policy.
         link = self.store.home / "hardlink.sqlite3"
         os.link(path, link)
         self.addCleanup(lambda: link.unlink(missing_ok=True))
