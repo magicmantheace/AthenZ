@@ -137,6 +137,32 @@ See [docs/TWIN_CONTEXT.md](docs/TWIN_CONTEXT.md).
 Details: [docs/TWIN_STYLE_VALIDATION.md](docs/TWIN_STYLE_VALIDATION.md). Readiness
 counts do not demonstrate correct style imitation or human digital continuity.
 
+### 2026-10-14 — Blinded local Twin style preference pilot
+
+- [x] Generate two supervised local-only responses to the same independent
+  owner writing task, using the same installed model and deterministic settings:
+  one neutral, one with approved Twin personalization.
+- [x] Present randomized unlabeled A/B responses and collect one explicit
+  owner rating (A, B or tie) before reporting which policy was preferred.
+- [x] Keep withheld calibration/test writing out of *both* model prompts;
+  require independent reviewed samples and reject obvious direct copy of
+  withheld text into tasks.
+- [x] Persist completed pair and rating in an isolated private SQLite file,
+  not in AthenZ training records or public GitHub, with deletion and no
+  partial results after aborted generation.
+- [x] Recheck reviewed source and local model fingerprints during generation;
+  mark comparisons stale and exclude them from aggregate results after
+  consent or source changes.
+- [ ] Collect owner judgments on truly unseen writing tasks using the actual
+  local model; assess preferences, uncertainty, hallucinations, within-person
+  variation and confidence intervals.
+- [ ] Add a semantically leak-screened independent heldout task bank and
+  external or blind adjudication before claiming quantitative Twin fidelity.
+
+Details: [docs/TWIN_STYLE_COMPARISON.md](docs/TWIN_STYLE_COMPARISON.md).
+This pilot measures owner preference only, not an authenticated personality
+copy or objectively proven style match.
+
 ## Next critical path
 1. Record and evaluate user decisions with reproducible train/test splits (#3).
 2. Complete v0.3 event ledger with replay-safe checkpoints, indexed evidence,
