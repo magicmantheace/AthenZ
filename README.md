@@ -30,7 +30,10 @@ calling a model. It does **not** measure real Twin personality similarity.
 using the same installed model with and without approved Twin context. It keeps
 held-out owner writing out of both model prompts and saves responses/owner
 ratings in a separate private SQLite database, not model training or public
-GitHub. See [Twin style comparison](docs/TWIN_STYLE_COMPARISON.md).
+GitHub. For repeatable owner-reviewed test prompts, run
+`athenz-style-compare task-add "Independent writing prompt" --confirm`,
+review the private task, then use `athenz-style-compare start-next --confirm`.
+See [Twin style comparison and task bank](docs/TWIN_STYLE_COMPARISON.md).
 This is a subjective owner-preference pilot, **not validated personality
 accuracy**.
 
