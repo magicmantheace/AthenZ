@@ -214,7 +214,8 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
                 # private per-case selection is discarded after this case.
                 if stability_trials > 1:
                     semantic = (options[_LETTERS.index(predicted)]
-                                if predicted in _LETTERS else predicted)
+                                if len(predicted) == 1 and predicted in _LETTERS
+                                else predicted)
                     trial_semantics[arm].append(semantic)
                 # Accuracy and inferential statistics must use independent
                 # held-out cases, never repeated trials as extra samples.
