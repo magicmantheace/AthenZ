@@ -22,6 +22,7 @@ from .experience import ExperienceStore
 from .prompting import build_messages
 from .store import private_home_path, utc_now
 from .style_readiness import _normalized, style_readiness
+from .style_overlap import strongly_overlaps
 
 
 _FILENAME = "twin-style-comparisons.sqlite3"
@@ -56,11 +57,16 @@ def _validate_task(store: ExperienceStore, task: str) -> None:
         raise ValueError("Review at least 3 independent train and test samples first")
     query = _normalized(task)
     for row in store.db.execute(
-        "SELECT text FROM writing_samples WHERE status='approved' "
-        "AND split IN ('test','calibration')"):
-        heldout = _normalized(row["text"])
-        if len(heldout) >= 24 and len(heldout.split()) >= 5 and heldout in query:
-            raise ValueError("Writing task copies protected evaluation evidence")
+        "SELECT text,split FROM writing_samples WHERE status='approved'"):
+        approved = row["text"]
+        normalized = _normalized(approved)
+        copied = ((len(normalized) >= 24 and len(normalized.split()) >= 5
+                   and normalized in query)
+                  or strongly_overlaps(task, approved))
+        if copied:
+            if row["split"] in {"test", "calibration"}:
+                raise ValueError("Writing task copies protected evaluation evidence")
+            raise ValueError("Writing task copies approved training evidence")
 
 
 def _db_path(store: ExperienceStore) -> Path:
