@@ -59,8 +59,10 @@ mode asserts calibrated confidence, and no private choices, individual
 probabilities or model responses are returned. [Method and limitations](docs/TWIN_DECISION_COMPARISON.md).
 Optional `athenz-decision-compare --family-template --confirm` creates an
 owner-only decision-family review manifest; after assigning family IDs and
-broad categories, use `--family-audit` to reject semantically related
-train/held-out decisions and suppress undersized category reports.
+broad categories, first use `--family-check --confirm` to validate the
+owner-private full-evidence fingerprint without loading a local model.
+Then use `--family-audit` to reject semantically related train/held-out
+decisions and suppress undersized category reports.
 This human review is not automatic semantic similarity detection.
 A real on-device held-out improvement has not yet been demonstrated.
 

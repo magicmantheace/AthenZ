@@ -138,6 +138,8 @@ See [docs/TWIN_CONTEXT.md](docs/TWIN_CONTEXT.md).
 - [x] Optional owner-reviewed semantic decision-family manifest with
   cross-split related-scenario quarantine, immutable consent snapshots and
   privacy-suppressed category comparison (synthetic evidence only).
+- [x] Bind family reviews to the full approved decision record set and
+  support explicit, offline review validation without model inference.
 - [ ] Actually calibrate uncertainty or abstention on real owner-labelled
   data; independently validate semantic group labels, topic-family
   generalization and owner decision variability benchmarks.

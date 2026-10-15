@@ -77,7 +77,8 @@ class FamilyAuditTests(unittest.TestCase):
         self.assertTrue(path.exists())
         self.assertEqual(len(payload["cases"]), 6)
         self.assertIn("scenario", payload["cases"][0])
-        self.assertEqual(payload["schema"], 1)
+        self.assertEqual(payload["schema"], 2)
+        self.assertEqual(len(payload["approved_source_sha256"]), 64)
         with self.assertRaisesRegex(ValueError, "exists"):
             create_family_template(self.store)
         if __import__("os").name != "nt":
@@ -132,6 +133,9 @@ class FamilyAuditTests(unittest.TestCase):
     def test_missing_stale_unknown_or_duplicate_case_fails(self):
         path, original = self.manifest()
         variants = []
+        stale_source = json.loads(json.dumps(original))
+        stale_source["approved_source_sha256"] = "0" * 64
+        variants.append(stale_source)
         less = json.loads(json.dumps(original))
         less["cases"].pop()
         variants.append(less)
@@ -209,6 +213,44 @@ class FamilyAuditTests(unittest.TestCase):
             main(["--home", str(self.store.home), "--family-template", "--confirm"])
             model.assert_not_called()
         self.assertTrue((self.store.home / "decision-family-audit.json").exists())
+
+    def test_source_choice_or_rationale_edit_invalidates_prior_review(self):
+        self.manifest()
+        with self.store.db:
+            self.store.db.execute(
+                "UPDATE decisions SET rationale=? WHERE id=?",
+                ("Changed interpretation after manual review", self.heldout[0]))
+        with self.assertRaisesRegex(ValueError, "incomplete or stale"):
+            FamilyAudit(self.store)
+
+    def test_family_check_cli_is_offline_and_rejects_stale_reviews(self):
+        self.manifest()
+        with patch("athenz.paired_decisions.OllamaClient") as model:
+            with patch("builtins.print") as printer:
+                main(["--home", str(self.store.home), "--family-check", "--confirm"])
+            model.assert_not_called()
+        reported = json.loads(printer.call_args[0][0])
+        self.assertEqual(reported["status"], "valid")
+        self.assertEqual(reported["approved_records_audited"], 6)
+        self.assertFalse(reported["source_text_in_report"])
+        self.assertNotIn("greenhouse", json.dumps(reported))
+        with self.store.db:
+            self.store.db.execute("UPDATE decisions SET choice=? WHERE id=?",
+                                  ("Option two", self.heldout[0]))
+        with patch("athenz.paired_decisions.OllamaClient") as model:
+            with self.assertRaisesRegex(SystemExit, "incomplete or stale"):
+                main(["--home", str(self.store.home), "--family-check", "--confirm"])
+            model.assert_not_called()
+
+    def test_family_cli_actions_mutually_exclusive(self):
+        model = AlwaysFirstModel()
+        self.manifest()
+        with patch("athenz.paired_decisions.OllamaClient") as client:
+            with self.assertRaisesRegex(SystemExit, "one family action"):
+                main(["--home", str(self.store.home), "--family-check",
+                      "--family-audit", "--confirm"])
+            client.assert_not_called()
+        self.assertEqual(model.calls, [])
 
     def test_aggregate_rejects_untrusted_categories(self):
         acc = CategoryScores()

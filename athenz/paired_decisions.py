@@ -295,6 +295,8 @@ def main(argv: list[str] | None = None) -> None:
                         help="Require owner-reviewed local family categories and split independence")
     parser.add_argument("--family-template", action="store_true",
                         help="Create a private family review template; no model inference")
+    parser.add_argument("--family-check", action="store_true",
+                        help="Validate reviewed private family groups without running a model")
     parser.add_argument("--confirm", action="store_true",
                         help="Owner explicitly agrees to local held-out evaluation")
     args = parser.parse_args(argv)
@@ -302,14 +304,24 @@ def main(argv: list[str] | None = None) -> None:
         parser.error("Explicit --confirm required before local model inference")
     store = ExperienceStore(args.home)
     try:
+        if sum((args.family_template, args.family_check, args.family_audit)) > 1:
+            raise SystemExit("Select one family action at a time")
         if args.family_template:
-            if args.family_audit:
-                raise SystemExit("Choose either family template or family audit")
             try:
                 create_family_template(store)
             except (ValueError, OSError):
                 raise SystemExit("Private family template creation refused") from None
             print("Owner-only decision-family template created in the private profile")
+            return
+        if args.family_check:
+            try:
+                audit = FamilyAudit(store)
+                audit.verify(store)
+            except (ValueError, OSError):
+                raise SystemExit("Private family review is incomplete or stale") from None
+            print(json.dumps({"status": "valid", "schema": 2,
+                              "approved_records_audited": audit.audited_records,
+                              "source_text_in_report": False}, sort_keys=True))
             return
         from .runtime import checked_active_tag, model_digest, RoutingError
         try:
