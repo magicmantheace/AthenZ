@@ -135,9 +135,12 @@ See [docs/TWIN_CONTEXT.md](docs/TWIN_CONTEXT.md).
 - [x] Add opt-in self-reported confidence evaluation with strict numeric
   parsing, fixed-size private-only Brier/ECE aggregate counters, synthetic
   negative cases and separate calibration/test protocols.
+- [x] Optional owner-reviewed semantic decision-family manifest with
+  cross-split related-scenario quarantine, immutable consent snapshots and
+  privacy-suppressed category comparison (synthetic evidence only).
 - [ ] Actually calibrate uncertainty or abstention on real owner-labelled
-  data; add semantic leakage, topic-family generalization and owner decision
-  variability benchmarks.
+  data; independently validate semantic group labels, topic-family
+  generalization and owner decision variability benchmarks.
 
 Details: [docs/TWIN_DECISION_COMPARISON.md](docs/TWIN_DECISION_COMPARISON.md).
 Synthetic passing tests verify data isolation and algorithm behavior,

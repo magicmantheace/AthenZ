@@ -21,6 +21,7 @@ from .evaluation import (
     _reject_repeated_heldout_scenarios, _wilson_interval,
 )
 from .experience import ExperienceStore
+from .family_audit import CategoryScores, FamilyAudit, create_family_template
 from .paired_stats import (
     ConfidenceAccumulator, exact_paired_sign_test, discordant_win_interval,
 )
@@ -84,7 +85,8 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
                               split: str = "calibration", limit: int = 100,
                               seed: int = 42, model_guard=None,
                               allow_abstain: bool = False,
-                              score_confidence: bool = False) -> dict:
+                              score_confidence: bool = False,
+                              family_audit: FamilyAudit | None = None) -> dict:
     """Compare personalized vs neutral predictions without exposing gold data.
 
     Optional model_guard pins an installed local model's digest and reviewed
@@ -102,6 +104,12 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
     rows = _heldout_rows(store, split, limit)
     heldout_sha = _fingerprint(rows)
     reference_sha = _reference_fingerprint(store)
+    if family_audit is not None:
+        family_audit.verify(store)
+        categories = family_audit.selected_categories([case[0] for case in rows])
+    else:
+        categories = {}
+    category_scores = CategoryScores()
 
     def verify_evidence(case: list | None = None) -> None:
         if (_fingerprint(_heldout_rows(store, split, limit)) != heldout_sha
@@ -115,6 +123,8 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
                 (case[0], split)).fetchone()
             if current is None or list(current) != case:
                 raise ValueError("Held-out decision changed during paired evaluation")
+        if family_audit is not None:
+            family_audit.verify(store)
         if model_guard is not None:
             model_guard()
 
@@ -193,6 +203,8 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
             counts["neutral_only"] += 1
         else:
             counts["both_wrong"] += 1
+        if family_audit is not None:
+            category_scores.add(categories[case[0]], twin_correct=t, neutral_correct=n)
         expected_chance += 1.0 / len(options)
 
     _reject_overlapping_decision_splits(store)
@@ -249,6 +261,8 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
             neutral_correct / neutral_answered if neutral_answered else None,
         "heldout_sha256": heldout_sha,
         "reference_sha256": reference_sha,
+        "family_audit": (category_scores.report(family_audit.audited_records)
+                         if family_audit is not None else {"enabled": False}),
         "case_text_in_report": False,
         "personality_or_identity_certified": False,
         "limitations": "Same-model paired prediction in owner-approved "
@@ -277,6 +291,10 @@ def main(argv: list[str] | None = None) -> None:
                         help="Allow both models to decline unsupported decisions")
     parser.add_argument("--score-confidence", action="store_true",
                         help="Request self-reported chosen-answer probabilities for calibration analysis")
+    parser.add_argument("--family-audit", action="store_true",
+                        help="Require owner-reviewed local family categories and split independence")
+    parser.add_argument("--family-template", action="store_true",
+                        help="Create a private family review template; no model inference")
     parser.add_argument("--confirm", action="store_true",
                         help="Owner explicitly agrees to local held-out evaluation")
     args = parser.parse_args(argv)
@@ -284,6 +302,15 @@ def main(argv: list[str] | None = None) -> None:
         parser.error("Explicit --confirm required before local model inference")
     store = ExperienceStore(args.home)
     try:
+        if args.family_template:
+            if args.family_audit:
+                raise SystemExit("Choose either family template or family audit")
+            try:
+                create_family_template(store)
+            except (ValueError, OSError):
+                raise SystemExit("Private family template creation refused") from None
+            print("Owner-only decision-family template created in the private profile")
+            return
         from .runtime import checked_active_tag, model_digest, RoutingError
         try:
             initial_route = checked_active_tag(store)
@@ -296,11 +323,13 @@ def main(argv: list[str] | None = None) -> None:
                         or model_digest(selected_tag) != expected_digest):
                     raise ValueError("Local reviewed model changed during evaluation")
 
+            audit = FamilyAudit(store) if args.family_audit else None
             report = evaluate_paired_decisions(
                 store, model, split=args.split, limit=args.limit,
                 seed=args.seed, model_guard=current_model,
                 allow_abstain=args.allow_abstain,
-                score_confidence=args.score_confidence)
+                score_confidence=args.score_confidence,
+                family_audit=audit)
         except (ValueError, RoutingError, OSError):
             # Never report exception details containing private heldout text.
             raise SystemExit("Paired decision evaluation refused; check "
