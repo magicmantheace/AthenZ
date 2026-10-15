@@ -37,6 +37,16 @@ See [Twin style comparison and task bank](docs/TWIN_STYLE_COMPARISON.md).
 This is a subjective owner-preference pilot, **not validated personality
 accuracy**.
 
+## Paired local Twin decision prediction (experimental)
+
+`athenz-decision-compare --split calibration --limit 12 --confirm`
+compares held-out owner choices using the **same local Ollama model** with
+approved Twin evidence versus a neutral no-personalization baseline. It
+reports aggregate Twin/neutral accuracy, disagreements, chance expectation
+and descriptive uncertainty without returning private choices or model
+responses. [Method and limitations](docs/TWIN_DECISION_COMPARISON.md).
+A real on-device held-out improvement has not yet been demonstrated.
+
 ## Setup
 
 ```sh
