@@ -54,15 +54,3 @@ def strongly_overlaps(first: str, second: str) -> bool:
             and len(pairs_a & pairs_b) / min(len(pairs_a), len(pairs_b)) >= 0.72)
 
 
-def source_overlap_count(rows: list[tuple[str, str]]) -> int:
-    """Count cross-split near duplicates for a bounded pilot (no excerpts).
-
-    The caller must cap its input size before using this O(n^2) diagnostic.
-    Approval-time protection checks each new owner sample independently.
-    """
-    matches = 0
-    for i, (split, text) in enumerate(rows):
-        for other_split, other_text in rows[i + 1:]:
-            if split != other_split and strongly_overlaps(text, other_text):
-                matches += 1
-    return matches
