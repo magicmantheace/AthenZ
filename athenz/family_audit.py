@@ -133,6 +133,7 @@ class FamilyAudit:
             if (item["scenario"] != row["scenario"]
                     or item["scenario_sha256"] != _digest(row["scenario"])
                     or item["split"] != row["split"]
+                    or not isinstance(item["category"], str)
                     or not isinstance(item["family"], str)
                     or _FAMILY.fullmatch(item["family"]) is None
                     or item["category"] not in _CATEGORIES):
