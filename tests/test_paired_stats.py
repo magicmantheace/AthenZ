@@ -1,7 +1,9 @@
 """Count-only, synthetic statistical benchmark tests."""
 import unittest
 
-from athenz.paired_stats import exact_paired_sign_test, discordant_win_interval
+from athenz.paired_stats import (
+    ConfidenceAccumulator, exact_paired_sign_test, discordant_win_interval,
+)
 
 
 class PairedStatsTests(unittest.TestCase):
@@ -36,6 +38,35 @@ class PairedStatsTests(unittest.TestCase):
                     exact_paired_sign_test(*args)
                 with self.assertRaises(ValueError):
                     discordant_win_interval(*args)
+
+    def test_confidence_bins_and_metrics_are_aggregate_only(self):
+        metric = ConfidenceAccumulator()
+        self.assertEqual(metric.report()["samples"], 0)
+        self.assertIsNone(metric.report()["chosen_answer_brier_score"])
+        metric.add(1.0, correct=True)
+        metric.add(0.0, correct=False)
+        report = metric.report()
+        self.assertEqual(report["samples"], 2)
+        self.assertEqual(report["chosen_answer_brier_score"], 0.0)
+        self.assertEqual(report["expected_calibration_error_10bins"], 0.0)
+        self.assertNotIn("cases", report)
+        self.assertNotIn("bins", report)
+
+    def test_overconfident_wrong_choice_has_maximum_error(self):
+        metric = ConfidenceAccumulator()
+        metric.add(1.0, correct=False)
+        result = metric.report()
+        self.assertEqual(result["chosen_answer_brier_score"], 1.0)
+        self.assertEqual(result["expected_calibration_error_10bins"], 1.0)
+
+    def test_confidence_validation_rejects_invalid_types_and_values(self):
+        for prob in (True, False, None, -0.1, 1.01, "0.5",
+                     float("nan"), float("inf"), float("-inf")):
+            with self.subTest(prob=prob):
+                with self.assertRaises(ValueError):
+                    ConfidenceAccumulator().add(prob, correct=True)
+        with self.assertRaises(ValueError):
+            ConfidenceAccumulator().add(0.5, correct=1)
 
 
 if __name__ == '__main__':

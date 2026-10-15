@@ -132,8 +132,12 @@ See [docs/TWIN_CONTEXT.md](docs/TWIN_CONTEXT.md).
 - [x] Add opt-in explicit abstention, separate malformed responses from
   deliberate uncertainty, and report selective accuracy, coverage and an
   exact paired McNemar test with synthetic unit coverage.
-- [ ] Calibrate abstention on real owner-labelled cases; add semantic leakage,
-  topic-family generalization and owner decision variability benchmarks.
+- [x] Add opt-in self-reported confidence evaluation with strict numeric
+  parsing, fixed-size private-only Brier/ECE aggregate counters, synthetic
+  negative cases and separate calibration/test protocols.
+- [ ] Actually calibrate uncertainty or abstention on real owner-labelled
+  data; add semantic leakage, topic-family generalization and owner decision
+  variability benchmarks.
 
 Details: [docs/TWIN_DECISION_COMPARISON.md](docs/TWIN_DECISION_COMPARISON.md).
 Synthetic passing tests verify data isolation and algorithm behavior,
