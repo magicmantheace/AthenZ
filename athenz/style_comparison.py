@@ -188,59 +188,110 @@ class ComparisonArchive:
                 raise ValueError("Unknown comparison")
 
     def report(self, store: ExperienceStore) -> dict:
+        """Read-only aggregate; never pool a win-rate across model identities.
+
+        Ad-hoc and reviewed task-bank counts remain separately disclosed.
+        This cannot reverify a local model without opening Ollama, so the
+        report explicitly describes identities as the recorded generation
+        digests, not independently attested current model installations.
+        """
         current = _evidence_state(store)
         counts = {"twin": 0, "neutral": 0, "tie": 0}
         stale, unrated, total = 0, 0, 0
-        for r in self.db.execute(
-            "SELECT chosen,twin_option,training_digest,heldout_digest "
-            "FROM comparisons ORDER BY id"):
-            total += 1
-            if (r["training_digest"], r["heldout_digest"]) != current:
-                stale += 1
-            elif r["chosen"] is None:
-                unrated += 1
-            elif r["chosen"] == "tie":
-                counts["tie"] += 1
-            elif r["chosen"] == r["twin_option"]:
-                counts["twin"] += 1
-            else:
-                counts["neutral"] += 1
-        decisions = counts["twin"] + counts["neutral"]
-        # Historical ad-hoc archives do not have task-bank tables. Treat
-        # their preferences as exploratory, not preapproved-test evidence.
-        bank_ratings = 0
         has_bank = self.db.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' "
             "AND name='style_task_uses'").fetchone() is not None
-        if has_bank:
-            for r in self.db.execute(
-                "SELECT c.chosen,c.training_digest,c.heldout_digest "
-                "FROM style_task_uses u "
-                "JOIN comparisons c ON c.id=u.comparison_id"):
-                if (r["chosen"] is not None
-                        and (r["training_digest"], r["heldout_digest"]) == current):
-                    bank_ratings += 1
+        bank_case_ids = (
+            {int(row[0]) for row in self.db.execute(
+                "SELECT comparison_id FROM style_task_uses")}
+            if has_bank else set()
+        )
+        # Never export model tags/digests or owner prose. A short opaque
+        # fingerprint separates experiments run using different exact local
+        # model identities without disclosing their filenames or aliases.
+        cohorts: dict[tuple[str, str], dict] = {}
+        for r in self.db.execute(
+            "SELECT id,chosen,twin_option,training_digest,heldout_digest,"
+            "model_tag,model_digest FROM comparisons ORDER BY id"
+        ):
+            total += 1
+            if (r["training_digest"], r["heldout_digest"]) != current:
+                stale += 1
+                continue
+            if r["chosen"] is None:
+                unrated += 1
+                continue
+            key = (r["model_tag"], r["model_digest"])
+            if key not in cohorts:
+                cohorts[key] = {
+                    "twin": 0, "neutral": 0, "tie": 0,
+                    "bank": 0, "ad_hoc": 0,
+                }
+            group = cohorts[key]
+            if r["chosen"] == "tie":
+                outcome = "tie"
+            elif r["chosen"] == r["twin_option"]:
+                outcome = "twin"
+            else:
+                outcome = "neutral"
+            counts[outcome] += 1
+            group[outcome] += 1
+            group["bank" if r["id"] in bank_case_ids else "ad_hoc"] += 1
+
+        summaries = []
+        for key, group in cohorts.items():
+            non_ties = group["twin"] + group["neutral"]
+            opaque_id = hashlib.sha256(json.dumps(
+                key, separators=(",", ":")).encode("utf-8")).hexdigest()[:16]
+            summaries.append({
+                "cohort_id": opaque_id,
+                "valid_owner_ratings": sum(group[name] for name in counts),
+                "reviewed_task_bank_ratings": group["bank"],
+                "ad_hoc_exploratory_ratings": group["ad_hoc"],
+                "twin_preferred": group["twin"],
+                "neutral_preferred": group["neutral"],
+                "ties": group["tie"],
+                "twin_preference_non_tie_rate":
+                    group["twin"] / non_ties if non_ties else None,
+                "wilson_interval_95":
+                    _wilson_interval(group["twin"], non_ties)
+                    if non_ties else None,
+                "minimum_pilot_non_ties_reached": non_ties >= 5,
+            })
+        summaries.sort(key=lambda row: row["cohort_id"])
+        heterogeneous = len(summaries) > 1
+        non_ties = counts["twin"] + counts["neutral"]
+        rated = sum(counts.values())
+        bank_ratings = sum(row["reviewed_task_bank_ratings"] for row in summaries)
         return {
             "schema": 1, "kind": "blinded-owner-style-preference-pilot",
             "total_cases": total, "stale_cases": stale,
             "unrated_current_cases": unrated,
-            "valid_owner_ratings": sum(counts.values()),
+            "valid_owner_ratings": rated,
             "reviewed_task_bank_ratings": bank_ratings,
-            "ad_hoc_exploratory_ratings": sum(counts.values()) - bank_ratings,
+            "ad_hoc_exploratory_ratings": rated - bank_ratings,
             "twin_preferred": counts["twin"],
             "neutral_preferred": counts["neutral"],
             "ties": counts["tie"],
+            "model_cohort_count": len(summaries),
+            "model_cohorts": summaries,
+            "mixed_model_pooled_rate_suppressed": heterogeneous,
+            "model_digest_rechecked_during_report": False,
             "twin_preference_non_tie_rate":
-                counts["twin"] / decisions if decisions else None,
+                counts["twin"] / non_ties
+                if non_ties and not heterogeneous else None,
             "wilson_interval_95":
-                _wilson_interval(counts["twin"], decisions) if decisions else None,
-            "minimum_pilot_non_ties_reached": decisions >= 5,
+                _wilson_interval(counts["twin"], non_ties)
+                if non_ties and not heterogeneous else None,
+            "minimum_pilot_non_ties_reached":
+                any(row["minimum_pilot_non_ties_reached"] for row in summaries),
             "model_accuracy_or_identity_certified": False,
             "owner_text_in_report": False,
-            "limitations": "Owner-reported, blinded style preference only; "
-                           "no semantic leak audit, consciousness or identity proof."
+            "limitations": "Owner-reported blind preferences from recorded "
+                           "model cohorts only; no independent semantic leakage "
+                           "audit, current model attestation, consciousness or "
+                           "identity proof."
         }
-
 
 def create_comparison(store: ExperienceStore, task: str, *,
                       confirmed: bool = False, model_tag: str | None = None,
