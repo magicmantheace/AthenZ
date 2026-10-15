@@ -74,8 +74,9 @@ class PairedDecisionTests(unittest.TestCase):
 
     def evaluate(self, model=None, **kwargs):
         model = model or PairedModel()
-        return evaluate_paired_decisions(
-            self.store, model, split="test", limit=4, seed=19, **kwargs)
+        options = {"split": "test", "limit": 4, "seed": 19}
+        options.update(kwargs)
+        return evaluate_paired_decisions(self.store, model, **options)
 
     def test_paired_contingency_and_same_model_option_order(self):
         model = PairedModel()
