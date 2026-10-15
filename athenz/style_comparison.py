@@ -113,9 +113,24 @@ class ComparisonArchive:
         self.db.close()
 
     def save(self, *, task: str, options: tuple[str, str], twin_option: str,
-             model_tag: str, model_digest: str, evidence: tuple[str, str]) -> int:
+             model_tag: str, model_digest: str, evidence: tuple[str, str],
+             task_id: int | None = None) -> int:
         digest = hashlib.sha256(_normalized(task).encode("utf-8")).hexdigest()
         with self.db:
+            if task_id is not None:
+                # Review/consumption check and insertion are one transaction
+                # in the SAME private SQLite database as the task bank.
+                approved = self.db.execute(
+                    "SELECT status,task_digest,training_digest,heldout_digest "
+                    "FROM style_tasks WHERE id=?", (task_id,)).fetchone()
+                if (approved is None or approved["status"] != "approved"
+                        or approved["task_digest"] != digest
+                        or (approved["training_digest"],
+                            approved["heldout_digest"]) != evidence
+                        or self.db.execute(
+                            "SELECT 1 FROM style_task_uses WHERE task_id=?",
+                            (task_id,)).fetchone()):
+                    raise ValueError("Reviewed writing task changed or was used")
             cursor = self.db.execute(
                 """INSERT INTO comparisons
                 (task,task_digest,option_a,option_b,twin_option,model_tag,
@@ -123,6 +138,10 @@ class ComparisonArchive:
                  VALUES (?,?,?,?,?,?,?,?,?,?)""",
                 (task.strip(), digest, *options, twin_option, model_tag,
                  model_digest, *evidence, utc_now()))
+            if task_id is not None:
+                self.db.execute(
+                    "INSERT INTO style_task_uses(task_id,comparison_id) "
+                    "VALUES (?,?)", (task_id, cursor.lastrowid))
         return int(cursor.lastrowid)
 
     def show(self, case_id: int) -> dict:
