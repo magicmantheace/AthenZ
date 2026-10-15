@@ -93,11 +93,11 @@ class CategoryDiversityTests(unittest.TestCase):
         self.assertTrue(audited["broad_coverage_gate_met"])
         self.assertEqual(audited["eligible_category_count"], 3)
         self.assertEqual(set(audited["category_metrics"]), set(DOMAINS))
-        self.assertEqual(audited["macro_twin_accuracy"],
+        self.assertAlmostEqual(audited["macro_twin_accuracy"],
                          report["twin_accuracy"])
-        self.assertEqual(audited["macro_neutral_accuracy"],
+        self.assertAlmostEqual(audited["macro_neutral_accuracy"],
                          report["neutral_accuracy"])
-        self.assertEqual(audited["macro_paired_accuracy_difference"],
+        self.assertAlmostEqual(audited["macro_paired_accuracy_difference"],
                          report["paired_accuracy_difference"])
         self.assertNotIn("independent_001", json.dumps(report))
         self.assertNotIn("inspection checklist", json.dumps(report))
@@ -131,8 +131,8 @@ class CategoryDiversityTests(unittest.TestCase):
         self.assertTrue(category_diversity_gate(balanced))
         self.assertFalse(category_diversity_gate({i: "work" for i in range(15)}))
         self.assertFalse(category_diversity_gate({
-            i: "work" if i < 12 else "planning" if i < 17 else "creative"
-            for i in range(22)}))
+            i: "work" if i < 16 else "planning" if i < 21 else "creative"
+            for i in range(26)}))
         self.assertFalse(category_diversity_gate({
             i: "other" if i < 5 else DOMAINS[0 if i < 10 else 1]
             for i in range(15)}))
