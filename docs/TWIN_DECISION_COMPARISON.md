@@ -23,6 +23,8 @@ every case before scoring. Never evaluate a training-split case.
 athenz-decision-compare --split calibration --limit 12 --confirm
 # Only after the calibration plan is fixed and frozen:
 athenz-decision-compare --split test --limit 30 --confirm
+# Optional exploratory uncertainty measurement, same rule for both arms:
+athenz-decision-compare --split calibration --limit 30 --allow-abstain --confirm
 ```
 
 Optional `--home /private/profile`, `--model installed-local-tag`
@@ -32,6 +34,12 @@ The local model's Ollama manifest digest and AthenZ's reviewed active route
 are checked before and after each generation. Calls use loopback only; no
 cloud LLM, external write, scheduled execution or model fine-tuning.
 
+Abstention is an optional, *uncalibrated* model self-assessment; do not
+interpret answering more often as being more correct. Fix the evaluation
+settings using calibration data before touching a final test split. The
+baseline keeps the same lack of owner evidence, and both arms share the
+ABSTAIN rule when enabled. Default runs remain choice-only.
+
 The report contains **counts only**, source fingerprints and the local model
 tag. It includes:
 
@@ -40,8 +48,15 @@ tag. It includes:
 - Invalid/unparseable predictions by arm
 - The paired **accuracy difference** in percentage-point units (a fraction
   in the JSON), and chance expected from number of options
-- Descriptive 95% Wilson intervals for each arm (not a paired significance
-  or psychological validity test)
+- Descriptive 95% Wilson intervals for each arm
+- Discordant pair count, the Twin win fraction when the arms differ, its
+  descriptive Wilson interval and a two-sided exact McNemar/binomial p-value
+  for equal discordant win rates. The p-value is null if arms never differ,
+  exploratory, and assumes independent held-out cases.
+- With --allow-abstain, both arms may decline unsupported predictions. Those
+  count as not-correct overall, but separately from malformed outputs. Report
+  coverage and accuracy among answered cases; zero answered means null.
+  Invalid outputs also reduce coverage, but are not intentional abstentions.
 
 No per-case scenario, correct answer, rationale, model response or choice
 letter is returned or persisted. Results should be kept private because the
@@ -66,7 +81,9 @@ errors or adversarially forged approvals.
 
 A reproducible Twin advantage over neutral on unseen, consented owner
 decisions would be **evidence of personalization value** in a narrow set
-of test cases. It does **not** demonstrate general intelligence, the
+of test cases. The exact paired test does not repair correlated tasks,
+small samples, post-hoc threshold tuning, selection bias or unverified labels.
+It does **not** demonstrate general intelligence, the
 owner's consciousness, a mind transfer or an accurate digital copy of
 the person. Decisions may vary over time, and owner-labeled examples may
 contain uncertainty. Report sample size, options per question, failure

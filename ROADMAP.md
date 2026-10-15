@@ -129,7 +129,10 @@ See [docs/TWIN_CONTEXT.md](docs/TWIN_CONTEXT.md).
   individual owner choices or rationales.
 - [ ] Freeze independent real-owner held-out questions and report verified
   on-device Twin improvement over a no-personalization baseline.
-- [ ] Add confidence-calibrated abstention, semantic leakage evaluation,
+- [x] Add opt-in explicit abstention, separate malformed responses from
+  deliberate uncertainty, and report selective accuracy, coverage and an
+  exact paired McNemar test with synthetic unit coverage.
+- [ ] Calibrate abstention on real owner-labelled cases; add semantic leakage,
   topic-family generalization and owner decision variability benchmarks.
 
 Details: [docs/TWIN_DECISION_COMPARISON.md](docs/TWIN_DECISION_COMPARISON.md).

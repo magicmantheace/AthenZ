@@ -92,6 +92,12 @@ class PairedDecisionTests(unittest.TestCase):
         self.assertEqual(report["twin_accuracy"], 0.5)
         self.assertEqual(report["neutral_accuracy"], 0.5)
         self.assertEqual(report["paired_accuracy_difference"], 0.0)
+        self.assertEqual(report["discordant_pairs"], 2)
+        self.assertEqual(report["twin_wins_given_discordance"], 0.5)
+        self.assertEqual(report["exact_mcnemar_two_sided_p"], 1.0)
+        self.assertEqual(len(report["twin_wins_given_discordance_interval_95"]), 2)
+        self.assertEqual(report["twin_coverage"], 1.0)
+        self.assertEqual(report["neutral_coverage"], 1.0)
         self.assertEqual(report["chance_expected"], 0.5)
         self.assertEqual(report["twin_invalid_predictions"], 0)
         self.assertEqual(report["neutral_invalid_predictions"], 0)
@@ -176,6 +182,30 @@ class PairedDecisionTests(unittest.TestCase):
         self.assertEqual(report["twin_correct"], 0)
         self.assertEqual(report["neutral_correct"], 0)
 
+    def test_explicit_abstention_is_separate_from_invalid_predictions(self):
+        model = PairedModel(response='{"choice_letter":"ABSTAIN"}')
+        result = self.evaluate(model, allow_abstain=True)
+        self.assertEqual(result["model_requests"], 8)
+        self.assertEqual(result["twin_abstentions"], 4)
+        self.assertEqual(result["neutral_abstentions"], 4)
+        self.assertEqual(result["twin_invalid_predictions"], 0)
+        self.assertEqual(result["neutral_invalid_predictions"], 0)
+        self.assertEqual(result["twin_coverage"], 0.0)
+        self.assertIsNone(result["twin_answered_accuracy"])
+        self.assertIsNone(result["exact_mcnemar_two_sided_p"])
+        self.assertTrue(all("ABSTAIN" in call[0][0]["content"]
+                            or "ABSTAIN" in call[0][1]["content"]
+                            for call in model.calls))
+        self.assertNotIn("PRIVATE_GOLD_REASON", str(model.calls))
+
+    def test_abstain_is_not_accepted_without_opt_in(self):
+        result = self.evaluate(PairedModel(response='{"choice_letter":"ABSTAIN"}'))
+        self.assertEqual(result["twin_abstentions"], 0)
+        self.assertEqual(result["neutral_abstentions"], 0)
+        self.assertEqual(result["twin_invalid_predictions"], 4)
+        self.assertEqual(result["twin_coverage"], 0.0)
+        self.assertFalse(result["allow_abstain"])
+
     def test_preflight_rejects_late_case_leak_before_any_model_call(self):
         row = self.store.db.execute(
             "SELECT scenario FROM decisions WHERE id=?", (self.ids[-1],)).fetchone()
@@ -232,7 +262,8 @@ class PairedDecisionTests(unittest.TestCase):
     def test_invalid_scope_refused_before_model_call(self):
         model = PairedModel()
         for options in ({"split":"train"}, {"split":""}, {"limit":0},
-                        {"limit":1001}, {"seed":-1}, {"seed":True}):
+                        {"limit":1001}, {"seed":-1}, {"seed":True},
+                        {"allow_abstain": 1}):
             with self.subTest(options=options):
                 with self.assertRaises(ValueError):
                     self.evaluate(model, **options)

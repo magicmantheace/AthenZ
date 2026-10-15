@@ -49,9 +49,11 @@ accuracy**.
 `athenz-decision-compare --split calibration --limit 12 --confirm`
 compares held-out owner choices using the **same local Ollama model** with
 approved Twin evidence versus a neutral no-personalization baseline. It
-reports aggregate Twin/neutral accuracy, disagreements, chance expectation
-and descriptive uncertainty without returning private choices or model
-responses. [Method and limitations](docs/TWIN_DECISION_COMPARISON.md).
+reports aggregate Twin/neutral accuracy, an exact matched-pairs
+comparison, disagreements, chance expectation and descriptive uncertainty.
+Use --allow-abstain on calibration cases to measure explicit uncertainty,
+answer coverage and accuracy among answered cases; abstentions are distinct
+from malformed responses. No private choices or model responses are returned. [Method and limitations](docs/TWIN_DECISION_COMPARISON.md).
 A real on-device held-out improvement has not yet been demonstrated.
 
 ## Setup
