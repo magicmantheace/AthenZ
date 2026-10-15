@@ -25,7 +25,8 @@ from .family_audit import (
     CategoryScores, FamilyAudit, category_diversity_gate, create_family_template,
 )
 from .paired_stats import (
-    ConfidenceAccumulator, exact_paired_sign_test, discordant_win_interval,
+    ChoiceStabilityCounter, ConfidenceAccumulator,
+    exact_paired_sign_test, discordant_win_interval,
 )
 from .store import IdentityStore
 
@@ -89,7 +90,8 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
                               allow_abstain: bool = False,
                               score_confidence: bool = False,
                               family_audit: FamilyAudit | None = None,
-                              require_category_diversity: bool = False) -> dict:
+                              require_category_diversity: bool = False,
+                              stability_trials: int = 1) -> dict:
     """Compare personalized vs neutral predictions without exposing gold data.
 
     Optional model_guard pins an installed local model's digest and reviewed
@@ -101,6 +103,8 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
             or type(allow_abstain) is not bool
             or type(score_confidence) is not bool
             or type(require_category_diversity) is not bool
+            or type(stability_trials) is not int or not 1 <= stability_trials <= 3
+            or (stability_trials > 1 and limit * stability_trials > 300)
             or (require_category_diversity and family_audit is None)
             or (allow_abstain and score_confidence)):
         raise ValueError("Use a held-out split and bounded limit/seed")
@@ -117,6 +121,14 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
     if require_category_diversity and not category_diversity_gate(categories):
         raise ValueError("Reviewed decision categories lack broad independent coverage")
     category_scores = CategoryScores()
+    stability = {"twin": ChoiceStabilityCounter(),
+                 "neutral": ChoiceStabilityCounter()}
+    # Each repeat varies both the deterministic local model seed and the
+    # shuffled option ordering; option permutations can coincide by chance.
+    trial_seeds = tuple(
+        (seed + i * 1_000_003) % (2 ** 32)
+        for i in range(stability_trials)
+    )
 
     def verify_evidence(case: list | None = None) -> None:
         if (_fingerprint(_heldout_rows(store, split, limit)) != heldout_sha
@@ -138,8 +150,9 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
     # Preflight ALL cases before any private held-out scenario is sent to a
     # model, so an overlap in a late case cannot invalidate earlier calls.
     for case in rows:
-        _heldout_prompt_messages(store, case, seed)
-        verify_evidence(case)
+        for trial_seed in trial_seeds:
+            _heldout_prompt_messages(store, case, trial_seed)
+            verify_evidence(case)
     verify_evidence()
 
     counts = {"both_correct": 0, "twin_only": 0,
@@ -150,69 +163,87 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
                    "neutral": ConfidenceAccumulator()}
     expected_chance = 0.0
     for case in rows:
-        verify_evidence(case)
-        personalized, options = _heldout_prompt_messages(store, case, seed)
-        if (len(personalized) != 4 or personalized[-1]["role"] != "user"
-                or len(personalized[-1]["content"]) > 18000):
-            raise ValueError("Paired evaluation message format changed")
-        if allow_abstain:
-            personalized[1] = {"role": "system", "content":
-                               _ABSTAIN_RULE + " Use approved TRAINING evidence only."}
-        elif score_confidence:
-            personalized[1] = {"role": "system", "content":
-                               _CONFIDENCE_RULE + " Use approved TRAINING evidence only."}
-        neutral_policy = _NEUTRAL_POLICY
-        if allow_abstain or score_confidence:
-            neutral_policy = ("You are an unpersonalized decision predictor "
-                              "without any owner profile or personal history. "
-                              + (_CONFIDENCE_RULE if score_confidence else
-                                 _ABSTAIN_RULE))
-        neutral = [
-            {"role": "system", "content": neutral_policy},
-            {"role": "user", "content": personalized[-1]["content"]},
-        ]
-        gold = _LETTERS[options.index(case[2])]
-        # Deterministic per-case arm ordering reduces systematic call-order
-        # effects. Both calls use the *same* seed and exact option order.
-        twin_first = bool(random.Random(seed + case[0] * 997).getrandbits(1))
-        order = ("twin", "neutral") if twin_first else ("neutral", "twin")
-        predictions: dict[str, str] = {}
-        for arm in order:
+        trial_semantics = {"twin": [], "neutral": []}
+        for trial_index, trial_seed in enumerate(trial_seeds):
             verify_evidence(case)
-            messages = personalized if arm == "twin" else neutral
-            try:
-                raw = model.generate(
-                    messages, json_mode=True, temperature=0.0, seed=seed)
-            except Exception:
-                # Local inference may echo private prompts in the exception.
-                raise ValueError("Local paired decision inference failed") from None
-            verify_evidence(case)
-            predicted = _choice(raw, len(options), allow_abstain=allow_abstain)
-            probability = _reported_confidence(raw) if score_confidence else None
-            if score_confidence and probability is None:
-                # An absent, nonnumeric, nonfinite, or malformed probability
-                # invalidates the entire prediction, not just its confidence.
-                predicted = ""
-            predictions[arm] = predicted
-            if predicted == "ABSTAIN":
-                abstentions[arm] += 1
-            elif not predicted:
-                invalid[arm] += 1
+            personalized, options = _heldout_prompt_messages(
+                store, case, trial_seed)
+            if (len(personalized) != 4 or personalized[-1]["role"] != "user"
+                    or len(personalized[-1]["content"]) > 18000):
+                raise ValueError("Paired evaluation message format changed")
+            if allow_abstain:
+                personalized[1] = {"role": "system", "content":
+                                   _ABSTAIN_RULE + " Use approved TRAINING evidence only."}
             elif score_confidence:
-                calibration[arm].add(probability, correct=(predicted == gold))
-        t = predictions["twin"] == gold
-        n = predictions["neutral"] == gold
-        if t and n:
-            counts["both_correct"] += 1
-        elif t:
-            counts["twin_only"] += 1
-        elif n:
-            counts["neutral_only"] += 1
-        else:
-            counts["both_wrong"] += 1
-        if family_audit is not None:
-            category_scores.add(categories[case[0]], twin_correct=t, neutral_correct=n)
-        expected_chance += 1.0 / len(options)
+                personalized[1] = {"role": "system", "content":
+                                   _CONFIDENCE_RULE + " Use approved TRAINING evidence only."}
+            neutral_policy = _NEUTRAL_POLICY
+            if allow_abstain or score_confidence:
+                neutral_policy = ("You are an unpersonalized decision predictor "
+                                  "without any owner profile or personal history. "
+                                  + (_CONFIDENCE_RULE if score_confidence else
+                                     _ABSTAIN_RULE))
+            neutral = [
+                {"role": "system", "content": neutral_policy},
+                {"role": "user", "content": personalized[-1]["content"]},
+            ]
+            gold = _LETTERS[options.index(case[2])]
+            twin_first = bool(random.Random(
+                trial_seed + case[0] * 997).getrandbits(1))
+            order = ("twin", "neutral") if twin_first else ("neutral", "twin")
+            predictions: dict[str, str] = {}
+            for arm in order:
+                verify_evidence(case)
+                messages = personalized if arm == "twin" else neutral
+                try:
+                    raw = model.generate(
+                        messages, json_mode=True, temperature=0.0,
+                        seed=trial_seed)
+                except Exception:
+                    # Inference exceptions may echo private evidence.
+                    raise ValueError("Local paired decision inference failed") from None
+                verify_evidence(case)
+                predicted = _choice(
+                    raw, len(options), allow_abstain=allow_abstain)
+                probability = (_reported_confidence(raw)
+                               if score_confidence else None)
+                if score_confidence and probability is None:
+                    predicted = ""
+                predictions[arm] = predicted
+                # Compare the *option text*, not the shuffled letter. The
+                # private per-case selection is discarded after this case.
+                if stability_trials > 1:
+                    semantic = (options[_LETTERS.index(predicted)]
+                                if predicted in _LETTERS else predicted)
+                    trial_semantics[arm].append(semantic)
+                # Accuracy and inferential statistics must use independent
+                # held-out cases, never repeated trials as extra samples.
+                if trial_index == 0:
+                    if predicted == "ABSTAIN":
+                        abstentions[arm] += 1
+                    elif not predicted:
+                        invalid[arm] += 1
+                    elif score_confidence:
+                        calibration[arm].add(
+                            probability, correct=(predicted == gold))
+            if trial_index == 0:
+                t = predictions["twin"] == gold
+                n = predictions["neutral"] == gold
+                if t and n:
+                    counts["both_correct"] += 1
+                elif t:
+                    counts["twin_only"] += 1
+                elif n:
+                    counts["neutral_only"] += 1
+                else:
+                    counts["both_wrong"] += 1
+                if family_audit is not None:
+                    category_scores.add(
+                        categories[case[0]], twin_correct=t, neutral_correct=n)
+                expected_chance += 1.0 / len(options)
+        if stability_trials > 1:
+            stability["twin"].add_choices(trial_semantics["twin"])
+            stability["neutral"].add_choices(trial_semantics["neutral"])
 
     _reject_overlapping_decision_splits(store)
     _reject_repeated_heldout_scenarios(store, split, limit)
@@ -224,13 +255,22 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
     twin_answered = total - abstentions["twin"] - invalid["twin"]
     neutral_answered = total - abstentions["neutral"] - invalid["neutral"]
     return {
-        "schema": 4,
+        "schema": 5,
         "kind": "same-model-paired-twin-decision-evaluation",
         "split": split,
         "model": getattr(model, "model", "unknown"),
         "seed": seed,
         "total": total,
-        "model_requests": 2 * total,
+        "model_requests": 2 * total * stability_trials,
+        "stability_trials": stability_trials,
+        "stability": ({
+            "enabled": True,
+            "trials_per_case": stability_trials,
+            "seed_step": 1_000_003,
+            "twin": stability["twin"].report(),
+            "neutral": stability["neutral"].report(),
+            "repeated_trials_count_as_independent_cases": False,
+        } if stability_trials > 1 else {"enabled": False}),
         "both_correct": counts["both_correct"],
         "twin_only_correct": counts["twin_only"],
         "neutral_only_correct": counts["neutral_only"],
@@ -282,7 +322,9 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
                        "confidence. Confidence scores are uncalibrated model "
                        "claims and binary chosen-answer Brier/ECE estimates "
                        "are exploratory; a held-out owner-device evaluation "
-                       "is still required. Abstention coverage is exploratory.",
+                       "is still required. Repeated model trials are not "
+                       "independent test cases and stability is not owner "
+                       "fidelity. Abstention coverage is exploratory.",
     }
 
 
@@ -297,6 +339,10 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--model", help="Explicit preinstalled local Ollama model")
     parser.add_argument("--allow-abstain", action="store_true",
                         help="Allow both models to decline unsupported decisions")
+    parser.add_argument("--stability-trials", type=int, default=1,
+                        choices=(1, 2, 3),
+                        help="Repeat each case with varied deterministic seeds "
+                             "(2 or 3 trials; limit times trials <= 300)")
     parser.add_argument("--score-confidence", action="store_true",
                         help="Request self-reported chosen-answer probabilities for calibration analysis")
     parser.add_argument("--family-audit", action="store_true",
@@ -354,7 +400,8 @@ def main(argv: list[str] | None = None) -> None:
                 allow_abstain=args.allow_abstain,
                 score_confidence=args.score_confidence,
                 family_audit=audit,
-                require_category_diversity=args.require_category_diversity)
+                require_category_diversity=args.require_category_diversity,
+                stability_trials=args.stability_trials)
         except (ValueError, RoutingError, OSError):
             # Never report exception details containing private heldout text.
             raise SystemExit("Paired decision evaluation refused; check "
