@@ -81,6 +81,46 @@ letter is returned or persisted. Results should be kept private because the
 aggregate still reflects owner-specific preferences. No model action or
 training promotion is authorized by a benchmark score.
 
+## Independent owner-reviewed decision families (optional)
+
+The lexical preflight cannot detect meaning-preserving paraphrases. To add
+**human-reviewed semantic grouping**, first run:
+
+```sh
+athenz-decision-compare --family-template --confirm
+```
+
+This creates an owner-only `decision-family-audit.json` under the local private
+AthenZ home directory. It contains the **private original scenario texts** for
+owner review, SHA-256 fingerprints, current splits, empty `family` and
+`category` labels. Never commit, upload, or share this file. Assign the same
+lowercase family identifier to every scenario representing the same underlying
+decision, even if phrased differently, and choose a category from `work`,
+`relationships`, `planning`, `creative`, or `other`.
+Use distinct family identifiers for independent scenarios. The template
+is created **only once**; after adding or revoking approved decisions,
+the owner must review and regenerate a replacement private manifest.
+
+To enforce the completed review before a run:
+
+```sh
+athenz-decision-compare --split test --limit 100 --family-audit --confirm
+```
+
+All approved decisions across train, calibration and test must have complete,
+unchanged manifest entries; **cross-split family reuse** or **two held-out
+decisions sharing one family** fails closed before any inference.
+The input file and all approved decision revisions are checked for changes
+before and after every model call. The model never sees the category, family
+identifier, held-out answer, or reviewer annotations.
+
+A private aggregate report includes category accuracy only for categories
+with **at least five** selected cases. Smaller categories and all raw owner
+family names are suppressed. The audit is *optional* for backwards
+compatibility and has no claim to automatic semantic understanding:
+misclassified relationships, external pretraining contamination, and
+non-independent decisions can still survive manual review.
+
 ## Fail-closed conditions
 
 Before the first inference, scan all selected held-out scenarios for strong
