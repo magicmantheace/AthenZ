@@ -116,6 +116,26 @@ retrieval engineering, not validated personality fidelity or weight training.
 
 See [docs/TWIN_CONTEXT.md](docs/TWIN_CONTEXT.md).
  
+### 2026-10-14 — Paired held-out Twin decision prediction
+
+- [x] Reuse approved test/calibration decision scenarios and exact shuffled
+  option order for both the Twin-personalized and unpersonalized model arms.
+- [x] Preflight every held-out case for cross-split leakage, repeated cases,
+  malformed options and owner-reference collisions before local inference.
+- [x] Check local model identity and complete approved source fingerprints
+  before and after each inference; drop results on any consent/model drift.
+- [x] Return aggregate paired contingency, Twin/neutral accuracy, invalid
+  predictions, chance baseline and descriptive intervals without revealing
+  individual owner choices or rationales.
+- [ ] Freeze independent real-owner held-out questions and report verified
+  on-device Twin improvement over a no-personalization baseline.
+- [ ] Add confidence-calibrated abstention, semantic leakage evaluation,
+  topic-family generalization and owner decision variability benchmarks.
+
+Details: [docs/TWIN_DECISION_COMPARISON.md](docs/TWIN_DECISION_COMPARISON.md).
+Synthetic passing tests verify data isolation and algorithm behavior,
+**not** real-person decision fidelity or model success.
+
 ### 2026-10-14 — Independent Twin writing-style evaluation groundwork
 
 - [x] Versioned private schema v6 partitions owner-reviewed writing into
