@@ -40,11 +40,16 @@ class FamilyAuditTests(unittest.TestCase):
             "Review", "Prefer review", source="synthetic:train", approved=True,
             split="train", options=["Review", "Skip"])
         self.heldout = []
-        for i in range(5):
+        scenarios = (
+            "When decorating a fictional greenhouse, should the panels be translucent?",
+            "For a hiking route in a made-up canyon, how should landmarks be marked?",
+            "Which optical filter should a model telescope use for a dim nebula?",
+            "How should an imaginary orchestra schedule rehearsals for brass sections?",
+            "During a simulated ocean cleanup, how should floating debris be categorized?",
+        )
+        for scenario in scenarios:
             self.heldout.append(self.store.add_decision(
-                f"For independent synthetic board question {i} about an imaginary action "
-                f"with object {i}, which outcome would be chosen?",
-                "Option one", "Synthetic only", source="synthetic:owner",
+                scenario, "Option one", "Synthetic only", source="synthetic:owner",
                 approved=True, split="test", options=["Option one", "Option two"]))
 
     def manifest(self, *, category="work"):
@@ -92,7 +97,7 @@ class FamilyAuditTests(unittest.TestCase):
                          report["twin_correct"])
         self.assertEqual(len(model.calls), 10)
         self.assertNotIn("case_001", json.dumps(report))
-        self.assertNotIn("imaginary action", json.dumps(report))
+        self.assertNotIn("fictional greenhouse", json.dumps(report))
         self.assertNotIn("case_001", str(model.calls))
         self.assertFalse(audit["semantic_independence_certified"])
 
