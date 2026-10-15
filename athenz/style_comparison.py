@@ -223,10 +223,15 @@ class ComparisonArchive:
 def create_comparison(store: ExperienceStore, task: str, *,
                       confirmed: bool = False, model_tag: str | None = None,
                       client_factory=None, digest_fn=None,
-                      route_fn=None, chooser=None) -> int:
+                      route_fn=None, chooser=None, task_id: int | None = None,
+                      task_guard=None) -> int:
     """Generate both arms before saving; no partial result after model failure."""
     if not confirmed:
         raise ValueError("Owner confirmation required before local inference")
+    if task_id is not None and task_guard is None:
+        raise ValueError("Reviewed style task requires a private task guard")
+    if task_guard is not None:
+        task_guard()
     _validate_task(store, task)
     from .runtime import checked_active_tag, model_digest
     route = route_fn or checked_active_tag
@@ -239,6 +244,13 @@ def create_comparison(store: ExperienceStore, task: str, *,
     model_sha = digest(chosen_tag)
     model = (client_factory or (lambda tag: OllamaClient(model=tag)))(chosen_tag)
     twin_messages = build_messages(store, task, mode="twin")
+    # A concurrent consent or task-review change must not get a stale
+    # personalized prompt sent to the local model.
+    if task_guard is not None:
+        task_guard()
+    if (_evidence_state(store) != before or route(store) != active_tag
+            or digest(chosen_tag) != model_sha):
+        raise ValueError("Source or local model changed before model inference")
     neutral_messages = [
         {"role": "system", "content": _BASELINE_POLICY},
         {"role": "user", "content": task.strip()}]
@@ -248,6 +260,8 @@ def create_comparison(store: ExperienceStore, task: str, *,
     except Exception:
         # A local model may echo a private prompt in an exception string.
         raise ValueError("Local blinded comparison inference failed") from None
+    if task_guard is not None:
+        task_guard()
     if (_evidence_state(store) != before or route(store) != active_tag
             or digest(chosen_tag) != model_sha):
         raise ValueError("Source or local model changed during blinded comparison")
@@ -255,6 +269,8 @@ def create_comparison(store: ExperienceStore, task: str, *,
         twin = model.generate(twin_messages, temperature=0.3, seed=11)
     except Exception:
         raise ValueError("Local blinded comparison inference failed") from None
+    if task_guard is not None:
+        task_guard()
     if (_evidence_state(store) != before or route(store) != active_tag
             or digest(chosen_tag) != model_sha):
         raise ValueError("Source or local model changed during blinded comparison")
@@ -268,13 +284,16 @@ def create_comparison(store: ExperienceStore, task: str, *,
     try:
         # Recheck after opening the separate private archive: the source can
         # be revoked while SQLite is establishing the comparison database.
+        if task_guard is not None:
+            task_guard()
         if (_evidence_state(store) != before or route(store) != active_tag
                 or digest(chosen_tag) != model_sha):
             raise ValueError("Source or local model changed before comparison save")
         try:
             return archive.save(
                 task=task, options=options, twin_option="A" if twin_first else "B",
-                model_tag=chosen_tag, model_digest=model_sha, evidence=before)
+                model_tag=chosen_tag, model_digest=model_sha, evidence=before,
+                task_id=task_id)
         except sqlite3.IntegrityError:
             raise ValueError("This normalized writing task has already been compared") from None
     finally:
