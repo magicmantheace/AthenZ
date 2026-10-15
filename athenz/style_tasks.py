@@ -104,6 +104,23 @@ class StyleTaskBank:
         if updated.rowcount != 1:
             raise ValueError("Task changed during review")
 
+    def delete(self, task_id: int, *, confirmed: bool = False) -> None:
+        """Explicitly erase a source task and its derived comparison pair."""
+        if not confirmed:
+            raise ValueError("Owner confirmation required to forget a private task")
+        self._get(task_id)
+        with self.db:
+            # The comparison includes the raw owner-authored task. Delete
+            # it before the original to avoid retained private derivatives.
+            self.db.execute(
+                "DELETE FROM comparisons WHERE id IN "
+                "(SELECT comparison_id FROM style_task_uses WHERE task_id=?)",
+                (task_id,))
+            updated = self.db.execute(
+                "DELETE FROM style_tasks WHERE id=?", (task_id,))
+            if updated.rowcount != 1:
+                raise ValueError("Private writing task changed during deletion")
+
     def summary(self, store: ExperienceStore) -> dict:
         evidence = _evidence_state(store)
         result = {
