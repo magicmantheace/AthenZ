@@ -30,6 +30,7 @@ athenz-conflicts = "athenz.conflict_review:main"
 athenz-inference-check = "athenz.inference_readiness:main"
 athenz-voice = "athenz.voice:main"
 athenz-style-compare = "athenz.style_comparison:main"
+athenz-decision-compare = "athenz.paired_decisions:main"
 
 [tool.setuptools.packages.find]
 include = ["athenz*"]
