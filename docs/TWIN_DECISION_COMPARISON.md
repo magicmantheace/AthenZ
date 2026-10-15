@@ -126,7 +126,28 @@ identifier, held-out answer, or reviewer annotations.
 
 A private aggregate report includes category accuracy only for categories
 with **at least five** selected cases. Smaller categories and all raw owner
-family names are suppressed. The audit is *optional* for backwards
+family names are suppressed. With at least three eligible categories, a
+**macro-averaged accuracy for both arms** and its difference weight every
+represented category equally, rather than allowing the largest topic to
+dominate an overall score.
+
+For an explicit broad-coverage evaluation, run:
+
+```sh
+athenz-decision-compare --split test --family-audit --require-category-diversity --confirm
+```
+
+This is an opt-in, **fail-closed pre-inference gate**: at least 15 independently
+reviewed held-out cases spanning **three or more non-`other` categories**,
+with **at least five cases per represented category** and **no category above
+60%** of the selected sample. A sparse category fails the gate rather than
+silently disappearing from the analysis. The extra study-design requirement
+requires `--family-audit` and can also be used on the calibration split.
+Default, choice-only and owner-review workflows are unchanged.
+
+Category macro statistics are descriptive; they neither validate the owner's
+labels nor turn correlated or sparse samples into independent evidence.
+ The audit is *optional* for backwards
 compatibility and has no claim to automatic semantic understanding:
 misclassified relationships, external pretraining contamination, and
 non-independent decisions can still survive manual review.
