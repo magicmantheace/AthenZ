@@ -224,11 +224,18 @@ def create_comparison(store: ExperienceStore, task: str, *,
         {"role": "system", "content": _BASELINE_POLICY},
         {"role": "user", "content": task.strip()}]
     # Never inspect, retrieve, display or send withheld test writing here.
-    neutral = model.generate(neutral_messages, temperature=0.3, seed=11)
+    try:
+        neutral = model.generate(neutral_messages, temperature=0.3, seed=11)
+    except Exception:
+        # A local model may echo a private prompt in an exception string.
+        raise ValueError("Local blinded comparison inference failed") from None
     if (_evidence_state(store) != before or route(store) != active_tag
             or digest(chosen_tag) != model_sha):
         raise ValueError("Source or local model changed during blinded comparison")
-    twin = model.generate(twin_messages, temperature=0.3, seed=11)
+    try:
+        twin = model.generate(twin_messages, temperature=0.3, seed=11)
+    except Exception:
+        raise ValueError("Local blinded comparison inference failed") from None
     if (_evidence_state(store) != before or route(store) != active_tag
             or digest(chosen_tag) != model_sha):
         raise ValueError("Source or local model changed during blinded comparison")
