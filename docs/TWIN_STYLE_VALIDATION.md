@@ -35,3 +35,13 @@ Next milestone: implement an explicitly consented, **blinded owner style
 comparison** evaluating outputs on held-out writing tasks, with strong
 literal and semantic contamination checks. Only owner judgments on unseen
 materials should be reported as actual Twin style fidelity.
+
+
+### Additional lexical independence protection
+
+Owner review rejects near-duplicate passages *across* writing sample splits,
+as well as exact normalized copies. Separate blind-comparison task preflight
+also rejects substantial overlap with either approved train writing (which
+would favor memorization) or protected test/calibration writing (which
+would contaminate the holdout). The screen is lexical, not semantic; avoid
+paraphrased copies and personally review task independence before a pilot.

@@ -11,6 +11,7 @@ import re
 import unicodedata
 from contextlib import nullcontext
 from .store import IdentityStore, STATES, utc_now
+from .style_overlap import strongly_overlaps
 
 
 def _writing_split_key(text: str) -> str:
@@ -74,8 +75,11 @@ class LearningStore(IdentityStore):
                    WHERE status='approved' AND split<>? AND id<>?""",
                 (row['split'], item_id)
             ):
-                if _writing_split_key(other['text']) == normalized:
-                    raise ValueError('Duplicate writing sample in a separate evaluation split')
+                if (_writing_split_key(other['text']) == normalized
+                        or strongly_overlaps(row['text'], other['text'])):
+                    raise ValueError(
+                        'Duplicate writing sample in a separate evaluation split '
+                        '(exact or near-copy)')
         if table == 'experiences' and state == 'approved':
             if row['outcome'] != 'test_pass':
                 raise ValueError('Cannot approve a failed test as a successful lesson')

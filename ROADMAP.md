@@ -206,6 +206,27 @@ The reviewed task bank improves repeatability and provenance but is **not**
 a psychometric assessment, semantic-contamination guarantee, or proof of
 a conscious/digitally continuous self.
 
+### 2026-10-15 — Stronger owner Twin evaluation integrity
+
+- [x] Reject substantial lexical near-copies of either held-out style evidence
+  **or approved training examples** before independent writing-task review
+  and before model inference, without exporting example text or matches.
+- [x] Reject reviewed style examples that closely overlap a different split,
+  while keeping all approval and consent checks owner controlled.
+- [x] Separate local model tag/digest cohorts in blinded style reports and
+  suppress pooled win rates and intervals across differing model versions;
+  continue reporting privacy-safe counts and stale/unrated records.
+- [x] Add synthetic tests for Unicode normalization, long quoted passages,
+  near-copy substitutions, task bank review, cross-split approval, model
+  upgrades, mixed-cohort reports and stale evidence.
+- [ ] Run a consented, adequately sized owner-rated pilot on the target PC.
+  Include real model lineage, bias awareness and separate accuracy/abstention
+  measures; never confuse preference counts with owner identity accuracy.
+- [ ] Expand beyond lexical overlap to a reviewed semantic holdout audit and
+  independently evaluated task diversity (still no claim of consciousness).
+
+See [docs/TWIN_STYLE_COMPARISON.md](docs/TWIN_STYLE_COMPARISON.md).
+
 ## Next critical path
 1. Record and evaluate user decisions with reproducible train/test splits (#3).
 2. Complete v0.3 event ledger with replay-safe checkpoints, indexed evidence,

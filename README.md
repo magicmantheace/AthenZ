@@ -26,6 +26,13 @@ calling a model. It does **not** measure real Twin personality similarity.
 
 ## Private blinded Twin writing-style pilot
 
+The Twin evaluation preflight now blocks substantial lexical near-copies
+of approved writing samples. Its aggregate report separates ratings by the
+**exact model identity used at generation**, suppressing mixed-version
+pooled preference rates. These checks improve experimental integrity but
+are not semantic leakage detection or proof of personality fidelity.
+
+
 `athenz-style-compare` runs an **opt-in, local-only, owner-blinded A/B comparison**
 using the same installed model with and without approved Twin context. It keeps
 held-out owner writing out of both model prompts and saves responses/owner
