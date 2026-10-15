@@ -190,10 +190,18 @@ class PairedDecisionTests(unittest.TestCase):
     def test_same_scenario_across_training_and_test_fails_without_inference(self):
         scenario = self.store.db.execute(
             "SELECT scenario FROM decisions WHERE id=?", (self.ids[0],)).fetchone()[0]
-        self.store.add_decision(
-            scenario, "Ship now", "synthetic training rationale",
-            source="synthetic", approved=True, split="train",
-            options=["Ship now", "Wait for tests"])
+        # Simulate pre-existing/tampered split data directly; the normal
+        # add_decision API already blocks this accidental duplication.
+        from athenz.store import utc_now
+        with self.store.db:
+            self.store.db.execute(
+                """INSERT INTO decisions
+                (scenario,choice,rationale,exception,source,source_ref,status,
+                 created_at,options_json,split)
+                 VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (scenario, "Ship now", "synthetic training rationale", "",
+                 "synthetic", "", "approved", utc_now(),
+                 json.dumps(["Ship now", "Wait for tests"]), "train"))
         model = PairedModel()
         with self.assertRaisesRegex(ValueError, "overlap"):
             self.evaluate(model)
