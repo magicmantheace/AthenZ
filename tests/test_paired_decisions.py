@@ -327,6 +327,34 @@ class PairedDecisionTests(unittest.TestCase):
                     self.assertEqual(data["abstention_trials"], 8 if abstain else 0)
                     self.assertEqual(data["invalid_trials"], 0 if abstain else 8)
 
+    def test_valid_option_named_abstain_is_not_a_refusal(self):
+        # This is a real choice option, not the model's opt-in ABSTAIN token.
+        with self.store.db:
+            self.store.db.execute(
+                "UPDATE decisions SET choice=?, options_json=? WHERE id=?",
+                ("ABSTAIN", json.dumps(["ABSTAIN", "Wait for tests"]),
+                 self.ids[0]))
+
+        class ChooseNamedOption(PairedModel):
+            def generate(self, messages, **kwargs):
+                self.calls.append((messages, kwargs))
+                options = dict(re.findall(
+                    r"(?m)^([A-F])\. ([^\n]+)$", messages[-1]["content"]))
+                selected = next(letter for letter, option in options.items()
+                                if option == "ABSTAIN")
+                return json.dumps({"choice_letter": selected})
+
+        model = ChooseNamedOption()
+        result = self.evaluate(model, limit=1, stability_trials=2,
+                               allow_abstain=True)
+        self.assertEqual(result["twin_abstentions"], 0)
+        self.assertEqual(result["neutral_abstentions"], 0)
+        for arm in ("twin", "neutral"):
+            self.assertEqual(result["stability"][arm]["valid_trials"], 2)
+            self.assertEqual(result["stability"][arm]["abstention_trials"], 0)
+            self.assertEqual(result["stability"][arm]["agreeing_pairs"], 1)
+            self.assertEqual(result["stability"][arm]["unanimous_cases"], 1)
+
     def test_repeat_guard_invalidates_everything_on_consent_revocation(self):
         def revoke(call):
             if call == 3:
