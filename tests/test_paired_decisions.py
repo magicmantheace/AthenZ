@@ -217,7 +217,7 @@ class PairedDecisionTests(unittest.TestCase):
     def test_opt_in_confidence_reports_aggregate_calibration_only(self):
         model = ConfidenceModel()
         report = self.evaluate(model, score_confidence=True)
-        self.assertEqual(report["schema"], 5)
+        self.assertEqual(report["schema"], 6)
         self.assertTrue(report["score_confidence"])
         self.assertEqual(report["total"], 4)
         self.assertEqual(report["model_requests"], 8)
