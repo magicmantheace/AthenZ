@@ -88,6 +88,36 @@ This is a descriptive selection audit, not automatic threshold learning or
 evidence of calibrated confidence.
 A real on-device held-out improvement has not yet been demonstrated.
 
+## Owner-reviewed memories from actual chats (experimental)
+
+AthenZ can now turn one **owner-written** chat message into a traceable
+**pending** memory without an AI guessing your biography. In local terminal
+chat, record your message ID with `athenz list messages`, then:
+
+```sh
+athenz memory-preview 123
+athenz memory-from-message 123 preference "I prefer peer review before release" --review-sha256 <reviewed-sha256> --confirm
+athenz list identity --status pending
+athenz status <new-memory-id> approved
+```
+
+In the desktop Chat tab, **Remember my message** opens the full, read-only
+owner message and lets you type your own summary and choose a memory type.
+Submitting it **never approves** the memory: use the separate full-record
+Review memory tab before Twin retrieval. AI replies cannot become owner
+biographical memories through this workflow. Each source message can
+produce at most one such memory proposal; new proposals and approvals are
+not made automatically.
+
+Deleting the source message with `athenz forget-runtime messages <id>` or
+its entire session with `athenz delete-session <session>` also deletes the
+linked memory and its revisions, including if previously approved.
+Deleting a memory does not delete its original message. Other independent
+memories are unaffected. This protects the owner's right to correct or
+revoke the source of remembered personal information.
+
+See [reviewed chat-to-memory flow](docs/CHAT_MEMORY.md).
+
 ## Owner-reported longitudinal decisions (experimental)
 
 `athenz-decision-timeline` is a separate, entirely offline private journal for
