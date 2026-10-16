@@ -60,6 +60,100 @@ class DesktopService:
         finally:
             store.close()
 
+    def sessions(self, *, limit: int = 100) -> list[dict]:
+        """Owner-only metadata for recent chat sessions, without message text."""
+        if type(limit) is not int or not 1 <= limit <= 200:
+            raise DesktopError('Choose a session list limit of 1–200')
+        store = ExperienceStore(self.home)
+        try:
+            rows = store.db.execute(
+                "SELECT session,mode,COUNT(*) AS messages,MAX(id) AS latest_id "
+                "FROM messages WHERE mode IN ('twin','agent') "
+                "GROUP BY session,mode ORDER BY latest_id DESC LIMIT ?",
+                (limit,)).fetchall()
+            return [
+                {'session': row['session'], 'mode': row['mode'],
+                 'messages': int(row['messages']), 'latest_id': int(row['latest_id'])}
+                for row in rows
+            ]
+        finally:
+            store.close()
+
+    @staticmethod
+    def _session_snapshot(store: ExperienceStore, session: str,
+                          mode: str) -> dict:
+        """Pin ALL message content and provenance without exposing it in digest.
+
+        Limit deletion reviews to a bounded number of messages; large
+        histories require explicit CLI/manual data handling, not an
+        unbounded in-memory GUI query.
+        """
+        _validate_session(session, mode)
+        rows = store.db.execute(
+            "SELECT id,role,content,created_at FROM messages "
+            "WHERE session=? AND mode=? ORDER BY id LIMIT 5001",
+            (session, mode)).fetchall()
+        if not rows:
+            raise DesktopError('Selected chat no longer exists')
+        if len(rows) > 5000:
+            raise DesktopError('Session is too large for desktop deletion review')
+        hash_ = hashlib.sha256()
+        hash_.update(json.dumps(
+            ['athenz-session-review-v1', session, mode],
+            ensure_ascii=False, separators=(',', ':')).encode('utf-8'))
+        for row in rows:
+            hash_.update(json.dumps(
+                [row['id'], row['role'], row['content'], row['created_at']],
+                ensure_ascii=False, separators=(',', ':')).encode('utf-8'))
+        return {
+            'session': session,
+            'mode': mode,
+            'messages': len(rows),
+            'latest_id': int(rows[-1]['id']),
+            'recent_excerpts': [
+                {'role': row['role'], 'excerpt': row['content'][:240]}
+                for row in rows[-8:]
+            ],
+            'review_sha256': hash_.hexdigest(),
+        }
+
+    def session_review(self, session: str, mode: str) -> dict:
+        """Read-only owner review. No model, network or background work."""
+        _validate_session(session, mode)
+        store = ExperienceStore(self.home)
+        try:
+            return self._session_snapshot(store, session, mode)
+        finally:
+            store.close()
+
+    def delete_mode_history(self, session: str, mode: str, *,
+                            review_sha256: str, confirmed: bool = False) -> dict:
+        """Delete only one mode after a fresh full-history fingerprint check.
+
+        The write lock covers the recheck and cascaded deletion, preventing
+        concurrent AthenZ session writes from being silently deleted.
+        """
+        _validate_session(session, mode)
+        if (confirmed is not True or type(review_sha256) is not str
+                or re.fullmatch('[a-f0-9]{64}', review_sha256) is None):
+            raise DesktopError('Review this entire chat and explicitly confirm deletion')
+        store = ExperienceStore(self.home)
+        try:
+            with store.db:
+                store.db.execute('BEGIN IMMEDIATE')
+                current = self._session_snapshot(store, session, mode)
+                if current['review_sha256'] != review_sha256:
+                    raise DesktopError('Chat changed since inspection; review it again')
+                deleted = store.delete_mode_session(session, mode)
+                if deleted != current['messages']:
+                    raise DesktopError('Chat changed during deletion; no messages removed')
+            return {'session': session, 'mode': mode,
+                    'messages_deleted': deleted,
+                    'linked_memories_revoked': True,
+                    'other_mode_unchanged': True}
+        finally:
+            store.close()
+
     def send(self, session: str, mode: str, prompt: str, *, model: str | None = None,
              cancel_gate: ReplyCancelGate | None = None) -> dict:
         """Synchronous worker-thread operation; only successful replies persist.
