@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -81,16 +82,41 @@ class OllamaClient:
             raise LocalModelError("Local Ollama inference failed or returned an invalid reply") from None
 
 
-def answer(store: IdentityStore, model: OllamaClient, prompt: str,
-           mode: str = "agent", recent: list[dict] | None = None) -> str:
+def context_snapshot(store: IdentityStore, prompt: str, mode: str = "agent",
+                     recent: list[dict] | None = None) -> tuple[str, list[dict]]:
+    """Fingerprint all approved prompt evidence and the exact chat context.
+
+    Never store or expose the private prompt in the digest. Two source reads
+    also refuse obvious concurrent edits during the multi-query context build.
+    This is not a cross-process transaction; persistence rechecks under a
+    SQLite write lock before committing a completed turn.
+    """
+    from .evaluation import _reference_fingerprint
+
+    before = _reference_fingerprint(store)
     messages = build_messages(store, prompt, mode=mode)
     if recent:
         # Caller-supplied context remains untrusted and bounded to one session.
         valid = [{"role": r["role"], "content": r["content"][:4000]}
-                 for r in recent[-10:] if r.get("role") in {"user", "assistant"}
+                 for r in recent[-10:] if isinstance(r, dict)
+                 and r.get("role") in {"user", "assistant"}
                  and isinstance(r.get("content"), str)]
         messages[2:2] = valid
-    return model.generate(messages)
+    if _reference_fingerprint(store) != before:
+        raise LocalModelError("Approved local evidence changed; reply discarded")
+    signature = hashlib.sha256(json.dumps(
+        [before, messages], sort_keys=True, ensure_ascii=False,
+        separators=(",", ":")).encode("utf-8")).hexdigest()
+    return signature, messages
+
+
+def answer(store: IdentityStore, model: OllamaClient, prompt: str,
+           mode: str = "agent", recent: list[dict] | None = None) -> str:
+    original, messages = context_snapshot(store, prompt, mode, recent)
+    reply = model.generate(messages)
+    if context_snapshot(store, prompt, mode, recent)[0] != original:
+        raise LocalModelError("Approved local evidence changed; reply discarded")
+    return reply
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -120,6 +146,7 @@ def main(argv: list[str] | None = None) -> None:
             try:
                 if args.model is None and checked_active_tag(store) != selected:
                     raise RoutingError('Active model routing changed; restart the session')
+                snapshot = context_snapshot(store, q, args.mode, history)[0]
                 reply = answer(store, model, q, args.mode, history)
                 # A tag, approval or runtime preference can change while a
                 # slow local generation is in flight. Never save its reply
@@ -135,10 +162,24 @@ def main(argv: list[str] | None = None) -> None:
             from .store import utc_now
             try:
                 with store.db:
+                    # Acquire the SQLite write lock BEFORE the final consent
+                    # and session check; no concurrent writer can revoke it
+                    # between verification and persistence.
+                    store.db.execute("BEGIN IMMEDIATE")
+                    if (store.conversation(args.session, args.mode, limit=10) != history
+                            or context_snapshot(store, q, args.mode, history)[0] != snapshot):
+                        raise LocalModelError(
+                            "Approved local evidence or session changed; reply discarded")
+                    if args.model is None and checked_active_tag(store) != selected:
+                        raise RoutingError("Active model routing changed; reply discarded")
                     store.db.execute('''INSERT INTO messages(session,mode,role,content,created_at)
                         VALUES (?,?,?,?,?)''', (args.session, args.mode, 'user', q, utc_now()))
                     saved = store.db.execute('''INSERT INTO messages(session,mode,role,content,created_at)
                         VALUES (?,?,?,?,?)''', (args.session, args.mode, 'assistant', reply, utc_now()))
+            except (LocalModelError, RoutingError) as error:
+                print(f"Error: {error}")
+                history = store.conversation(args.session, args.mode, limit=10)
+                continue
             except sqlite3.DatabaseError:
                 # Roll back the complete turn and never expose raw SQL errors
                 # or confidential rows to the terminal or log.
