@@ -21,6 +21,7 @@ from .evaluation import (
     _reject_repeated_heldout_scenarios, _wilson_interval,
 )
 from .experience import ExperienceStore
+from .frozen_decision_plan import FrozenTestPlan, freeze_test_plan
 from .family_audit import (
     CategoryScores, FamilyAudit, category_diversity_gate, create_family_template,
 )
@@ -91,7 +92,9 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
                               score_confidence: bool = False,
                               family_audit: FamilyAudit | None = None,
                               require_category_diversity: bool = False,
-                              stability_trials: int = 1) -> dict:
+                              stability_trials: int = 1,
+                              frozen_test_plan: FrozenTestPlan | None = None,
+                              model_identity_digest: str | None = None) -> dict:
     """Compare personalized vs neutral predictions without exposing gold data.
 
     Optional model_guard pins an installed local model's digest and reviewed
@@ -106,6 +109,8 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
             or type(stability_trials) is not int or not 1 <= stability_trials <= 3
             or (stability_trials > 1 and limit * stability_trials > 300)
             or (require_category_diversity and family_audit is None)
+            or (frozen_test_plan is not None and (
+                split != "test" or model_identity_digest is None))
             or (allow_abstain and score_confidence)):
         raise ValueError("Use a held-out split and bounded limit/seed")
     _reject_overlapping_decision_splits(store)
@@ -121,6 +126,18 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
     if require_category_diversity and not category_diversity_gate(categories):
         raise ValueError("Reviewed decision categories lack broad independent coverage")
     category_scores = CategoryScores()
+    frozen_options = {
+        "limit": limit, "seed": seed,
+        "allow_abstain": allow_abstain,
+        "score_confidence": score_confidence,
+        "family_audit": family_audit is not None,
+        "require_category_diversity": require_category_diversity,
+        "stability_trials": stability_trials,
+    }
+    if frozen_test_plan is not None:
+        frozen_test_plan.verify(
+            store, model_tag=getattr(model, "model", ""),
+            model_digest=model_identity_digest, **frozen_options)
     stability = {"twin": ChoiceStabilityCounter(),
                  "neutral": ChoiceStabilityCounter()}
     # Each repeat varies both the deterministic local model seed and the
@@ -144,6 +161,10 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
                 raise ValueError("Held-out decision changed during paired evaluation")
         if family_audit is not None:
             family_audit.verify(store)
+        if frozen_test_plan is not None:
+            frozen_test_plan.verify(
+                store, model_tag=getattr(model, "model", ""),
+                model_digest=model_identity_digest, **frozen_options)
         if model_guard is not None:
             model_guard()
 
@@ -259,8 +280,12 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
     twin_answered = total - abstentions["twin"] - invalid["twin"]
     neutral_answered = total - abstentions["neutral"] - invalid["neutral"]
     return {
-        "schema": 5,
+        "schema": 6,
         "kind": "same-model-paired-twin-decision-evaluation",
+        "frozen_test_plan": (
+            {"enabled": True, "verified": True,
+             "plan_sha256": frozen_test_plan.plan_sha256}
+            if frozen_test_plan is not None else {"enabled": False}),
         "split": split,
         "model": getattr(model, "model", "unknown"),
         "seed": seed,
@@ -353,6 +378,12 @@ def main(argv: list[str] | None = None) -> None:
                         help="Require owner-reviewed local family categories and split independence")
     parser.add_argument("--require-category-diversity", action="store_true",
                         help="Refuse inference without three balanced reviewed decision categories")
+    parser.add_argument("--freeze-test-plan", action="store_true",
+                        help="Freeze an owner-private final-test protocol; no inference")
+    parser.add_argument("--check-test-plan", action="store_true",
+                        help="Verify frozen final-test settings/evidence/model; no inference")
+    parser.add_argument("--use-test-plan", action="store_true",
+                        help="Require exact frozen final-test protocol before inference")
     parser.add_argument("--family-template", action="store_true",
                         help="Create a private family review template; no model inference")
     parser.add_argument("--family-check", action="store_true",
@@ -362,6 +393,14 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if args.require_category_diversity and not args.family_audit:
         parser.error("--require-category-diversity requires --family-audit")
+    if (sum((args.freeze_test_plan, args.check_test_plan,
+             args.use_test_plan)) > 1
+            or ((args.freeze_test_plan or args.check_test_plan
+                 or args.use_test_plan) and args.split != "test")
+            or (args.freeze_test_plan or args.check_test_plan
+                or args.use_test_plan) and
+                (args.family_template or args.family_check)):
+        parser.error("Frozen final-test actions require --split test and one action")
     if not args.confirm:
         parser.error("Explicit --confirm required before local model inference")
     store = ExperienceStore(args.home)
@@ -390,6 +429,34 @@ def main(argv: list[str] | None = None) -> None:
             initial_route = checked_active_tag(store)
             selected_tag = args.model or initial_route or OllamaClient().model
             expected_digest = model_digest(selected_tag)
+            frozen_options = {
+                "limit": args.limit, "seed": args.seed,
+                "allow_abstain": args.allow_abstain,
+                "score_confidence": args.score_confidence,
+                "family_audit": args.family_audit,
+                "require_category_diversity": args.require_category_diversity,
+                "stability_trials": args.stability_trials,
+            }
+            if args.freeze_test_plan:
+                freeze_test_plan(
+                    store, model_tag=selected_tag,
+                    model_digest=expected_digest, **frozen_options)
+                if (checked_active_tag(store) != initial_route
+                        or model_digest(selected_tag) != expected_digest):
+                    raise ValueError("Local model changed while freezing final test")
+                print("Frozen owner-only final-test plan created; no inference")
+                return
+            plan = (FrozenTestPlan(store)
+                    if args.use_test_plan or args.check_test_plan else None)
+            if args.check_test_plan:
+                plan.verify(
+                    store, model_tag=selected_tag,
+                    model_digest=expected_digest, **frozen_options)
+                print(json.dumps({"frozen_final_test": "valid",
+                                  "plan_sha256": plan.plan_sha256,
+                                  "owner_data_in_report": False},
+                                 sort_keys=True))
+                return
             model = OllamaClient(model=selected_tag)
 
             def current_model() -> None:
@@ -405,7 +472,9 @@ def main(argv: list[str] | None = None) -> None:
                 score_confidence=args.score_confidence,
                 family_audit=audit,
                 require_category_diversity=args.require_category_diversity,
-                stability_trials=args.stability_trials)
+                stability_trials=args.stability_trials,
+                frozen_test_plan=plan,
+                model_identity_digest=(expected_digest if plan else None))
         except (ValueError, RoutingError, OSError):
             # Never report exception details containing private heldout text.
             raise SystemExit("Paired decision evaluation refused; check "

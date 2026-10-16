@@ -149,6 +149,10 @@ See [docs/TWIN_CONTEXT.md](docs/TWIN_CONTEXT.md).
 - [x] Add a separate owner-only, consented longitudinal decision observation
   journal with dated/context-grouped comparison, bounded atomic writes and
   small-sample aggregate suppression (synthetic tests only).
+- [x] Add optional owner-private frozen final-test protocol: hash all
+  approved decisions/reference evidence, the selected heldout sample,
+  family review, explicit local model digest, exact evaluation settings and
+  directly involved code; refuse drift before/after each model response.
 - [ ] Actually calibrate uncertainty or abstention on real owner-labelled
   data; independently validate semantic group labels, topic-family
   generalization and observed owner variability against on-device model
