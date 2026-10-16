@@ -165,9 +165,13 @@ class DesktopService:
         _validate_session(session, mode)
         store = ExperienceStore(self.home)
         try:
-            return store.propose_message_memory(
-                message_id, kind, summary, review_sha256=review_sha256,
-                confirmed=confirmed, expected_session=session, expected_mode=mode)
+            try:
+                return store.propose_message_memory(
+                    message_id, kind, summary, review_sha256=review_sha256,
+                    confirmed=confirmed, expected_session=session, expected_mode=mode)
+            except ValueError:
+                raise DesktopError(
+                    'Memory source, summary or owner review changed; inspect again') from None
         finally:
             store.close()
 
