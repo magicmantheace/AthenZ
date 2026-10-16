@@ -134,7 +134,7 @@ class ContinuityTests(unittest.TestCase):
             "The synthetic phoenix plan changed completely",
             json.dumps(model.messages[0]))
         self.assertEqual(
-            len(self.store.conversation("work", "twin")), 10)
+            len(self.store.conversation("work", "twin")), 12)
 
     def test_deleting_old_selected_message_midflight_discards_reply(self):
         def remove():
