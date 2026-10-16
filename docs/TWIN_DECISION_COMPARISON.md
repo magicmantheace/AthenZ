@@ -196,6 +196,47 @@ prediction scores. Different observation dates may indicate genuine human
 preference changes, so model prediction consistency must not automatically
 be treated as human stability or fidelity.
 
+## Owner-frozen final test protocol (optional)
+
+For a final, previously untouched **test split**, freeze the actual test
+selection, approved source snapshots, model digest, relevant local evaluator
+code and evaluation settings **before inspecting test outcomes**:
+
+```sh
+athenz-decision-compare --split test --limit 30 --seed 42 --model qwen3.5:2b --family-audit --freeze-test-plan --confirm
+athenz-decision-compare --split test --limit 30 --seed 42 --model qwen3.5:2b --family-audit --check-test-plan --confirm
+athenz-decision-compare --split test --limit 30 --seed 42 --model qwen3.5:2b --family-audit --use-test-plan --confirm
+```
+
+The first command performs local evidence and leakage preflight, queries
+the explicit local Ollama model digest (loopback only), and writes
+`decision-final-test-plan.json` **only once** inside the private AthenZ
+profile. It does **not run model inference** or write private examples to
+Git. The check command verifies the plan without generating a response.
+The run command requires the exact frozen options, model tag/digest, and
+owner-approved reference/decision fingerprints. It checks those snapshots
+again before and after every inference, discarding the entire result on
+drift, revocation, newly approved decisions, family review changes or
+relevant local scoring-code changes.
+
+If using `--require-category-diversity`, `--allow-abstain`,
+`--score-confidence`, or `--stability-trials`, specify the exact same
+settings on **all three commands**. The plan is restricted to
+`--split test`, with `limit × stability-trials ≤ 300` local case-trials.
+The plan contains only configuration, checksums, and selected case counts;
+it has no scenario text, correct answers or rationales. It is private
+because those hashes still represent owner evidence. Existing exploratory
+`calibration` evaluations and unfrozen runs continue to work, but unfrozen
+tests should never support a final fidelity claim.
+
+A source-code hash is **not a trusted signature or complete environment
+attestation**. The owner can edit, delete or replace the plan, and nothing
+prevents repeating a test after seeing its results; frozen plans do not
+guarantee preregistration, unbiased case selection or independent review.
+To preserve a valid final evaluation, predeclare the protocol, avoid
+post-hoc tuning, and record any repeated runs or replacements honestly.
+Real on-device validation and owner consent are still outstanding.
+
 ## Fail-closed conditions
 
 Before the first inference, scan all selected held-out scenarios for strong
