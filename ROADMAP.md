@@ -78,6 +78,19 @@ optional adapter rather than a dependency. Do not put personal examples in
 either public Git repository, permit learned text to grant tools, or use
 simulation checksums as user authentication.
 
+### 2026-10-16 — Desktop memory correction and revocation
+
+- [x] List current approved personal memories in the local desktop,
+  inspect the complete record and provenance, and require an owner review
+  digest plus confirmation for any edit or removal.
+- [x] Stage a correction as pending (old approval immediately invalid),
+  revoke approval without deleting private text, or explicitly forget a
+  live memory and its revision history while preserving other sources.
+- [x] Use SQLite write-lock transactions to refuse concurrent record edits;
+  add synthetic review, consent and stale-digest regression coverage.
+- [ ] Conduct owner-device desktop usability tests and verify retention,
+  private backups and review flows with real source histories.
+
 ### 2026-10-16 — Owner-reviewed chat-to-memory capture
 
 - [x] Preview one complete user-authored local message and its session/mode
