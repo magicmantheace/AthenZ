@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import sqlite3
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
@@ -137,6 +138,8 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--model", default=None)
     p.add_argument("--session", default="default", help="Persistent session ID; stored locally")
     args = p.parse_args(argv)
+    if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", args.session) is None:
+        p.error("Session must be a local 1–64 character identifier")
     store = ExperienceStore(args.home)
     try:
         from .runtime import checked_active_tag, RoutingError
@@ -153,6 +156,9 @@ def main(argv: list[str] | None = None) -> None:
             if q in {"/exit", "/quit"}:
                 break
             if not q:
+                continue
+            if len(q) > 4000:
+                print("Error: Enter a message of 1–4000 characters")
                 continue
             try:
                 if args.model is None and checked_active_tag(store) != selected:
