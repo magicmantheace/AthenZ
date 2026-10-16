@@ -53,7 +53,8 @@ def _settings(**kw) -> dict:
     return dict(kw)
 
 
-def _evidence(store: IdentityStore, settings: dict) -> tuple[dict, FamilyAudit | None]:
+def _evidence(store: IdentityStore, settings: dict, *,
+              preflight: bool = True) -> tuple[dict, FamilyAudit | None]:
     _reject_overlapping_decision_splits(store)
     _reject_repeated_heldout_scenarios(store, "test", settings["limit"])
     rows = _heldout_rows(store, "test", settings["limit"])
@@ -65,10 +66,11 @@ def _evidence(store: IdentityStore, settings: dict) -> tuple[dict, FamilyAudit |
         cats = audit.selected_categories([r[0] for r in rows])
         if settings["require_category_diversity"] and not category_diversity_gate(cats):
             raise ValueError("Final study needs balanced reviewed decision categories")
-    for row in rows:
-        for index in range(settings["stability_trials"]):
-            seed = (settings["seed"] + index * 1_000_003) % (2 ** 32)
-            _heldout_prompt_messages(store, row, seed)
+    if preflight:
+        for row in rows:
+            for index in range(settings["stability_trials"]):
+                seed = (settings["seed"] + index * 1_000_003) % (2 ** 32)
+                _heldout_prompt_messages(store, row, seed)
     data = {
         "heldout_sha256": _fingerprint(rows),
         "reference_sha256": _reference_fingerprint(store),
@@ -134,6 +136,7 @@ class FrozenTestPlan:
                 or type(payload["schema"]) is not int or payload["schema"] != 1
                 or payload["kind"] != "owner-frozen-twin-final-decision-study"
                 or not isinstance(payload["settings"], dict)
+                or set(payload["settings"]) != _KEYS
                 or not isinstance(payload["evidence"], dict)
                 or set(payload["evidence"]) != {
                     "heldout_sha256", "reference_sha256",
@@ -165,6 +168,6 @@ class FrozenTestPlan:
         raw = _read_private(self.path)
         if hashlib.sha256(raw).hexdigest() != self.plan_sha256:
             raise ValueError("Frozen test-plan bytes changed during evaluation")
-        current, _ = _evidence(store, self.settings)
+        current, _ = _evidence(store, self.settings, preflight=False)
         if current != self.payload["evidence"]:
             raise ValueError("Approved final-test evidence changed since freezing")
