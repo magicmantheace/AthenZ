@@ -79,6 +79,13 @@ with the intended model, family audit, seed and sample-limit settings.
 without generating answers, and `--use-test-plan` refuses altered source,
 protocol, model or relevant evaluator code during the final comparison.
 This improves reproducibility but cannot prove independent preregistration.
+Use `athenz-decision-compare --split calibration --limit 30 --score-confidence
+--calibration-grid --confirm` to inspect privacy-suppressed answer
+coverage and accuracy at five predefined cutoff candidates. A selected
+`--confidence-cutoff 0.5|0.6|0.7|0.8|0.9` may be included in a
+`--score-confidence` final test and is pinned by the frozen plan.
+This is a descriptive selection audit, not automatic threshold learning or
+evidence of calibrated confidence.
 A real on-device held-out improvement has not yet been demonstrated.
 
 ## Owner-reported longitudinal decisions (experimental)
