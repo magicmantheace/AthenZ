@@ -165,16 +165,13 @@ class DesktopService:
         _validate_session(session, mode)
         store = ExperienceStore(self.home)
         try:
-            with store.db:
-                store.db.execute("BEGIN IMMEDIATE")
-                row = store.db.execute(
-                    "SELECT session,mode FROM messages WHERE id=? AND role='user'",
-                    (message_id,)).fetchone()
-                if row is None or row["session"] != session or row["mode"] != mode:
-                    raise DesktopError("Source does not belong to this chat session")
+            try:
                 return store.propose_message_memory(
                     message_id, kind, summary, review_sha256=review_sha256,
-                    confirmed=confirmed)
+                    confirmed=confirmed, expected_session=session, expected_mode=mode)
+            except ValueError:
+                raise DesktopError(
+                    'Memory source, summary or owner review changed; inspect again') from None
         finally:
             store.close()
 
