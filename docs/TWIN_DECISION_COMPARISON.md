@@ -83,6 +83,52 @@ letter is returned or persisted. Results should be kept private because the
 aggregate still reflects owner-specific preferences. No model action or
 training promotion is authorized by a benchmark score.
 
+## Calibration-only confidence selection (optional)
+
+AthenZ can now compute a fixed, **exploratory** confidence-cutoff table
+using the independently approved `calibration` split only:
+
+```sh
+athenz-decision-compare --split calibration --limit 30 --score-confidence --calibration-grid --confirm
+```
+
+The table covers five *predefined* candidate cutoffs: 0.5, 0.6, 0.7, 0.8,
+0.9. For each Twin/neutral arm, it shows the fraction of all selected
+held-out questions that would receive an answer and the accuracy among
+answers whose self-reported chosen-answer probability meets or exceeds the
+cutoff. Rows accepting fewer than **five** cases suppress coverage and
+accuracy. If fewer than 20 calibration cases produced valid confidences, the
+whole grid is suppressed. Neither case-level probabilities nor reference
+answers are saved, and the software **does not automatically choose** a
+threshold.
+
+Choose a threshold based only on calibration, before opening the final test
+split; document the reason, sample size, and that this choice may be
+optimistically biased. Then freeze it as a final-test configuration:
+
+```sh
+athenz-decision-compare --split test --limit 30 --seed 42 --score-confidence --confidence-cutoff 0.7 --freeze-test-plan --confirm
+athenz-decision-compare --split test --limit 30 --seed 42 --score-confidence --confidence-cutoff 0.7 --check-test-plan --confirm
+athenz-decision-compare --split test --limit 30 --seed 42 --score-confidence --confidence-cutoff 0.7 --use-test-plan --confirm
+```
+
+The frozen plan pins the chosen cutoff, so any attempt to change it requires
+a new protocol rather than silently retuning a held-out test. An unfrozen
+exploratory calibration run may also include `--confidence-cutoff`. A
+selection cutoff changes only **descriptive answer coverage and accuracy**
+for the confidence-selected subset; the underlying paired Twin-versus-neutral
+accuracy, p-value and valid-answer counts still use all primary held-out
+predictions. The cutoff does **not** make the model actually refuse, retrain
+weights, change response policy, or grant tool permissions. A later
+user-facing runtime deferral mechanism would require a separate approved
+safety design.
+
+Cutoffs operate on uncalibrated, self-reported model confidence. A selected
+subset may differ between Twin and neutral, so their selective accuracies
+cannot be subjected to the ordinary matched-pair p-value. Even a favorable
+calibration grid is **not** demonstrated reliability or proven owner
+likeness; final private on-device validation is required.
+
 ## Independent owner-reviewed decision families (optional)
 
 The lexical preflight cannot detect meaning-preserving paraphrases. To add
