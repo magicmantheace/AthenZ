@@ -88,6 +88,24 @@ This is a descriptive selection audit, not automatic threshold learning or
 evidence of calibrated confidence.
 A real on-device held-out improvement has not yet been demonstrated.
 
+## Same-session conversational continuity (local, unverified)
+
+AthenZ now retains its recent ten chat turns and, when an older **user-written**
+message in the **same session and same mode** matches the current topic, supplies
+up to four bounded historical excerpts to the local model. These excerpts are
+separately labeled **unreviewed conversation references**, not verified
+autobiographical memories, standing preferences, instructions, or permissions.
+Old assistant replies are not treated as owner evidence. Unrelated messages
+and messages from other chat modes/sessions are never included by this
+history-retrieval path. The relevant excerpts are recalculated and checked
+during local inference, and stale answers are discarded if a referenced
+historical message is edited or deleted.
+
+No automatic summarization, profile approval, model training, internet search,
+cross-session tracking or background process is enabled. Explicitly reviewed
+long-term memories still use the separate owner-controlled approval flow.
+See [same-session context limits](docs/SESSION_CONTINUITY.md).
+
 ## Browse, switch and delete individual desktop conversations
 
 The desktop **Chat** tab now has **Browse sessions…**. It lists each existing
