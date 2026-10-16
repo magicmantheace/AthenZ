@@ -60,6 +60,100 @@ class DesktopService:
         finally:
             store.close()
 
+    def sessions(self, *, limit: int = 100) -> list[dict]:
+        """Owner-only metadata for recent chat sessions, without message text."""
+        if type(limit) is not int or not 1 <= limit <= 200:
+            raise DesktopError('Choose a session list limit of 1–200')
+        store = ExperienceStore(self.home)
+        try:
+            rows = store.db.execute(
+                "SELECT session,mode,COUNT(*) AS messages,MAX(id) AS latest_id "
+                "FROM messages WHERE mode IN ('twin','agent') "
+                "GROUP BY session,mode ORDER BY latest_id DESC LIMIT ?",
+                (limit,)).fetchall()
+            return [
+                {'session': row['session'], 'mode': row['mode'],
+                 'messages': int(row['messages']), 'latest_id': int(row['latest_id'])}
+                for row in rows
+            ]
+        finally:
+            store.close()
+
+    @staticmethod
+    def _session_snapshot(store: ExperienceStore, session: str,
+                          mode: str) -> dict:
+        """Pin ALL message content and provenance without exposing it in digest.
+
+        Limit deletion reviews to a bounded number of messages; large
+        histories require explicit CLI/manual data handling, not an
+        unbounded in-memory GUI query.
+        """
+        _validate_session(session, mode)
+        rows = store.db.execute(
+            "SELECT id,role,content,created_at FROM messages "
+            "WHERE session=? AND mode=? ORDER BY id LIMIT 5001",
+            (session, mode)).fetchall()
+        if not rows:
+            raise DesktopError('Selected chat no longer exists')
+        if len(rows) > 5000:
+            raise DesktopError('Session is too large for desktop deletion review')
+        hash_ = hashlib.sha256()
+        hash_.update(json.dumps(
+            ['athenz-session-review-v1', session, mode],
+            ensure_ascii=False, separators=(',', ':')).encode('utf-8'))
+        for row in rows:
+            hash_.update(json.dumps(
+                [row['id'], row['role'], row['content'], row['created_at']],
+                ensure_ascii=False, separators=(',', ':')).encode('utf-8'))
+        return {
+            'session': session,
+            'mode': mode,
+            'messages': len(rows),
+            'latest_id': int(rows[-1]['id']),
+            'recent_excerpts': [
+                {'role': row['role'], 'excerpt': row['content'][:240]}
+                for row in rows[-8:]
+            ],
+            'review_sha256': hash_.hexdigest(),
+        }
+
+    def session_review(self, session: str, mode: str) -> dict:
+        """Read-only owner review. No model, network or background work."""
+        _validate_session(session, mode)
+        store = ExperienceStore(self.home)
+        try:
+            return self._session_snapshot(store, session, mode)
+        finally:
+            store.close()
+
+    def delete_mode_history(self, session: str, mode: str, *,
+                            review_sha256: str, confirmed: bool = False) -> dict:
+        """Delete only one mode after a fresh full-history fingerprint check.
+
+        The write lock covers the recheck and cascaded deletion, preventing
+        concurrent AthenZ session writes from being silently deleted.
+        """
+        _validate_session(session, mode)
+        if (confirmed is not True or type(review_sha256) is not str
+                or re.fullmatch('[a-f0-9]{64}', review_sha256) is None):
+            raise DesktopError('Review this entire chat and explicitly confirm deletion')
+        store = ExperienceStore(self.home)
+        try:
+            with store.db:
+                store.db.execute('BEGIN IMMEDIATE')
+                current = self._session_snapshot(store, session, mode)
+                if current['review_sha256'] != review_sha256:
+                    raise DesktopError('Chat changed since inspection; review it again')
+                deleted = store.delete_mode_session(session, mode)
+                if deleted != current['messages']:
+                    raise DesktopError('Chat changed during deletion; no messages removed')
+            return {'session': session, 'mode': mode,
+                    'messages_deleted': deleted,
+                    'linked_memories_revoked': True,
+                    'other_mode_unchanged': True}
+        finally:
+            store.close()
+
     def send(self, session: str, mode: str, prompt: str, *, model: str | None = None,
              cancel_gate: ReplyCancelGate | None = None) -> dict:
         """Synchronous worker-thread operation; only successful replies persist.
@@ -389,6 +483,8 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
     session = tk.StringVar(value='desktop')
     session_box = ttk.Entry(chat_controls, textvariable=session, width=24)
     session_box.pack(side='left', padx=(0, 8))
+    sessions_button = ttk.Button(chat_controls, text='Browse sessions…')
+    sessions_button.pack(side='left')
     transcript_frame = ttk.Frame(chat_tab)
     transcript_frame.pack(fill='both', expand=True, pady=8)
     transcript = tk.Text(transcript_frame, wrap='word', state='disabled', padx=10, pady=10)
@@ -427,6 +523,160 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
             set_status('Chat ready · Ollama uses local loopback only')
         except Exception as exc:
             set_status(str(exc))
+
+    def browse_sessions() -> None:
+        """Owner-initiated session switch/review/deletion, without inference."""
+        if active['pending']:
+            set_status('Finish or cancel the active reply before managing sessions')
+            return
+        popup = tk.Toplevel(window)
+        popup.title('Your local Twin and Agent sessions')
+        popup.geometry('750x480')
+        popup.transient(window)
+        ttk.Label(popup, text=(
+            'Select a chat to open it or review deletion. '
+            'Deleting one mode does NOT remove the same name in the other mode.'),
+            padding=12).pack(anchor='w')
+        tree = ttk.Treeview(popup, columns=('session', 'mode', 'messages'),
+                            show='headings', selectmode='browse')
+        for col, width in (('session', 420), ('mode', 100), ('messages', 110)):
+            tree.heading(col, text=col.title())
+            tree.column(col, width=width, stretch=col == 'session')
+        tree.pack(fill='both', expand=True, padx=12, pady=8)
+        indexed = {}
+
+        def reload_sessions() -> None:
+            try:
+                tree.delete(*tree.get_children())
+                indexed.clear()
+                for i, item in enumerate(service.sessions()):
+                    key = str(i)
+                    indexed[key] = item
+                    tree.insert('', 'end', iid=key,
+                                values=(item['session'], item['mode'],
+                                        item['messages']))
+            except Exception:
+                messagebox.showerror('Session list unavailable',
+                                     'Could not inspect local session metadata.',
+                                     parent=popup)
+
+        def chosen() -> dict | None:
+            selected = tree.selection()
+            if not selected:
+                messagebox.showinfo('Select a chat',
+                                    'Choose one existing session first.',
+                                    parent=popup)
+                return None
+            return indexed.get(selected[0])
+
+        def open_selected() -> None:
+            if active['pending']:
+                messagebox.showerror('Chat busy',
+                                     'Finish or cancel the active reply first.',
+                                     parent=popup)
+                return
+            row = chosen()
+            if row is None:
+                return
+            session.set(row['session'])
+            mode.set(row['mode'])
+            popup.destroy()
+            refresh_history()
+
+        def review_delete() -> None:
+            if active['pending']:
+                messagebox.showerror('Chat busy',
+                                     'Finish or cancel the active reply first.',
+                                     parent=popup)
+                return
+            row = chosen()
+            if row is None:
+                return
+            try:
+                snapshot = service.session_review(row['session'], row['mode'])
+            except Exception:
+                messagebox.showerror('Chat changed',
+                                     'Could not review that chat. Refresh sessions.',
+                                     parent=popup)
+                reload_sessions()
+                return
+            review = tk.Toplevel(popup)
+            review.title('Review chat deletion')
+            review.geometry('700x500')
+            review.transient(popup)
+            ttk.Label(review, text=(
+                f"Delete {snapshot['messages']} messages in "
+                f"{snapshot['session']} / {snapshot['mode']} only?"),
+                padding=12).pack(anchor='w')
+            ttk.Label(review, text=(
+                'Recent excerpts only; the deletion fingerprint covers ALL '
+                'messages. Derived memories, feedback and training examples '
+                'linked to deleted messages are also removed. Backups remain.'),
+                wraplength=660, padding=(12, 4)).pack(anchor='w')
+            preview = tk.Text(review, wrap='word', height=12)
+            preview.pack(fill='both', expand=True, padx=12, pady=(8, 12))
+            for message in snapshot['recent_excerpts']:
+                preview.insert('end', message['role'].title() + ': ' +
+                               message['excerpt'] + '\n\n')
+            preview.config(state='disabled')
+            controls = ttk.Frame(review, padding=12)
+            controls.pack(fill='x')
+
+            def delete_reviewed() -> None:
+                if active['pending']:
+                    messagebox.showerror('Chat busy',
+                                         'Finish or cancel the active reply first.',
+                                         parent=review)
+                    return
+                if not messagebox.askyesno(
+                        'Confirm permanent local deletion',
+                        'Delete this mode-specific chat and memories derived '
+                        'from its messages from the LIVE private database? '
+                        'Offline backups are not erased.',
+                        parent=review):
+                    return
+                try:
+                    result = service.delete_mode_history(
+                        snapshot['session'], snapshot['mode'],
+                        review_sha256=snapshot['review_sha256'],
+                        confirmed=True)
+                except Exception:
+                    messagebox.showerror('Deletion refused',
+                                         'Chat changed or could not be removed. '
+                                         'Review the current chat again.',
+                                         parent=review)
+                    reload_sessions()
+                    return
+                review.destroy()
+                reload_sessions()
+                if ((session.get(), mode.get()) ==
+                        (snapshot['session'], snapshot['mode'])):
+                    refresh_history()
+                reload_reviews()
+                set_status(f"Removed {result['messages_deleted']} "
+                           "reviewed messages from the selected mode")
+
+            ttk.Button(controls, text='Cancel',
+                       command=review.destroy).pack(side='right', padx=4)
+            ttk.Button(controls, text='Delete reviewed mode',
+                       command=delete_reviewed).pack(side='right', padx=4)
+
+        bar = ttk.Frame(popup, padding=12)
+        bar.pack(fill='x')
+        ttk.Button(bar, text='Close',
+                   command=popup.destroy).pack(side='right')
+        ttk.Button(bar, text='Review deletion…',
+                   command=review_delete).pack(side='right', padx=6)
+        ttk.Button(bar, text='Open selected',
+                   command=open_selected).pack(side='right', padx=6)
+        ttk.Button(bar, text='Refresh', command=reload_sessions).pack(
+            side='right', padx=6)
+        tree.bind('<Double-1>', lambda _: open_selected())
+        reload_sessions()
+
+    sessions_button.config(command=browse_sessions)
+    modes.bind('<<ComboboxSelected>>', refresh_history)
+    session_box.bind('<Return>', refresh_history)
 
     def send(*_) -> None:
         if active['pending']:

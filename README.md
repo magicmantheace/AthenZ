@@ -88,6 +88,28 @@ This is a descriptive selection audit, not automatic threshold learning or
 evidence of calibrated confidence.
 A real on-device held-out improvement has not yet been demonstrated.
 
+## Browse, switch and delete individual desktop conversations
+
+The desktop **Chat** tab now has **Browse sessions…**. It lists each existing
+local `session / Agent-or-Twin mode` independently with message counts, without
+showing message text in the list. Open an existing conversation to continue it,
+or type a new session identifier in the Chat field for a new one.
+
+**Review deletion…** shows the number of messages and recent excerpts. Its
+private full-history review fingerprint includes **every** message in the
+selected mode, even when only eight excerpts are shown. After a separate
+confirmation, deletion removes only that specific mode's messages from the
+live private database; the Agent conversation is preserved when deleting
+the Twin conversation with the same session name (and vice versa). Memories
+derived from deleted owner messages, their revision histories, feedback
+and linked training pairs are removed alongside those messages. Concurrent
+changes invalidate the deletion review; large conversations of more than
+5,000 messages must be handled through a deliberate separate owner workflow.
+Existing offline backups are **not** securely erased.
+
+The older `athenz delete-session <name>` CLI command still deletes **both**
+modes of that name. See [desktop session controls](docs/DESKTOP_SESSIONS.md).
+
 ## Run a real local Twin + Agent smoke test without personal data
 
 AthenZ offers an explicit, disposable-profile smoke test through the **Setup**
