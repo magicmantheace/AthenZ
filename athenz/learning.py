@@ -273,7 +273,11 @@ class LearningStore(IdentityStore):
         if (type(session) is not str or not session.strip()
                 or type(mode) is not str or mode not in {"agent", "twin"}):
             raise ValueError("Choose a valid named Agent or Twin conversation")
-        with self.db:
+        from contextlib import nullcontext
+        # A caller may already hold BEGIN IMMEDIATE after reviewing a pinned
+        # complete-session digest. Never commit that outer transaction early.
+        context = nullcontext() if self.db.in_transaction else self.db
+        with context:
             self._forget_message_memories("session=? AND mode=?", (session, mode))
             cur = self.db.execute(
                 "DELETE FROM messages WHERE session=? AND mode=?", (session, mode))
