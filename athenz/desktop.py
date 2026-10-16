@@ -813,7 +813,9 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
         setup_text.insert('1.0', '\n'.join(lines))
         setup_text.config(state='disabled')
 
-    def refresh_setup(*, ollama: bool = False, gpu: bool = False, profile: bool = False, backup_action: str | None = None) -> None:
+    def refresh_setup(*, ollama: bool = False, gpu: bool = False, profile: bool = False,
+                      backup_action: str | None = None,
+                      smoke_model: str | None = None) -> None:
         if setup_busy['running']:
             return
         if profile and not messagebox.askyesno(
@@ -842,12 +844,18 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
                     'is NOT encrypted and can be large (up to 16 GiB). No upload or activation.'):
                 return
         setup_busy['running'] = True
-        for button in (setup_help, setup_basic, setup_ollama, setup_gpu, setup_profile, setup_backup, setup_verify, setup_bundle, setup_bundle_verify):
+        for button in (setup_help, setup_basic, setup_ollama, setup_gpu,
+                               setup_profile, setup_backup, setup_verify,
+                               setup_bundle, setup_bundle_verify, setup_chat_smoke):
             button.config(state='disabled')
         set_status('Working locally… no automatic model or coding operations')
         def worker() -> None:
             try:
-                if profile:
+                if smoke_model is not None:
+                    from .synthetic_chat_smoke import check_synthetic_chat
+                    report = check_synthetic_chat(model=smoke_model, confirmed=True)
+                    setup_results.put(('synthetic-chat-smoke', report))
+                elif profile:
                     from .profile_setup import inspect_for_setup, format_for_setup
                     report = inspect_for_setup(home, confirmed=True)
                     setup_results.put(('profile-health', format_for_setup(report)))
@@ -906,6 +914,44 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
     setup_bundle_verify = ttk.Button(bundle_controls, text='Verify latest bundle',
                                      command=lambda: refresh_setup(backup_action='bundle-verify'))
     setup_bundle_verify.pack(side='left')
+    smoke_controls = ttk.Frame(setup_tab)
+    smoke_controls.pack(fill='x', pady=(6, 0))
+
+    def request_synthetic_chat_smoke() -> None:
+        if setup_busy['running']:
+            return
+        tag = simpledialog.askstring(
+            'Synthetic Twin + Agent smoke',
+            'Enter an already installed local Ollama model tag '
+            '(for example qwen3.5:2b). No model will be downloaded.',
+            parent=window)
+        if tag is None:
+            return
+        from .synthetic_chat_smoke import _MODEL
+        if _MODEL.fullmatch(tag) is None:
+            messagebox.showerror('Invalid model tag',
+                                 'Choose a short installed local model tag.',
+                                 parent=window)
+            return
+        if not messagebox.askyesno(
+                'Authorize two synthetic Ollama replies?',
+                'Run exactly one Twin and one Agent response through a '
+                'disposable synthetic profile? This uses the local Ollama '
+                'service and may consume compute. NO personal profile '
+                'is read, no model is downloaded, and the temporary chat '
+                'is deleted afterward. Not a GPU or digital-twin fidelity test.',
+                parent=window):
+            return
+        refresh_setup(smoke_model=tag)
+
+    setup_chat_smoke = ttk.Button(
+        smoke_controls, text='Test Twin + Agent (synthetic)…',
+        command=request_synthetic_chat_smoke)
+    setup_chat_smoke.pack(side='left')
+    ttk.Label(smoke_controls,
+              text='Two authorized local model replies, no personal memory.').pack(
+                  side='left', padx=(10, 0))
+
     ttk.Label(setup_tab, text='Ollama and GPU probes are manual and off by default; a GPU query requires confirmation.').pack(
         anchor='w', pady=(8, 0))
 
@@ -916,7 +962,9 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
             while True:
                 state, report = setup_results.get_nowait()
                 setup_busy['running'] = False
-                for button in (setup_help, setup_basic, setup_ollama, setup_gpu, setup_profile, setup_backup, setup_verify, setup_bundle, setup_bundle_verify):
+                for button in (setup_help, setup_basic, setup_ollama, setup_gpu,
+                               setup_profile, setup_backup, setup_verify,
+                               setup_bundle, setup_bundle_verify, setup_chat_smoke):
                     button.config(state='normal')
                 if state == 'ok':
                     show_setup(report)
@@ -925,6 +973,31 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
                     set_status('Private SQLite-only plaintext backup created; verify before relying on it')
                 elif state == 'backup-verified':
                     set_status('Latest private SQLite backup verified against checksum and integrity')
+                elif state == 'synthetic-chat-smoke':
+                    # Render only fixed observed flags. Never show model
+                    # response, prompt text, path or backend exception.
+                    observed = report.get('status') == 'synthetic-chat-roundtrip-observed'
+                    lines = [
+                        'SYNTHETIC TWIN / AGENT CHAT SMOKE',
+                        '',
+                        'Local synthetic round-trip: ' + ('PASS' if observed else 'NOT VERIFIED'),
+                        'Twin synthetic reply: ' +
+                            ('saved' if report.get('twin_reply_saved') is True else 'not verified'),
+                        'Agent synthetic reply: ' +
+                            ('saved' if report.get('agent_reply_saved') is True else 'not verified'),
+                        'Mode separation: ' +
+                            ('verified' if report.get('mode_isolation_verified') is True else 'not verified'),
+                        '',
+                        'No personal owner profile or examples used.',
+                        'Disposable profile only. Real Twin fidelity, GPU,',
+                        'training and long-term adaptation remain unverified.',
+                    ]
+                    setup_text.config(state='normal')
+                    setup_text.delete('1.0', 'end')
+                    setup_text.insert('1.0', '\n'.join(lines))
+                    setup_text.config(state='disabled')
+                    set_status('Synthetic Twin/Agent smoke ' +
+                               ('passed' if observed else 'not verified'))
                 elif state == 'profile-health':
                     setup_text.config(state='normal')
                     setup_text.delete('1.0', 'end')
