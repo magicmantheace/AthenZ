@@ -26,7 +26,7 @@ from .family_audit import (
     CategoryScores, FamilyAudit, category_diversity_gate, create_family_template,
 )
 from .paired_stats import (
-    ChoiceStabilityCounter, ConfidenceAccumulator,
+    ChoiceStabilityCounter, ConfidenceAccumulator, SelectiveConfidenceAccumulator,
     exact_paired_sign_test, discordant_win_interval,
 )
 from .store import IdentityStore
@@ -90,6 +90,8 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
                               seed: int = 42, model_guard=None,
                               allow_abstain: bool = False,
                               score_confidence: bool = False,
+                              confidence_cutoff: float | None = None,
+                              calibration_grid: bool = False,
                               family_audit: FamilyAudit | None = None,
                               require_category_diversity: bool = False,
                               stability_trials: int = 1,
@@ -105,6 +107,9 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
             or not 0 <= seed <= 2**32 - 1
             or type(allow_abstain) is not bool
             or type(score_confidence) is not bool
+            or type(calibration_grid) is not bool
+            or (calibration_grid and (not score_confidence or split != "calibration"))
+            or (confidence_cutoff is not None and not score_confidence)
             or type(require_category_diversity) is not bool
             or type(stability_trials) is not int or not 1 <= stability_trials <= 3
             or (stability_trials > 1 and limit * stability_trials > 300)
@@ -113,6 +118,7 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
                 split != "test" or model_identity_digest is None))
             or (allow_abstain and score_confidence)):
         raise ValueError("Use a held-out split and bounded limit/seed")
+    confidence_cutoff = SelectiveConfidenceAccumulator.validate_cutoff(confidence_cutoff)
     _reject_overlapping_decision_splits(store)
     _reject_repeated_heldout_scenarios(store, split, limit)
     rows = _heldout_rows(store, split, limit)
@@ -130,6 +136,7 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
         "limit": limit, "seed": seed,
         "allow_abstain": allow_abstain,
         "score_confidence": score_confidence,
+        "confidence_cutoff": confidence_cutoff,
         "family_audit": family_audit is not None,
         "require_category_diversity": require_category_diversity,
         "stability_trials": stability_trials,
@@ -182,6 +189,8 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
     abstentions = {"twin": 0, "neutral": 0}
     calibration = {"twin": ConfidenceAccumulator(),
                    "neutral": ConfidenceAccumulator()}
+    selection = {"twin": SelectiveConfidenceAccumulator(),
+                 "neutral": SelectiveConfidenceAccumulator()}
     expected_chance = 0.0
     for case in rows:
         trial_semantics = {"twin": [], "neutral": []}
@@ -251,6 +260,8 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
                     elif score_confidence:
                         calibration[arm].add(
                             probability, correct=(predicted == gold))
+                        selection[arm].add(
+                            probability, correct=(predicted == gold))
             if trial_index == 0:
                 t = predictions["twin"] == gold
                 n = predictions["neutral"] == gold
@@ -280,7 +291,7 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
     twin_answered = total - abstentions["twin"] - invalid["twin"]
     neutral_answered = total - abstentions["neutral"] - invalid["neutral"]
     return {
-        "schema": 6,
+        "schema": 7,
         "kind": "same-model-paired-twin-decision-evaluation",
         "frozen_test_plan": (
             {"enabled": True, "verified": True,
@@ -328,6 +339,15 @@ def evaluate_paired_decisions(store: IdentityStore, model, *,
             "twin": calibration["twin"].report(),
             "neutral": calibration["neutral"].report(),
         },
+        "confidence_selection": ({
+            "enabled": True,
+            "twin": selection["twin"].report(
+                total, cutoff=confidence_cutoff, calibration_grid=calibration_grid),
+            "neutral": selection["neutral"].report(
+                total, cutoff=confidence_cutoff, calibration_grid=calibration_grid),
+            "selected_cutoff_applies_to_inference": False,
+            "raw_prediction_accuracy_unchanged": True,
+        } if score_confidence else {"enabled": False}),
         "twin_abstentions": abstentions["twin"],
         "neutral_abstentions": abstentions["neutral"],
         "twin_coverage": twin_answered / total if total else None,
@@ -374,6 +394,10 @@ def main(argv: list[str] | None = None) -> None:
                              "(2 or 3 trials; limit times trials <= 300)")
     parser.add_argument("--score-confidence", action="store_true",
                         help="Request self-reported chosen-answer probabilities for calibration analysis")
+    parser.add_argument("--confidence-cutoff", type=float, default=None,
+                        help="Report selective accuracy at a prereviewed 0.5-0.9 confidence cutoff")
+    parser.add_argument("--calibration-grid", action="store_true",
+                        help="Exploratory 0.5-0.9 cutoff table (calibration split only)")
     parser.add_argument("--family-audit", action="store_true",
                         help="Require owner-reviewed local family categories and split independence")
     parser.add_argument("--require-category-diversity", action="store_true",
@@ -393,6 +417,10 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if args.require_category_diversity and not args.family_audit:
         parser.error("--require-category-diversity requires --family-audit")
+    if args.calibration_grid and args.split != "calibration":
+        parser.error("--calibration-grid requires --split calibration")
+    if (args.calibration_grid or args.confidence_cutoff is not None) and not args.score_confidence:
+        parser.error("Confidence cutoff studies require --score-confidence")
     if (sum((args.freeze_test_plan, args.check_test_plan,
              args.use_test_plan)) > 1
             or ((args.freeze_test_plan or args.check_test_plan
@@ -433,6 +461,7 @@ def main(argv: list[str] | None = None) -> None:
                 "limit": args.limit, "seed": args.seed,
                 "allow_abstain": args.allow_abstain,
                 "score_confidence": args.score_confidence,
+                "confidence_cutoff": args.confidence_cutoff,
                 "family_audit": args.family_audit,
                 "require_category_diversity": args.require_category_diversity,
                 "stability_trials": args.stability_trials,
@@ -470,6 +499,8 @@ def main(argv: list[str] | None = None) -> None:
                 seed=args.seed, model_guard=current_model,
                 allow_abstain=args.allow_abstain,
                 score_confidence=args.score_confidence,
+                confidence_cutoff=args.confidence_cutoff,
+                calibration_grid=args.calibration_grid,
                 family_audit=audit,
                 require_category_diversity=args.require_category_diversity,
                 stability_trials=args.stability_trials,
