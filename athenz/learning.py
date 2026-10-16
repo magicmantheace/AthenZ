@@ -10,7 +10,7 @@ import json
 import re
 import unicodedata
 from contextlib import nullcontext
-from .store import IdentityStore, STATES, utc_now
+from .store import IdentityStore, KINDS, STATES, utc_now
 from .style_overlap import strongly_overlaps
 
 
@@ -21,6 +21,79 @@ def _writing_split_key(text: str) -> str:
 
 
 class LearningStore(IdentityStore):
+    @staticmethod
+    def _message_review_digest(row) -> str:
+        """One user-authored message AND its session provenance, never assistant text."""
+        payload = [row["id"], row["session"], row["mode"],
+                   row["role"], row["content"]]
+        return hashlib.sha256(json.dumps(
+            payload, ensure_ascii=False, separators=(",", ":")
+        ).encode("utf-8")).hexdigest()
+
+    def memory_source_preview(self, message_id: int) -> dict:
+        """Return a private owner-preview; not a model prompt or public report."""
+        if type(message_id) is not int or message_id <= 0:
+            raise ValueError("Choose an existing owner-authored message")
+        row = self.db.execute(
+            "SELECT id,session,mode,role,content FROM messages WHERE id=?",
+            (message_id,)).fetchone()
+        if row is None or row["role"] != "user":
+            raise ValueError("Only an owner-authored chat message can be remembered")
+        if row["mode"] not in ("agent", "twin"):
+            raise ValueError("Message mode is invalid")
+        return {
+            "id": row["id"], "session": row["session"], "mode": row["mode"],
+            "content": row["content"],
+            "review_sha256": self._message_review_digest(row),
+        }
+
+    def propose_message_memory(self, message_id: int, kind: str, text: str, *,
+                               review_sha256: str, confirmed: bool = False) -> int:
+        """One pending memory per pinned source; no model extraction or approval."""
+        if confirmed is not True:
+            raise ValueError("Explicit owner confirmation is required")
+        if (type(kind) is not str or kind not in KINDS
+                or type(text) is not str or not text.strip()
+                or len(text) > 1200):
+            raise ValueError("Choose a memory type and 1-1200 character owner summary")
+        if (type(review_sha256) is not str or
+                re.fullmatch(r"[a-f0-9]{64}", review_sha256) is None):
+            raise ValueError("Inspect the exact source message before proposing memory")
+        if type(message_id) is not int or message_id <= 0:
+            raise ValueError("Invalid source message")
+        with self.db:
+            self.db.execute("BEGIN IMMEDIATE")
+            source = self.db.execute(
+                "SELECT id,session,mode,role,content FROM messages WHERE id=?",
+                (message_id,)).fetchone()
+            if (source is None or source["role"] != "user"
+                    or self._message_review_digest(source) != review_sha256):
+                raise ValueError("Source message changed after owner review; inspect again")
+            ref = str(message_id)
+            if self.db.execute(
+                "SELECT 1 FROM identity WHERE source='owner:chat-message' "
+                "AND source_ref=?", (ref,)).fetchone():
+                raise ValueError("This source message already has a memory proposal")
+            now = utc_now()
+            cur = self.db.execute(
+                "INSERT INTO identity "
+                "(kind,text,source,source_ref,confidence,status,created_at,updated_at) "
+                "VALUES (?,?,?,?,1.0,'pending',?,?)",
+                (kind, text.strip(), "owner:chat-message", ref, now, now))
+            self._event("created", "identity", cur.lastrowid)
+            return int(cur.lastrowid)
+
+    def _forget_message_memories(self, predicate: str, key) -> None:
+        """Delete derived identity and revisions inside the source deletion."""
+        if predicate not in ("id=?", "session=?"):
+            raise ValueError("Invalid source scope")
+        source = "SELECT CAST(id AS TEXT) FROM messages WHERE " + predicate
+        criteria = "source='owner:chat-message' AND source_ref IN (" + source + ")"
+        self.db.execute(
+            "DELETE FROM identity_revisions WHERE identity_id IN "
+            "(SELECT id FROM identity WHERE " + criteria + ")", (key,))
+        self.db.execute("DELETE FROM identity WHERE " + criteria, (key,))
+
     def add_message(self, session: str, mode: str, role: str, content: str) -> int:
         if mode not in {'twin', 'agent'} or role not in {'user', 'assistant'}:
             raise ValueError('Invalid mode or role')
@@ -174,8 +247,10 @@ class LearningStore(IdentityStore):
         if table not in {'messages', 'feedback', 'train_pairs', 'proposals', 'test_runs', 'experiences'}:
             raise ValueError('Unsupported deletion table')
         with self.db:
-            # Deleting message -> feedback -> training pairs via ON DELETE CASCADE.
-            # Deleting proposal -> tests -> experiences via ON DELETE CASCADE.
+            # Deleting message -> feedback -> train pairs via ON DELETE CASCADE.
+            # Derived personal memories require explicit source cleanup.
+            if table == "messages":
+                self._forget_message_memories("id=?", item_id)
             cur = self.db.execute(f'DELETE FROM {table} WHERE id=?', (item_id,))
             if cur.rowcount:
                 self._event('deleted', table, item_id)
@@ -183,6 +258,7 @@ class LearningStore(IdentityStore):
 
     def delete_session(self, session: str) -> int:
         with self.db:
+            self._forget_message_memories("session=?", session)
             cur = self.db.execute('DELETE FROM messages WHERE session=?', (session,))
             if cur.rowcount:
                 self._event('session-deleted', 'messages', None)
