@@ -78,6 +78,19 @@ optional adapter rather than a dependency. Do not put personal examples in
 either public Git repository, permit learned text to grant tools, or use
 simulation checksums as user authentication.
 
+### 2026-10-16 — Owner-reviewed chat-to-memory capture
+
+- [x] Preview one complete user-authored local message and its session/mode
+  provenance, require an owner-supplied summary pinned to that exact source
+  and explicitly confirm a pending identity/style/value/preference record.
+- [x] Add local CLI and desktop Review-memory workflow; no LLM extraction,
+  assistant-role promotion, automatic approval or weight training.
+- [x] Erase linked approved/pending personal memories and old revision text
+  when the original chat message or session is removed, while preserving
+  unrelated independent memories.
+- [ ] Validate on owner Windows hardware, including review GUI usability,
+  realistic imported chat volume and SQLite/backup data lifecycle.
+
 ### 2026-10-16 — Live Twin/Agent context integrity
 
 - [x] Discard local chat replies whose approved evidence or exact prompt

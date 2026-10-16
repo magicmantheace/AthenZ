@@ -146,6 +146,35 @@ class DesktopService:
         finally:
             store.close()
 
+    def memory_source_preview(self, session: str, mode: str, message_id: int) -> dict:
+        """Inspect the full owner-authored message under this session/mode."""
+        _validate_session(session, mode)
+        store = ExperienceStore(self.home)
+        try:
+            row = store.memory_source_preview(message_id)
+            if row["session"] != session or row["mode"] != mode:
+                raise DesktopError("Source does not belong to this chat session")
+            return row
+        finally:
+            store.close()
+
+    def propose_message_memory(self, session: str, mode: str, message_id: int,
+                               kind: str, summary: str, *, review_sha256: str,
+                               confirmed: bool = False) -> int:
+        """Stage an owner-written memory as pending, never auto-approve."""
+        _validate_session(session, mode)
+        store = ExperienceStore(self.home)
+        try:
+            try:
+                return store.propose_message_memory(
+                    message_id, kind, summary, review_sha256=review_sha256,
+                    confirmed=confirmed, expected_session=session, expected_mode=mode)
+            except ValueError:
+                raise DesktopError(
+                    'Memory source, summary or owner review changed; inspect again') from None
+        finally:
+            store.close()
+
     def feedback(self, session: str, mode: str, message_id: int, rating: str,
                  correction: str = '') -> dict:
         # Only a reply from this same local session/mode can be rated.
@@ -406,8 +435,76 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
         except Exception as exc:
             messagebox.showerror('Feedback failed', str(exc))
 
+    def remember_last_user_message() -> None:
+        """Explicit visual full-source and summary review; no model extraction."""
+        try:
+            current_session, current_mode = session.get(), mode.get()
+            rows = service.history(current_session, current_mode, limit=10)
+            last = next((r for r in reversed(rows) if r['role'] == 'user'), None)
+            if last is None:
+                raise DesktopError('There is no owner-written message to remember')
+            source = service.memory_source_preview(
+                current_session, current_mode, int(last['id']))
+        except Exception as exc:
+            messagebox.showerror('Memory source unavailable', str(exc))
+            return
+        dialog = tk.Toplevel(window)
+        dialog.title('Propose reviewed memory from your message')
+        dialog.geometry('700x510')
+        dialog.transient(window)
+        ttk.Label(dialog, text='Inspect your entire original message (read-only):').pack(
+            anchor='w', padx=12, pady=(12, 3))
+        original = tk.Text(dialog, wrap='word', height=8, padx=8, pady=8)
+        original.pack(fill='both', expand=True, padx=12, pady=(0, 8))
+        original.insert('1.0', source['content'])
+        original.config(state='disabled')
+        memory_controls = ttk.Frame(dialog, padding=(12, 4))
+        memory_controls.pack(fill='x')
+        ttk.Label(memory_controls, text='Memory type:').pack(side='left')
+        memory_kind = tk.StringVar(value='preference')
+        ttk.Combobox(memory_controls, textvariable=memory_kind,
+                     values=('preference', 'style', 'value', 'knowledge',
+                             'identity', 'skill', 'lesson'),
+                     state='readonly', width=16).pack(side='left', padx=8)
+        ttk.Label(dialog, text='Write your own summary (not automatically inferred):').pack(
+            anchor='w', padx=12, pady=(8, 3))
+        summary_field = tk.Text(dialog, wrap='word', height=5, padx=8, pady=8)
+        summary_field.pack(fill='both', expand=True, padx=12, pady=(0, 8))
+        buttons = ttk.Frame(dialog, padding=12)
+        buttons.pack(fill='x')
+
+        def propose() -> None:
+            summary = summary_field.get('1.0', 'end-1c').strip()
+            if not summary or len(summary) > 1200:
+                messagebox.showerror('Memory summary', 'Write a 1–1200 character summary.',
+                                     parent=dialog)
+                return
+            if not messagebox.askyesno(
+                    'Confirm memory proposal',
+                    'Store this owner-written summary as PENDING? It will not '
+                    'enter Twin memory until you separately approve it.',
+                    parent=dialog):
+                return
+            try:
+                mid = service.propose_message_memory(
+                    current_session, current_mode, int(source['id']),
+                    memory_kind.get(), summary,
+                    review_sha256=source['review_sha256'], confirmed=True)
+                dialog.destroy()
+                reload_reviews()
+                set_status(f'Memory #{mid} pending full review; not used by Twin yet')
+            except Exception as exc:
+                messagebox.showerror('Memory proposal refused', str(exc),
+                                     parent=dialog)
+
+        ttk.Button(buttons, text='Cancel', command=dialog.destroy).pack(side='right')
+        ttk.Button(buttons, text='Propose pending memory', command=propose).pack(
+            side='right', padx=8)
+
     ttk.Button(send_row, text='Good reply', command=lambda: rate_reply('up')).pack(side='left', padx=(8, 0))
     ttk.Button(send_row, text='Correct reply', command=lambda: rate_reply('down')).pack(side='left', padx=(8, 0))
+    ttk.Button(send_row, text='Remember my message',
+               command=remember_last_user_message).pack(side='left', padx=(8, 0))
 
     send_button.config(command=send)
     prompt.bind('<Return>', send)
