@@ -74,6 +74,18 @@ repeats as new independent cases. All repeat predictions stay ephemeral and
 the report contains aggregate stability only.
 A real on-device held-out improvement has not yet been demonstrated.
 
+## Owner-reported longitudinal decisions (experimental)
+
+`athenz-decision-timeline` is a separate, entirely offline private journal for
+recording repeated owner-confirmed decision choices with a date, comparable
+context and family identifier. It reports **aggregate consecutive choice
+agreement** only when at least five qualifying pairs span three distinct
+families; sparse comparisons remain suppressed. Neither these self-reports
+nor the summaries enter Twin prompts, model training or the independent
+held-out model benchmark. This is a human variability reference, **not**
+verified identity or Twin predictive accuracy.
+See [longitudinal decision protocol](docs/TWIN_LONGITUDINAL_DECISIONS.md).
+
 ## Setup
 
 ```sh
