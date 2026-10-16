@@ -928,7 +928,7 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
         if tag is None:
             return
         from .synthetic_chat_smoke import _MODEL
-        if _MODEL.fullmatch(tag) is None:
+        if _MODEL.fullmatch(tag) is None or '://' in tag or '//' in tag:
             messagebox.showerror('Invalid model tag',
                                  'Choose a short installed local model tag.',
                                  parent=window)
