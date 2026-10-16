@@ -22,6 +22,7 @@ from .family_audit import (
     category_diversity_gate,
 )
 from .store import IdentityStore, private_home_path
+from .paired_stats import SelectiveConfidenceAccumulator
 
 _FILENAME = "decision-final-test-plan.json"
 _DIGEST = re.compile(r"[a-fA-F0-9]{64}\Z")
@@ -32,7 +33,8 @@ _SOURCE_MODULES = (
     "store.py", "frozen_decision_plan.py",
 )
 _KEYS = frozenset({
-    "limit", "seed", "allow_abstain", "score_confidence", "family_audit",
+    "limit", "seed", "allow_abstain", "score_confidence", "confidence_cutoff",
+    "family_audit",
     "require_category_diversity", "stability_trials",
 })
 
@@ -71,6 +73,10 @@ def _settings(**kw) -> dict:
             or type(kw["stability_trials"]) is not int
             or not 1 <= kw["stability_trials"] <= 3
             or kw["limit"] * kw["stability_trials"] > 300
+            or (kw["confidence_cutoff"] is not None
+                and (not kw["score_confidence"]
+                     or SelectiveConfidenceAccumulator.validate_cutoff(
+                         kw["confidence_cutoff"]) is None))
             or (kw["allow_abstain"] and kw["score_confidence"])
             or (kw["require_category_diversity"] and not kw["family_audit"])):
         raise ValueError("Invalid frozen test settings or excessive local workload")

@@ -153,6 +153,9 @@ See [docs/TWIN_CONTEXT.md](docs/TWIN_CONTEXT.md).
   approved decisions/reference evidence, the selected heldout sample,
   family review, explicit local model digest, exact evaluation settings and
   directly involved code; refuse drift before/after each model response.
+- [x] Add calibration-only aggregate self-reported confidence cutoff grid,
+  suppress small answer groups, and bind explicit chosen cutoff into frozen
+  test protocol without modifying raw paired accuracy or model behavior.
 - [ ] Actually calibrate uncertainty or abstention on real owner-labelled
   data; independently validate semantic group labels, topic-family
   generalization and observed owner variability against on-device model

@@ -50,7 +50,8 @@ class FrozenDecisionPlanTests(unittest.TestCase):
         ]
         self.options = {
             "limit": 2, "seed": 19, "allow_abstain": False,
-            "score_confidence": False, "family_audit": False,
+            "score_confidence": False, "confidence_cutoff": None,
+            "family_audit": False,
             "require_category_diversity": False, "stability_trials": 1,
         }
         self.path = self.store.home / "decision-final-test-plan.json"
@@ -76,6 +77,7 @@ class FrozenDecisionPlanTests(unittest.TestCase):
             limit=kw["limit"], seed=kw["seed"],
             allow_abstain=kw["allow_abstain"],
             score_confidence=kw["score_confidence"],
+            confidence_cutoff=kw["confidence_cutoff"],
             require_category_diversity=kw["require_category_diversity"],
             stability_trials=kw["stability_trials"],
             family_audit=None, frozen_test_plan=plan,
@@ -87,7 +89,7 @@ class FrozenDecisionPlanTests(unittest.TestCase):
         model = FixedModel()
         result = self.run_eval(plan, model)
         self.assertEqual(len(model.calls), 4)
-        self.assertEqual(result["schema"], 6)
+        self.assertEqual(result["schema"], 7)
         self.assertEqual(result["total"], 2)
         self.assertEqual(result["frozen_test_plan"]["plan_sha256"],
                          plan.plan_sha256)
@@ -106,6 +108,17 @@ class FrozenDecisionPlanTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "exists"):
             self.freeze()
         self.assertEqual(self.path.read_bytes(), original)
+
+    def test_confidence_threshold_is_frozen_and_cannot_be_retuned(self):
+        plan = self.freeze(score_confidence=True, confidence_cutoff=0.7)
+        self.verify(plan, score_confidence=True, confidence_cutoff=0.7)
+        model = FixedModel()
+        with self.assertRaisesRegex(ValueError, "model or protocol"):
+            self.run_eval(
+                plan, model, score_confidence=True, confidence_cutoff=0.8)
+        self.assertEqual(model.calls, [])
+        with self.assertRaisesRegex(ValueError, "model or protocol"):
+            self.verify(plan, score_confidence=False, confidence_cutoff=None)
 
     def test_protocol_and_model_identity_mismatch_before_model_calls(self):
         plan = self.freeze()

@@ -161,3 +161,83 @@ class ChoiceStabilityCounter:
             "invalid_trials": self.invalid_trials,
             "abstention_trials": self.abstention_trials,
         }
+
+
+class SelectiveConfidenceAccumulator:
+    """Finite-grid selective prediction audit with no per-case retention.
+
+    A cutoff means the model must report confidence >= cutoff to be counted
+    as an answered prediction. This does not calibrate self-reported confidence
+    or authorize deployment/automatic action.
+    """
+
+    _CUTOFFS = (0.5, 0.6, 0.7, 0.8, 0.9)
+    _MIN_GRID_SAMPLES = 20
+    _MIN_PUBLISHED_ANSWERS = 5
+
+    def __init__(self) -> None:
+        self._bins = [[0, 0] for _ in range(10)]
+        self.samples = 0
+
+    @classmethod
+    def validate_cutoff(cls, cutoff: float | None) -> float | None:
+        if cutoff is None:
+            return None
+        if type(cutoff) not in (float, int) or not isfinite(cutoff):
+            raise ValueError("Confidence cutoff must be one of 0.5, 0.6, 0.7, 0.8, 0.9")
+        if float(cutoff) not in cls._CUTOFFS:
+            raise ValueError("Confidence cutoff must be one of 0.5, 0.6, 0.7, 0.8, 0.9")
+        return float(cutoff)
+
+    def add(self, probability: float, *, correct: bool) -> None:
+        if (type(probability) not in (int, float) or not isfinite(probability)
+                or not 0 <= probability <= 1 or type(correct) is not bool
+                or self.samples >= 1000):
+            raise ValueError("Invalid confidence prediction outcome")
+        index = min(9, int(probability * 10))
+        self._bins[index][0] += 1
+        self._bins[index][1] += int(correct)
+        self.samples += 1
+
+    def _threshold(self, cutoff: float, total: int, *, grid: bool) -> dict:
+        threshold = int(round(cutoff * 10))
+        accepted = sum(count for count, _ in self._bins[threshold:])
+        correct = sum(wins for _, wins in self._bins[threshold:])
+        # Exclude malformed predictions from accepted; their absence already
+        # reduces coverage measured against all held-out cases.
+        result = {"cutoff": cutoff}
+        if accepted < self._MIN_PUBLISHED_ANSWERS:
+            return {**result, "status": "insufficient-accepted-cases",
+                    "coverage": None, "accuracy": None}
+        return {**result, "status": "descriptive",
+                "coverage": accepted / total if total else None,
+                "accuracy": correct / accepted}
+
+    def report(self, total: int, *, cutoff: float | None = None,
+               calibration_grid: bool = False) -> dict:
+        if (type(total) is not int or total < self.samples or total > 1000
+                or type(calibration_grid) is not bool):
+            raise ValueError("Invalid confidence evaluation case count")
+        cutoff = self.validate_cutoff(cutoff)
+        return {
+            "scored_predictions": self.samples,
+            "all_heldout_cases": total,
+            "minimum_accepted_cases_for_accuracy": self._MIN_PUBLISHED_ANSWERS,
+            "selection_rule": "self_reported_probability_at_least_cutoff",
+            "selected_cutoff": cutoff,
+            "selected_metrics": (
+                self._threshold(cutoff, total, grid=False)
+                if cutoff is not None else None),
+            "calibration_grid": (
+                {"status": "descriptive", "thresholds": [
+                    self._threshold(t, total, grid=True)
+                    for t in self._CUTOFFS]}
+                if total >= self._MIN_GRID_SAMPLES
+                and self.samples >= self._MIN_GRID_SAMPLES
+                else {"status": "insufficient-calibration-samples",
+                      "thresholds": []}
+            ) if calibration_grid else {"enabled": False},
+            "cutoff_chosen_by_algorithm": False,
+            "confidence_is_calibrated": False,
+            "selective_scores_are_independent_tests": False,
+        }
