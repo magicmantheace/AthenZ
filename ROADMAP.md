@@ -146,9 +146,13 @@ See [docs/TWIN_CONTEXT.md](docs/TWIN_CONTEXT.md).
 - [x] Add opt-in within-case repeated decision stability over changed
   deterministic model seeds and option permutations, count semantic-option
   agreement only, and keep primary paired accuracy/stats independent.
+- [x] Add a separate owner-only, consented longitudinal decision observation
+  journal with dated/context-grouped comparison, bounded atomic writes and
+  small-sample aggregate suppression (synthetic tests only).
 - [ ] Actually calibrate uncertainty or abstention on real owner-labelled
   data; independently validate semantic group labels, topic-family
-  generalization and owner decision variability benchmarks.
+  generalization and observed owner variability against on-device model
+  predictions.
 
 Details: [docs/TWIN_DECISION_COMPARISON.md](docs/TWIN_DECISION_COMPARISON.md).
 Synthetic passing tests verify data isolation and algorithm behavior,
