@@ -91,14 +91,15 @@ class LearningStore(IdentityStore):
 
     def _forget_message_memories(self, predicate: str, key) -> None:
         """Delete derived identity and revisions inside the source deletion."""
-        if predicate not in ("id=?", "session=?"):
+        if predicate not in ("id=?", "session=?", "session=? AND mode=?"):
             raise ValueError("Invalid source scope")
         source = "SELECT CAST(id AS TEXT) FROM messages WHERE " + predicate
         criteria = "source='owner:chat-message' AND source_ref IN (" + source + ")"
+        args = key if predicate == "session=? AND mode=?" else (key,)
         self.db.execute(
             "DELETE FROM identity_revisions WHERE identity_id IN "
-            "(SELECT id FROM identity WHERE " + criteria + ")", (key,))
-        self.db.execute("DELETE FROM identity WHERE " + criteria, (key,))
+            "(SELECT id FROM identity WHERE " + criteria + ")", args)
+        self.db.execute("DELETE FROM identity WHERE " + criteria, args)
 
     def add_message(self, session: str, mode: str, role: str, content: str) -> int:
         if mode not in {'twin', 'agent'} or role not in {'user', 'assistant'}:
@@ -261,6 +262,24 @@ class LearningStore(IdentityStore):
             if cur.rowcount:
                 self._event('deleted', table, item_id)
         return bool(cur.rowcount)
+
+    def delete_mode_session(self, session: str, mode: str) -> int:
+        """Remove one chat mode, including source-linked owner memories.
+
+        Does not touch the same session name in the other chat mode.
+        This operation may be called under a caller-held SQLite write
+        transaction after a reviewed session digest was checked.
+        """
+        if (type(session) is not str or not session.strip()
+                or type(mode) is not str or mode not in {"agent", "twin"}):
+            raise ValueError("Choose a valid named Agent or Twin conversation")
+        with self.db:
+            self._forget_message_memories("session=? AND mode=?", (session, mode))
+            cur = self.db.execute(
+                "DELETE FROM messages WHERE session=? AND mode=?", (session, mode))
+            if cur.rowcount:
+                self._event("session-mode-deleted", "messages", None)
+        return int(cur.rowcount)
 
     def delete_session(self, session: str) -> int:
         with self.db:
