@@ -11,6 +11,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, ProxyHandler, HTTPRedirectHandler, build_opener
 from .prompting import build_messages
+from .chat_continuity import same_session_user_excerpts
 from .experience import ExperienceStore
 from .store import IdentityStore
 
@@ -83,7 +84,8 @@ class OllamaClient:
 
 
 def context_snapshot(store: IdentityStore, prompt: str, mode: str = "agent",
-                     recent: list[dict] | None = None) -> tuple[str, list[dict]]:
+                     recent: list[dict] | None = None,
+                     session: str | None = None) -> tuple[str, list[dict]]:
     """Fingerprint all approved prompt evidence and the exact chat context.
 
     Never store or expose the private prompt in the digest. Two source reads
@@ -95,13 +97,21 @@ def context_snapshot(store: IdentityStore, prompt: str, mode: str = "agent",
 
     before = _reference_fingerprint(store)
     messages = build_messages(store, prompt, mode=mode)
+    insert_at = 2
+    if session is not None:
+        historical = same_session_user_excerpts(
+            store, session=session, mode=mode, prompt=prompt, recent=recent)
+        if historical is not None:
+            # Explicitly untrusted source, distinct from the approved profile.
+            messages.insert(insert_at, {"role": "system", "content": historical})
+            insert_at += 1
     if recent:
         # Caller-supplied context remains untrusted and bounded to one session.
         valid = [{"role": r["role"], "content": r["content"][:4000]}
                  for r in recent[-10:] if isinstance(r, dict)
                  and r.get("role") in {"user", "assistant"}
                  and isinstance(r.get("content"), str)]
-        messages[2:2] = valid
+        messages[insert_at:insert_at] = valid
     if _reference_fingerprint(store) != before:
         raise LocalModelError("Approved local evidence changed; reply discarded")
     signature = hashlib.sha256(json.dumps(
@@ -111,10 +121,11 @@ def context_snapshot(store: IdentityStore, prompt: str, mode: str = "agent",
 
 
 def answer(store: IdentityStore, model: OllamaClient, prompt: str,
-           mode: str = "agent", recent: list[dict] | None = None) -> str:
-    original, messages = context_snapshot(store, prompt, mode, recent)
+           mode: str = "agent", recent: list[dict] | None = None,
+           session: str | None = None) -> str:
+    original, messages = context_snapshot(store, prompt, mode, recent, session)
     reply = model.generate(messages)
-    if context_snapshot(store, prompt, mode, recent)[0] != original:
+    if context_snapshot(store, prompt, mode, recent, session)[0] != original:
         raise LocalModelError("Approved local evidence changed; reply discarded")
     return reply
 
@@ -146,8 +157,10 @@ def main(argv: list[str] | None = None) -> None:
             try:
                 if args.model is None and checked_active_tag(store) != selected:
                     raise RoutingError('Active model routing changed; restart the session')
-                snapshot = context_snapshot(store, q, args.mode, history)[0]
-                reply = answer(store, model, q, args.mode, history)
+                snapshot = context_snapshot(
+                    store, q, args.mode, history, args.session)[0]
+                reply = answer(
+                    store, model, q, args.mode, history, args.session)
                 # A tag, approval or runtime preference can change while a
                 # slow local generation is in flight. Never save its reply
                 # after revocation or re-routing, including None -> candidate.
@@ -167,7 +180,8 @@ def main(argv: list[str] | None = None) -> None:
                     # between verification and persistence.
                     store.db.execute("BEGIN IMMEDIATE")
                     if (store.conversation(args.session, args.mode, limit=10) != history
-                            or context_snapshot(store, q, args.mode, history)[0] != snapshot):
+                            or context_snapshot(
+                                store, q, args.mode, history, args.session)[0] != snapshot):
                         raise LocalModelError(
                             "Approved local evidence or session changed; reply discarded")
                     if args.model is None and checked_active_tag(store) != selected:
