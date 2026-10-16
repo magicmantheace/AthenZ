@@ -26,10 +26,34 @@ from .store import IdentityStore, private_home_path
 _FILENAME = "decision-final-test-plan.json"
 _DIGEST = re.compile(r"[a-fA-F0-9]{64}\Z")
 _TAG = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}\Z")
+_SOURCE_MODULES = (
+    "paired_decisions.py", "evaluation.py", "family_audit.py",
+    "paired_stats.py", "prompting.py", "chat.py", "runtime.py",
+    "store.py", "frozen_decision_plan.py",
+)
 _KEYS = frozenset({
     "limit", "seed", "allow_abstain", "score_confidence", "family_audit",
     "require_category_diversity", "stability_trials",
 })
+
+
+def _implementation_digest() -> str:
+    """Fingerprint directly involved local source implementations.
+
+    This is a change detector, not a signature or trusted software attestation.
+    """
+    directory = Path(__file__).resolve().parent
+    digest = hashlib.sha256()
+    for name in _SOURCE_MODULES:
+        path = directory / name
+        try:
+            content = path.read_bytes()
+        except OSError:
+            raise ValueError("Frozen study code fingerprint unavailable") from None
+        digest.update(name.encode("ascii") + b"\0")
+        digest.update(len(content).to_bytes(8, "big"))
+        digest.update(content)
+    return digest.hexdigest()
 
 
 def _path(store: IdentityStore) -> Path:
@@ -98,6 +122,7 @@ def freeze_test_plan(store: IdentityStore, *, model_tag: str, model_digest: str,
         "schema": 1, "kind": "owner-frozen-twin-final-decision-study",
         "model_tag": model_tag, "model_digest": model_digest,
         "settings": settings, "evidence": first,
+        "implementation_sha256": _implementation_digest(),
     }
     if first != _evidence(store, settings)[0]:
         raise ValueError("Final test source changed during freezing")
@@ -132,7 +157,8 @@ class FrozenTestPlan:
         except (ValueError, UnicodeError):
             raise ValueError("Malformed private final-test plan") from None
         if (not isinstance(payload, dict) or set(payload) != {
-                "schema", "kind", "model_tag", "model_digest", "settings", "evidence"}
+                "schema", "kind", "model_tag", "model_digest", "settings",
+                "evidence", "implementation_sha256"}
                 or type(payload["schema"]) is not int or payload["schema"] != 1
                 or payload["kind"] != "owner-frozen-twin-final-decision-study"
                 or not isinstance(payload["settings"], dict)
@@ -144,6 +170,9 @@ class FrozenTestPlan:
                     "selected_count"}):
             raise ValueError("Unsupported or incomplete private final-test plan")
         _validate_model(payload["model_tag"], payload["model_digest"])
+        if (type(payload["implementation_sha256"]) is not str or
+                _DIGEST.fullmatch(payload["implementation_sha256"]) is None):
+            raise ValueError("Invalid frozen study implementation fingerprint")
         self.settings = _settings(**payload["settings"])
         ev = payload["evidence"]
         if (any(type(ev[k]) is not str or _DIGEST.fullmatch(ev[k]) is None
@@ -163,7 +192,8 @@ class FrozenTestPlan:
         _validate_model(model_tag, model_digest)
         if (self.payload["model_tag"] != model_tag
                 or self.payload["model_digest"] != model_digest
-                or self.settings != _settings(**options)):
+                or self.settings != _settings(**options)
+                or self.payload["implementation_sha256"] != _implementation_digest()):
             raise ValueError("Final-test model or protocol does not match frozen plan")
         raw = _read_private(self.path)
         if hashlib.sha256(raw).hexdigest() != self.plan_sha256:
