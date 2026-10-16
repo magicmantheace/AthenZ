@@ -15,7 +15,7 @@ import queue
 import re
 import threading
 
-from .chat import OllamaClient, answer
+from .chat import OllamaClient, answer, context_snapshot
 from .chat_cancel import ReplyCancelled, ReplyCancelGate
 from .experience import ExperienceStore
 from .runtime import checked_active_tag
@@ -77,6 +77,7 @@ class DesktopService:
             chosen = checked_active_tag(store) if model is None else None
             local = OllamaClient(model=model or chosen)
             recent = store.conversation(session, mode, limit=10)
+            snapshot = context_snapshot(store, prompt.strip(), mode, recent)[0]
             reply = answer(store, local, prompt.strip(), mode, recent)
             if model is None and checked_active_tag(store) != chosen:
                 raise DesktopError('Selected model changed during inference; reply discarded')
@@ -91,6 +92,14 @@ class DesktopService:
             guard = cancel_gate.commit_guard() if cancel_gate is not None else nullcontext()
             with guard:
                 with store.db:
+                    store.db.execute("BEGIN IMMEDIATE")
+                    if (store.conversation(session, mode, limit=10) != recent
+                            or context_snapshot(store, prompt.strip(), mode, recent)[0] != snapshot):
+                        raise DesktopError(
+                            'Approved context or session changed; reply discarded')
+                    if model is None and checked_active_tag(store) != chosen:
+                        raise DesktopError(
+                            'Selected model changed during inference; reply discarded')
                     store.db.execute('''INSERT INTO messages(session,mode,role,content,created_at)
                                     VALUES (?,?,?,?,?)''',
                                      (session, mode, 'user', prompt.strip(), utc_now()))

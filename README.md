@@ -117,6 +117,15 @@ The `athenz`, `athenz-worker`, `athenz-controller`, `athenz-sequence`, and
 installed from `pyproject.toml`. Each mode uses locally stored, approval-gated
 private identity and memory in `~/.athenz` or `ATHENZ_HOME`, never the Git repo.
 The Ollama client accepts **only** explicit HTTP loopback endpoints.
+Both terminal chat and the desktop now check an in-flight answer against
+the current **approved memory/reference evidence and same-session history**.
+If a memory is revoked, relevant context changes, another turn arrives or
+the selected model route changes during generation, the stale answer is
+discarded instead of being saved as a fresh reply. Persistence uses a
+short SQLite write lock for the final consistency check; inference itself
+does not run inside that lock. This is an owner-data integrity safeguard,
+not a claim that local AI replies are factually correct or that every
+possible hostile filesystem race is prevented.
 
 ## Supervised coding and learning
 
