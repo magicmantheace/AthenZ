@@ -48,7 +48,9 @@ class LearningStore(IdentityStore):
         }
 
     def propose_message_memory(self, message_id: int, kind: str, text: str, *,
-                               review_sha256: str, confirmed: bool = False) -> int:
+                               review_sha256: str, confirmed: bool = False,
+                               expected_session: str | None = None,
+                               expected_mode: str | None = None) -> int:
         """One pending memory per pinned source; no model extraction or approval."""
         if confirmed is not True:
             raise ValueError("Explicit owner confirmation is required")
@@ -67,7 +69,11 @@ class LearningStore(IdentityStore):
                 "SELECT id,session,mode,role,content FROM messages WHERE id=?",
                 (message_id,)).fetchone()
             if (source is None or source["role"] != "user"
-                    or self._message_review_digest(source) != review_sha256):
+                    or self._message_review_digest(source) != review_sha256
+                    or (expected_session is not None and
+                        source["session"] != expected_session)
+                    or (expected_mode is not None and
+                        source["mode"] != expected_mode)):
                 raise ValueError("Source message changed after owner review; inspect again")
             ref = str(message_id)
             if self.db.execute(
