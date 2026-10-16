@@ -186,6 +186,16 @@ mid-run change invalidates the whole report.
 variability**. A later longitudinal study will need owner-approved decisions
 recorded at different times and must control for genuine preference changes.
 
+## Independent owner variability reference
+
+The separate [private longitudinal decision journal](TWIN_LONGITUDINAL_DECISIONS.md)
+allows the owner to explicitly record time-separated choices under comparable
+contexts. Its aggregate observed consistency is **not** part of this held-out
+Twin model benchmark, never enters prompts, and cannot substitute for model
+prediction scores. Different observation dates may indicate genuine human
+preference changes, so model prediction consistency must not automatically
+be treated as human stability or fidelity.
+
 ## Fail-closed conditions
 
 Before the first inference, scan all selected held-out scenarios for strong
