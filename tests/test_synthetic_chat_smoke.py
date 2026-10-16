@@ -115,7 +115,7 @@ class SyntheticChatSmokeTests(unittest.TestCase):
             self.assertNotIn("PRIVATE OWNER MEMORIES", json.dumps(FakeModel.calls))
 
     def test_failed_prompt_assembly_never_starts_any_inference(self):
-        with mock.patch("athenz.synthetic_chat_smoke.build_messages",
+        with mock.patch("athenz.prompting.build_messages",
                         side_effect=RuntimeError("SECRET OWNER TEXT")), \
              mock.patch("athenz.desktop.OllamaClient", FakeModel):
             result = check_synthetic_chat(model="synthetic:1", confirmed=True)
