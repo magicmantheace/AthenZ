@@ -78,6 +78,20 @@ optional adapter rather than a dependency. Do not put personal examples in
 either public Git repository, permit learned text to grant tools, or use
 simulation checksums as user authentication.
 
+### 2026-10-16 — Owner-device local chat acceptance bridge
+
+- [x] Add a one-command and Setup-tab **explicitly authorized** two-request
+  Twin/Agent smoke using actual local Ollama inference on a disposable,
+  synthetic-only approved profile and the real desktop persistence path.
+- [x] Verify mode-separated user/assistant turn persistence, source prompt
+  assembly, cleanup and bounded sanitized results without opening personal
+  profile files or logging model output; no model download or training.
+- [x] Add synthetic service tests for consent, malformed model IDs,
+  report privacy, first/second inference failure and environment isolation.
+- [ ] Run the smoke on the owner PC with an already installed model and
+  separately test RTX 3060 acceleration, real approved-memory handling,
+  Windows GUI usability, private backup/recovery and Twin predictive fidelity.
+
 ### 2026-10-16 — Desktop memory correction and revocation
 
 - [x] List current approved personal memories in the local desktop,

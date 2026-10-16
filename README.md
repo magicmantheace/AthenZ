@@ -88,6 +88,29 @@ This is a descriptive selection audit, not automatic threshold learning or
 evidence of calibrated confidence.
 A real on-device held-out improvement has not yet been demonstrated.
 
+## Run a real local Twin + Agent smoke test without personal data
+
+AthenZ offers an explicit, disposable-profile smoke test through the **Setup**
+tab's **Test Twin + Agent (synthetic)…** button or this terminal command:
+
+```sh
+athenz-chat-smoke --model qwen3.5:2b --confirm
+```
+
+The chosen Ollama model must already be installed and running on the same
+computer. After confirmation, AthenZ creates an empty *temporary* private
+profile with a fictional preference, verifies its ordinary prompt assembly,
+generates exactly **one Twin and one Agent reply** via the desktop service,
+checks that the replies were committed in separate sessions/modes, and deletes
+the synthetic profile when finished. Only fixed, sanitized outcome flags are
+printed; no real owner profile is loaded and no chat content is exported.
+A failed request makes the CLI exit nonzero. This exercises actual local
+inference and the everyday persistence path—not GPU use, model quality,
+personality fidelity, autonomous learning, or installed-model integrity.
+No inference is triggered by app startup or ordinary prerequisite checks.
+
+See [the local chat smoke protocol](docs/LOCAL_CHAT_SMOKE.md).
+
 ## Inspect, correct, revoke or forget memories in the desktop
 
 Open the **Review memory** tab and choose **Manage approved**. Inspect the
