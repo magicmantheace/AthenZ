@@ -78,6 +78,19 @@ optional adapter rather than a dependency. Do not put personal examples in
 either public Git repository, permit learned text to grant tools, or use
 simulation checksums as user authentication.
 
+### 2026-10-16 — Live Twin/Agent context integrity
+
+- [x] Discard local chat replies whose approved evidence or exact prompt
+  context changes while Ollama is generating, including memory revocation,
+  edits to approved identity/decision records, and concurrent session turns.
+- [x] Revalidate the owner-reviewed context under SQLite `BEGIN IMMEDIATE`
+  before atomically saving the complete user+assistant turn in both terminal
+  chat and desktop; no long-lived database write lock during model inference.
+- [x] Keep prompts and source contents out of diagnostic errors; synthetic
+  concurrency and revocation regressions cover both entrypoints.
+- [ ] Validate actual simultaneous owner reviews and local inference on
+  target Windows 11 hardware, including cancellation and power-loss cases.
+
 ### 2026-10-14 — Twin-first personality and relevance improvement
 
 - [x] Select topical approved training decisions and personality evidence for
