@@ -171,8 +171,10 @@ class DesktopService:
             chosen = checked_active_tag(store) if model is None else None
             local = OllamaClient(model=model or chosen)
             recent = store.conversation(session, mode, limit=10)
-            snapshot = context_snapshot(store, prompt.strip(), mode, recent)[0]
-            reply = answer(store, local, prompt.strip(), mode, recent)
+            snapshot = context_snapshot(
+                store, prompt.strip(), mode, recent, session)[0]
+            reply = answer(
+                store, local, prompt.strip(), mode, recent, session)
             if model is None and checked_active_tag(store) != chosen:
                 raise DesktopError('Selected model changed during inference; reply discarded')
             if not isinstance(reply, str) or not reply.strip():
@@ -188,7 +190,8 @@ class DesktopService:
                 with store.db:
                     store.db.execute("BEGIN IMMEDIATE")
                     if (store.conversation(session, mode, limit=10) != recent
-                            or context_snapshot(store, prompt.strip(), mode, recent)[0] != snapshot):
+                            or context_snapshot(
+                                store, prompt.strip(), mode, recent, session)[0] != snapshot):
                         raise DesktopError(
                             'Approved context or session changed; reply discarded')
                     if model is None and checked_active_tag(store) != chosen:

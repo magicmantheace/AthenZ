@@ -78,6 +78,20 @@ optional adapter rather than a dependency. Do not put personal examples in
 either public Git repository, permit learned text to grant tools, or use
 simulation checksums as user authentication.
 
+### 2026-10-16 — Bounded older same-session chat continuity
+
+- [x] Retrieve up to four older topic-matched, owner-authored excerpts
+  beyond the recent 10-message window from the exact current chat/mode;
+  stream session history with bounded top-K memory and bounded excerpts.
+- [x] Label retrieved history as unreviewed reference data, exclude past
+  assistant outputs, unrelated topics, other sessions and other modes,
+  and never auto-promote historical chat into approved memory/training.
+- [x] Recompute and fingerprint the assembled conversation including older
+  excerpts before and after inference and under the final transactional
+  persistence guard; synthetic midflight editing/deletion regression coverage.
+- [ ] Verify real owner-session continuity, local inference latency, and
+  measured relevance on Windows without cross-session private-data exposure.
+
 ### 2026-10-16 — Desktop conversation navigation and reviewable deletion
 
 - [x] Show owner-only, text-free metadata for recent Agent and Twin chat
