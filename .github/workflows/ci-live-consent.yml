@@ -1,0 +1,36 @@
+name: One-time live Twin consent and chat regression
+on:
+  push:
+    branches:
+      - ci/athenz-live-consent-20261016
+permissions:
+  contents: read
+concurrency:
+  group: athenz-live-consent-20261016
+  cancel-in-progress: true
+jobs:
+  regression:
+    name: Python 3.11 regression on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install
+        run: python -m pip install -e .
+      - name: Remove temporary trigger before repo policy checks
+        run: python -c "from pathlib import Path; Path('.github/workflows/ci-live-consent.yml').unlink()"
+      - name: Manual-only CI policy
+        run: python -m unittest tests.test_ci_budget -v
+      - name: Python bytecode check
+        run: python -m compileall -q athenz/chat.py athenz/desktop.py tests/test_chat_context_guard.py
+      - name: Focused chat, cancellation and desktop context tests
+        run: python -m unittest tests.test_chat_context_guard tests.test_chat tests.test_chat_safety tests.test_desktop tests.test_desktop_shutdown tests.test_twin_context -v
+      - name: Full Python regression
+        run: python -m unittest discover -s tests -v
