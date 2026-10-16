@@ -146,6 +146,84 @@ class DesktopService:
         finally:
             store.close()
 
+    def approved_memories(self, *, limit: int = 100) -> list[dict]:
+        """Private, bounded owner-management view; never exposes pending claims as facts."""
+        if type(limit) is not int or not 1 <= limit <= 200:
+            raise DesktopError('Choose an approved-memory list limit of 1–200')
+        store = ExperienceStore(self.home)
+        try:
+            return [
+                {'id': int(r['id']), 'kind': r['kind'],
+                 'preview': r['text'][:180], 'source': r['source']}
+                for r in store.db.execute(
+                    "SELECT id,kind,text,source FROM identity WHERE status='approved' "
+                    "ORDER BY updated_at DESC,id DESC LIMIT ?", (limit,))
+            ]
+        finally:
+            store.close()
+
+    def approved_memory_detail(self, memory_id: int) -> dict:
+        """Read complete approved identity metadata for exact owner review."""
+        if type(memory_id) is not int or memory_id <= 0:
+            raise DesktopError('Choose a valid approved memory')
+        store = ExperienceStore(self.home)
+        try:
+            record = store.db.execute(
+                "SELECT * FROM identity WHERE id=? AND status='approved'",
+                (memory_id,)).fetchone()
+            if record is None:
+                raise DesktopError('Approved memory no longer exists')
+            detail = dict(record)
+            detail['review_sha256'] = _review_digest(detail)
+            return detail
+        finally:
+            store.close()
+
+    def manage_approved_memory(self, memory_id: int, action: str, *,
+                               review_sha256: str, confirmed: bool = False,
+                               new_text: str = '', reason: str = '') -> dict:
+        """Revise, revoke, or forget exactly the entire owner-reviewed record.
+
+        A correction returns to pending and cannot enter the Twin prompt until
+        a separate approval. Revocation is reversible but excludes the memory
+        from prompts; forgetting deletes it and any identity revision history
+        from the live SQLite database.
+        """
+        if (type(memory_id) is not int or memory_id <= 0
+                or action not in ('revise', 'revoke', 'forget')
+                or confirmed is not True
+                or not isinstance(review_sha256, str)
+                or not re.fullmatch('[a-f0-9]{64}', review_sha256)):
+            raise DesktopError('Inspect the approved record and explicitly confirm an action')
+        if action == 'revise' and (
+                type(new_text) is not str or not new_text.strip()
+                or len(new_text) > 1200 or type(reason) is not str
+                or not reason.strip() or len(reason) > 500):
+            raise DesktopError('Correction and reason must be provided (1200/500 characters max)')
+        store = ExperienceStore(self.home)
+        try:
+            with store.db:
+                store.db.execute('BEGIN IMMEDIATE')
+                row = store.db.execute(
+                    "SELECT * FROM identity WHERE id=? AND status='approved'",
+                    (memory_id,)).fetchone()
+                if row is None or _review_digest(dict(row)) != review_sha256:
+                    raise DesktopError('Memory changed after inspection; review the full record again')
+                if action == 'revise':
+                    if new_text.strip() == row['text']:
+                        raise DesktopError('A correction must change the memory')
+                    store.revise(memory_id, new_text, reason)
+                    outcome = 'pending-review'
+                elif action == 'revoke':
+                    store.status(memory_id, 'rejected')
+                    outcome = 'revoked'
+                else:
+                    store.delete('identity', memory_id)
+                    outcome = 'forgotten-from-live-database'
+            return {'id': memory_id, 'result': outcome}
+        finally:
+            store.close()
+
     def memory_source_preview(self, session: str, mode: str, message_id: int) -> dict:
         """Inspect the full owner-authored message under this session/mode."""
         _validate_session(session, mode)
