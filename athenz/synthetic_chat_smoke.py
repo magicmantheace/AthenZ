@@ -47,7 +47,7 @@ def check_synthetic_chat(*, model: str, confirmed: bool = False) -> dict:
         "owner_profile_opened": False,
         "owner_data_sent": False,
         "prompts_synthetic": True,
-        "temporary_profile_removed": True,
+        "temporary_profile_removed": False,
         "local_model_downloaded": False,
         "training_performed": False,
         "gpu_validated": False,
@@ -106,6 +106,9 @@ def check_synthetic_chat(*, model: str, confirmed: bool = False) -> dict:
                 report["status"] = "synthetic-chat-roundtrip-observed"
             else:
                 report["status"] = "synthetic-session-check-failed"
+        # The context manager has completed without reporting a failed
+        # teardown. Do not claim cleanup happened on exception paths.
+        report["temporary_profile_removed"] = True
     except Exception:
         # Model/library errors and OS paths could include private identifiers;
         # deliberately never return raw exception details.

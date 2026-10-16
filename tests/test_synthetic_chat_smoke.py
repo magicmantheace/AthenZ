@@ -57,6 +57,7 @@ class SyntheticChatSmokeTests(unittest.TestCase):
         self.assertTrue(report["agent_reply_saved"])
         self.assertTrue(report["mode_isolation_verified"])
         self.assertTrue(report["synthetic_approved_context_verified"])
+        self.assertTrue(report["temporary_profile_removed"])
         self.assertEqual(report["inference_calls_attempted"], 2)
         self.assertEqual(len(FakeModel.calls), 2)
         self.assertIn("Twin mode", FakeModel.calls[0][0]["content"])
@@ -84,6 +85,7 @@ class SyntheticChatSmokeTests(unittest.TestCase):
         with mock.patch("athenz.desktop.OllamaClient", FailsSecond):
             report = check_synthetic_chat(model="synthetic:1", confirmed=True)
         self.assertEqual(report["status"], "local-smoke-unavailable")
+        self.assertFalse(report["temporary_profile_removed"])
         self.assertTrue(report["twin_reply_saved"])
         self.assertFalse(report["agent_reply_saved"])
         self.assertEqual(report["inference_calls_attempted"], 2)
