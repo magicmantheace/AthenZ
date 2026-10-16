@@ -271,7 +271,7 @@ class PairedDecisionTests(unittest.TestCase):
         base = self.evaluate(PairedModel())
         model = PairedModel()
         report = self.evaluate(model, stability_trials=2)
-        self.assertEqual(report["schema"], 5)
+        self.assertEqual(report["schema"], 6)
         self.assertEqual(report["total"], 4)
         self.assertEqual(report["model_requests"], 16)
         self.assertEqual(len(model.calls), 16)
