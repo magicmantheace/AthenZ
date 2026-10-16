@@ -72,6 +72,13 @@ Use `athenz-decision-compare --split calibration --limit 30 --stability-trials 2
 to compare **semantic** choice agreement across seeded repeats without treating
 repeats as new independent cases. All repeat predictions stay ephemeral and
 the report contains aggregate stability only.
+For a stricter untouched final decision study, run
+`athenz-decision-compare --split test --freeze-test-plan --confirm`
+with the intended model, family audit, seed and sample-limit settings.
+`--check-test-plan` validates the owner-only frozen evidence and model
+without generating answers, and `--use-test-plan` refuses altered source,
+protocol, model or relevant evaluator code during the final comparison.
+This improves reproducibility but cannot prove independent preregistration.
 A real on-device held-out improvement has not yet been demonstrated.
 
 ## Owner-reported longitudinal decisions (experimental)
