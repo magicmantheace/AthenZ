@@ -109,6 +109,17 @@ class FrozenDecisionPlanTests(unittest.TestCase):
             self.freeze()
         self.assertEqual(self.path.read_bytes(), original)
 
+    def test_confidence_threshold_is_frozen_and_cannot_be_retuned(self):
+        plan = self.freeze(score_confidence=True, confidence_cutoff=0.7)
+        self.verify(plan, score_confidence=True, confidence_cutoff=0.7)
+        model = FixedModel()
+        with self.assertRaisesRegex(ValueError, "model or protocol"):
+            self.run_eval(
+                plan, model, score_confidence=True, confidence_cutoff=0.8)
+        self.assertEqual(model.calls, [])
+        with self.assertRaisesRegex(ValueError, "model or protocol"):
+            self.verify(plan, score_confidence=False, confidence_cutoff=None)
+
     def test_protocol_and_model_identity_mismatch_before_model_calls(self):
         plan = self.freeze()
         with self.assertRaisesRegex(ValueError, "model or protocol"):
