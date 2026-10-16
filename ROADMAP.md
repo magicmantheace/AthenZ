@@ -78,6 +78,20 @@ optional adapter rather than a dependency. Do not put personal examples in
 either public Git repository, permit learned text to grant tools, or use
 simulation checksums as user authentication.
 
+### 2026-10-16 — Desktop conversation navigation and reviewable deletion
+
+- [x] Show owner-only, text-free metadata for recent Agent and Twin chat
+  sessions; support opening each mode's saved conversation from a dedicated
+  desktop browser while preserving the existing manual session field.
+- [x] Add explicit **mode-scoped** session deletion that never silently removes
+  the other mode under the same name; validate a full-conversation content
+  fingerprint under a SQLite write lock before removing messages.
+- [x] Cascade deletion to approved/pending memories derived from deleted
+  user messages, their revision history, feedback and linked training pairs.
+  Refuse stale reviews, require confirmation, and bound review size.
+- [ ] Verify real Windows GUI session switching and deletion of larger
+  owner-private histories with recovery backups before normal daily use.
+
 ### 2026-10-16 — Owner-device local chat acceptance bridge
 
 - [x] Add a one-command and Setup-tab **explicitly authorized** two-request
