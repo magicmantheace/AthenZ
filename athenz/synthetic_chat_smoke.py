@@ -33,7 +33,8 @@ def check_synthetic_chat(*, model: str, confirmed: bool = False) -> dict:
     if confirmed is not True:
         raise SyntheticChatSmokeError(
             "Explicit --confirm is required for two local model inferences")
-    if type(model) is not str or _MODEL.fullmatch(model) is None:
+    if (type(model) is not str or _MODEL.fullmatch(model) is None
+            or "://" in model or "//" in model):
         raise SyntheticChatSmokeError("Choose one short installed Ollama model tag")
     report = {
         "schema": 1,
