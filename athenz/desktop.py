@@ -146,6 +146,84 @@ class DesktopService:
         finally:
             store.close()
 
+    def approved_memories(self, *, limit: int = 100) -> list[dict]:
+        """Private, bounded owner-management view; never exposes pending claims as facts."""
+        if type(limit) is not int or not 1 <= limit <= 200:
+            raise DesktopError('Choose an approved-memory list limit of 1–200')
+        store = ExperienceStore(self.home)
+        try:
+            return [
+                {'id': int(r['id']), 'kind': r['kind'],
+                 'preview': r['text'][:180], 'source': r['source']}
+                for r in store.db.execute(
+                    "SELECT id,kind,text,source FROM identity WHERE status='approved' "
+                    "ORDER BY updated_at DESC,id DESC LIMIT ?", (limit,))
+            ]
+        finally:
+            store.close()
+
+    def approved_memory_detail(self, memory_id: int) -> dict:
+        """Read complete approved identity metadata for exact owner review."""
+        if type(memory_id) is not int or memory_id <= 0:
+            raise DesktopError('Choose a valid approved memory')
+        store = ExperienceStore(self.home)
+        try:
+            record = store.db.execute(
+                "SELECT * FROM identity WHERE id=? AND status='approved'",
+                (memory_id,)).fetchone()
+            if record is None:
+                raise DesktopError('Approved memory no longer exists')
+            detail = dict(record)
+            detail['review_sha256'] = _review_digest(detail)
+            return detail
+        finally:
+            store.close()
+
+    def manage_approved_memory(self, memory_id: int, action: str, *,
+                               review_sha256: str, confirmed: bool = False,
+                               new_text: str = '', reason: str = '') -> dict:
+        """Revise, revoke, or forget exactly the entire owner-reviewed record.
+
+        A correction returns to pending and cannot enter the Twin prompt until
+        a separate approval. Revocation is reversible but excludes the memory
+        from prompts; forgetting deletes it and any identity revision history
+        from the live SQLite database.
+        """
+        if (type(memory_id) is not int or memory_id <= 0
+                or action not in ('revise', 'revoke', 'forget')
+                or confirmed is not True
+                or not isinstance(review_sha256, str)
+                or not re.fullmatch('[a-f0-9]{64}', review_sha256)):
+            raise DesktopError('Inspect the approved record and explicitly confirm an action')
+        if action == 'revise' and (
+                type(new_text) is not str or not new_text.strip()
+                or len(new_text) > 1200 or type(reason) is not str
+                or not reason.strip() or len(reason) > 500):
+            raise DesktopError('Correction and reason must be provided (1200/500 characters max)')
+        store = ExperienceStore(self.home)
+        try:
+            with store.db:
+                store.db.execute('BEGIN IMMEDIATE')
+                row = store.db.execute(
+                    "SELECT * FROM identity WHERE id=? AND status='approved'",
+                    (memory_id,)).fetchone()
+                if row is None or _review_digest(dict(row)) != review_sha256:
+                    raise DesktopError('Memory changed after inspection; review the full record again')
+                if action == 'revise':
+                    if new_text.strip() == row['text']:
+                        raise DesktopError('A correction must change the memory')
+                    store.revise(memory_id, new_text, reason)
+                    outcome = 'pending-review'
+                elif action == 'revoke':
+                    store.status(memory_id, 'rejected')
+                    outcome = 'revoked'
+                else:
+                    store.delete('identity', memory_id)
+                    outcome = 'forgotten-from-live-database'
+            return {'id': memory_id, 'result': outcome}
+        finally:
+            store.close()
+
     def memory_source_preview(self, session: str, mode: str, message_id: int) -> dict:
         """Inspect the full owner-authored message under this session/mode."""
         _validate_session(session, mode)
@@ -575,6 +653,120 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
         ttk.Button(controls, text='Cancel', command=dialog.destroy).pack(side='right', padx=4)
         ttk.Button(controls, text='Confirm '+state, command=decide).pack(side='right', padx=4)
 
+    def manage_existing_memories() -> None:
+        """Owner-only list of approved records with complete read-before-edit."""
+        manager = tk.Toplevel(window)
+        manager.title('Manage approved memories')
+        manager.geometry('790x480')
+        manager.transient(window)
+        ttk.Label(manager, text='Approved memories only. Corrections need separate reapproval.',
+                  padding=12).pack(anchor='w')
+        entries = ttk.Treeview(manager, columns=('id', 'kind', 'summary'),
+                               show='headings', selectmode='browse')
+        for name, width in [('id', 70), ('kind', 130), ('summary', 555)]:
+            entries.heading(name, text=name.title())
+            entries.column(name, width=width, stretch=name=='summary')
+        entries.pack(fill='both', expand=True, padx=12, pady=8)
+
+        def refresh() -> None:
+            try:
+                entries.delete(*entries.get_children())
+                for memory in service.approved_memories():
+                    entries.insert('', 'end', values=(
+                        memory['id'], memory['kind'], memory['preview']))
+            except Exception as exc:
+                messagebox.showerror('Memory list unavailable', str(exc),
+                                     parent=manager)
+
+        def inspect() -> None:
+            selected = entries.selection()
+            if not selected:
+                messagebox.showinfo('Choose a memory', 'Select an approved memory first.',
+                                    parent=manager)
+                return
+            try:
+                memory_id = int(entries.item(selected[0], 'values')[0])
+                record = service.approved_memory_detail(memory_id)
+            except Exception as exc:
+                messagebox.showerror('Memory changed', str(exc), parent=manager)
+                refresh()
+                return
+            details_window = tk.Toplevel(manager)
+            details_window.title(f'Review memory #{memory_id}')
+            details_window.geometry('760x620')
+            details_window.transient(manager)
+            ttk.Label(details_window,
+                      text='Full current record and provenance (read-only):',
+                      padding=(12, 8)).pack(anchor='w')
+            full_record = tk.Text(details_window, wrap='word', height=10,
+                                  padx=8, pady=8)
+            full_record.pack(fill='both', expand=True, padx=12, pady=(0, 6))
+            full_record.insert('1.0', json.dumps(record, indent=2, ensure_ascii=False))
+            full_record.config(state='disabled')
+            ttk.Label(details_window,
+                      text='Correction text (only used by Stage correction):',
+                      padding=(12, 4)).pack(anchor='w')
+            replacement = tk.Text(details_window, wrap='word', height=4,
+                                  padx=8, pady=8)
+            replacement.pack(fill='both', expand=True, padx=12, pady=(0, 8))
+            replacement.insert('1.0', record['text'])
+            reason_row = ttk.Frame(details_window, padding=(12, 4))
+            reason_row.pack(fill='x')
+            ttk.Label(reason_row, text='Why this changed:').pack(side='left')
+            reason_value = tk.StringVar()
+            ttk.Entry(reason_row, textvariable=reason_value).pack(
+                side='left', fill='x', expand=True, padx=(8, 0))
+            buttons = ttk.Frame(details_window, padding=12)
+            buttons.pack(fill='x')
+
+            def take_action(action: str) -> None:
+                new_text = replacement.get('1.0', 'end-1c').strip()
+                reason = reason_value.get().strip()
+                messages = {
+                    'revise': ('Stage this correction as PENDING? The existing '
+                               'approved wording stops being used immediately. '
+                               'Approval must happen separately.'),
+                    'revoke': ('Revoke this memory? It becomes rejected and is '
+                               'excluded from future Twin prompts.'),
+                    'forget': ('Forget this memory AND its revision history '
+                               'from the live database? Existing backups and '
+                               'the original chat source are not wiped.'),
+                }
+                if not messagebox.askyesno(
+                        'Confirm memory action', messages[action],
+                        parent=details_window):
+                    return
+                try:
+                    result = service.manage_approved_memory(
+                        memory_id, action, review_sha256=record['review_sha256'],
+                        confirmed=True, new_text=new_text, reason=reason)
+                    details_window.destroy()
+                    refresh()
+                    reload_reviews()
+                    set_status(f"Memory #{memory_id}: {result['result']}")
+                except Exception as exc:
+                    messagebox.showerror('Memory change refused', str(exc),
+                                         parent=details_window)
+
+            ttk.Button(buttons, text='Close',
+                       command=details_window.destroy).pack(side='right', padx=4)
+            ttk.Button(buttons, text='Forget from DB',
+                       command=lambda: take_action('forget')).pack(side='right', padx=4)
+            ttk.Button(buttons, text='Revoke',
+                       command=lambda: take_action('revoke')).pack(side='right', padx=4)
+            ttk.Button(buttons, text='Stage correction',
+                       command=lambda: take_action('revise')).pack(side='right', padx=4)
+
+        toolbar = ttk.Frame(manager, padding=(12, 4))
+        toolbar.pack(fill='x')
+        ttk.Button(toolbar, text='Close', command=manager.destroy).pack(side='right')
+        ttk.Button(toolbar, text='Inspect and manage selected',
+                   command=inspect).pack(side='right', padx=8)
+        ttk.Button(toolbar, text='Refresh', command=refresh).pack(side='right')
+        refresh()
+
+    ttk.Button(review_toolbar, text='Manage approved',
+               command=manage_existing_memories).pack(side='right', padx=4)
     ttk.Button(review_toolbar, text='Refresh', command=reload_reviews).pack(side='right', padx=4)
     ttk.Button(review_toolbar, text='Reject selected', command=lambda: review_selected('rejected')).pack(side='right', padx=4)
     ttk.Button(review_toolbar, text='Approve selected', command=lambda: review_selected('approved')).pack(side='right', padx=4)

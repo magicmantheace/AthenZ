@@ -88,6 +88,25 @@ This is a descriptive selection audit, not automatic threshold learning or
 evidence of calibrated confidence.
 A real on-device held-out improvement has not yet been demonstrated.
 
+## Inspect, correct, revoke or forget memories in the desktop
+
+Open the **Review memory** tab and choose **Manage approved**. Inspect the
+**complete** approved record and its provenance before choosing an action:
+
+- **Stage correction**: edit the summary and supply a reason. The old
+  approval is revoked immediately and the corrected text remains **pending**
+  until separately reviewed and approved.
+- **Revoke**: set the current approved memory to `rejected`, excluding it
+  from the Twin prompt without immediately deleting the private stored text.
+- **Forget from DB**: delete the memory and any earlier identity revision
+  history from the live SQLite database. The original chat message (if any)
+  remains; offline backups and SQLite/WAL deletion limits still apply.
+
+A stale full-record review hash, removed record, or concurrent owner edit
+refuses the operation. All actions require a separate explicit confirmation.
+They run locally and never call the model. See
+[Memory correction and revocation](docs/MEMORY_MANAGEMENT.md).
+
 ## Owner-reviewed memories from actual chats (experimental)
 
 AthenZ can now turn one **owner-written** chat message into a traceable
