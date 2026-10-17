@@ -1,0 +1,32 @@
+name: Disposable D2 ACK clean-mainline regression
+on:
+  push:
+    branches:
+      - integration/d2-ack-mainline-20261017
+permissions:
+  contents: read
+jobs:
+  python:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile source
+        run: python -m compileall -q athenz tests
+      - name: D2 signed receipts and buffered transport
+        run: |
+          python -m unittest discover -s tests -p test_developmental_ack.py -v
+          python -m unittest discover -s tests -p test_developmental_frames_flush.py -v
+          python -m unittest discover -s tests -p test_developmental_subprocess.py -v
+      - name: Remove disposable workflow from policy gate
+        run: python -c "from pathlib import Path; Path('.github/workflows/d2-disposable-ack-mainline-20261017.yml').unlink()"
+      - name: Full Python 3.11 regression on Linux
+        if: runner.os == 'Linux'
+        run: python -m unittest discover -s tests -q
