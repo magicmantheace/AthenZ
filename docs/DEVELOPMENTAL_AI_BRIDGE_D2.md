@@ -74,7 +74,7 @@ real device actions.
 
 ## Cross-repository synthetic compatibility milestone (2026-10-17)
 
-The separate Developmental AI repository has an experimental mirrored
+An unmerged Developmental AI integration branch has an experimental mirrored
 `developmental_ai.athenz_bridge` implementation and
 `developmental_ai.athenz_sim_adapter` proposal projection. The projects
 pin identical `tests/fixtures/d2_synthetic_vector.json` fixtures and
