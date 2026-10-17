@@ -85,8 +85,11 @@ simulation checksums as user authentication.
   invalidate sender session after uncertain delivery.
 - [x] Introduce five buffered-send regression tests plus three distinct
   Python-process handshake, request/reply and synthetic-revocation tests.
-- [ ] Validate focused and complete Linux/Windows suites, merge only green
-  code without disposable CI changes.
+- [x] Full Linux and Windows Python 3.11 suites passed: **981 tests each**
+  (Linux 4 expected skips; Windows 11). All five buffered-send, three
+  separate-process, 18 frame and nine pipe tests passed on both.
+  [GitHub Actions evidence](https://github.com/magicmantheace/AthenZ/actions/runs/39071764990).
+  One-off CI workflow removed before merge.
 - [ ] A fixed-key test peer is not private Developmental AI; real peer
   attestation, credential protection, verified learning adapter and remote
   durable ACK are outstanding.
