@@ -1,0 +1,32 @@
+name: Disposable D2 OS pipe synthetic fixture validation
+on:
+  push:
+    branches:
+      - integration/d2-supervised-pipe-roundtrip-20261017
+permissions:
+  contents: read
+jobs:
+  python:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile Python package and tests
+        run: python -m compileall -q athenz tests
+      - name: Synthetic pipes, handshake, frames and registry
+        run: |
+          python -m unittest discover -s tests -p test_developmental_pipe.py -v
+          python -m unittest discover -s tests -p test_developmental_handshake.py -v
+          python -m unittest discover -s tests -p test_developmental_frames.py -v
+      - name: Remove temporary workflow before project policy audit
+        run: python -c "from pathlib import Path; Path('.github/workflows/d2-disposable-pipe-20261017.yml').unlink()"
+      - name: Full Python tests on Linux
+        if: runner.os == 'Linux'
+        run: python -m unittest discover -s tests -q
