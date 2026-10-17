@@ -89,7 +89,7 @@ simulation checksums as user authentication.
   scope; allow signed old inner outbox events with *fresh* delivery frames.
 - [x] Add fixture tests for corruption/truncation, replay/skip, wrong
   session/producer, stale clock, revocation and journal dedup.
-- [ ] Independent Windows/Linux tests and owner-PC pipe handshake pending.
+- [x] Python 3.11 full regression passed on Linux and Windows: 950 tests each (Linux 4 skips; Windows 11 skips); 18 focused stream tests passed on each. [Actions evidence](https://github.com/magicmantheace/AthenZ/actions/runs/39058910673). Temporary CI workflow removed. Actual owner-PC pipe integration and session handshake remain pending.
 - [ ] There is NO authenticated key/session negotiation, OS peer identity,
   live Developmental AI subprocess, production IPC, durable channel ACK or
   actual owner consent. This cannot close D2 acceptance yet.
