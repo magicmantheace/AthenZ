@@ -1,0 +1,28 @@
+name: Disposable D2 bridge validation
+
+# Temporary, single-feature synthetic-only CI. Remove before any merge.
+on:
+  push:
+    branches:
+      - integration/developmental-bridge-d2-v1
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-bridge:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Syntax
+        run: python -m compileall -q athenz tests
+      - name: Synthetic D2 bridge regression
+        run: python -m unittest discover -s tests -p test_developmental_bridge.py -v
