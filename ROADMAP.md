@@ -94,6 +94,21 @@ simulation checksums as user authentication.
   attestation, credential protection, verified learning adapter and remote
   durable ACK are outstanding.
 
+### 2026-10-17 — D2 signed synthetic delivery receipt (candidate)
+
+- [x] Add opt-in bounded ACK frames with HMAC from ephemeral negotiated
+  session keys, fixed receiver, event ID, signed envelope digest, source
+  revision, timestamp and strict per-session sequence.
+- [x] Require receiver's prior durable metadata-journal record before
+  issuing an ACK; require current synthetic source revision and exact
+  outbox digest before applying one.
+- [x] Test wrong keys, stale source approvals, missing/reordered receipts,
+  tampered metadata, extra fields and malformed/oversized frames.
+- [x] Fourteen signed-ACK tests passed on Linux and Windows, with the previous bridge and outbox tests. Complete Linux Python 3.11 regression passed **987 tests (4 skipped)**. [Actions run](https://github.com/magicmantheace/AthenZ/actions/runs/39072311190). Temporary workflow removed. Combined full Windows regression was not run for this ACK branch, but all focused tests passed there.
+- [ ] Complete real process key provisioning, authoritative owner consent,
+  durable receiver replay for aged events, independent ACK persistence
+  and Developmental AI private adapter integration.
+
 ### 2026-10-17 — D2 caller-owned OS-pipe synthetic roundtrip (candidate)
 
 - [x] Add strict bounded, canonical handshake records over already-open
