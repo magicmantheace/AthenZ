@@ -243,6 +243,15 @@ class DesktopService:
         finally:
             store.close()
 
+    def memory_consistency_audit(self, *, limit: int = 80) -> dict:
+        """Manual read-only review hints, never auto-reject or publish data."""
+        from .memory_consistency import audit_approved_memories
+        store = ExperienceStore(self.home)
+        try:
+            return audit_approved_memories(store, limit=limit)
+        finally:
+            store.close()
+
     def approved_memories(self, *, limit: int = 100) -> list[dict]:
         """Private, bounded owner-management view; never exposes pending claims as facts."""
         if type(limit) is not int or not 1 <= limit <= 200:
@@ -1018,6 +1027,9 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
         ttk.Button(toolbar, text='Refresh', command=refresh).pack(side='right')
         refresh()
 
+    from .memory_consistency_panel import mount_memory_consistency_button
+    mount_memory_consistency_button(
+        review_toolbar, window, service, set_status, manage_existing_memories)
     ttk.Button(review_toolbar, text='Manage approved',
                command=manage_existing_memories).pack(side='right', padx=4)
     ttk.Button(review_toolbar, text='Refresh', command=reload_reviews).pack(side='right', padx=4)
