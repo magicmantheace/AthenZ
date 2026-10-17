@@ -88,7 +88,7 @@ simulation checksums as user authentication.
   outbox digest before applying one.
 - [x] Test wrong keys, stale source approvals, missing/reordered receipts,
   tampered metadata, extra fields and malformed/oversized frames.
-- [ ] Validate on Linux and Windows before merge.
+- [x] Fourteen signed-ACK tests passed on Linux and Windows, with the previous bridge and outbox tests. Complete Linux Python 3.11 regression passed **987 tests (4 skipped)**. [Actions run](https://github.com/magicmantheace/AthenZ/actions/runs/39072311190). Temporary workflow removed. Combined full Windows regression was not run for this ACK branch, but all focused tests passed there.
 - [ ] Complete real process key provisioning, authoritative owner consent,
   durable receiver replay for aged events, independent ACK persistence
   and Developmental AI private adapter integration.
