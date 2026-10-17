@@ -88,6 +88,7 @@ class SyntheticFrameSession:
         self.enabled = enabled
         self._out_seq = {"athenz": 0, "learner": 0}
         self._in_seq = {"athenz": 0, "learner": 0}
+        self._send_broken = False
 
     def _approval(self, event: dict) -> None:
         try:
@@ -111,6 +112,8 @@ class SyntheticFrameSession:
         """Authenticate a fresh delivery frame containing a signed event."""
         if not self.enabled:
             raise BridgeError("Synthetic frame session is disabled")
+        if self._send_broken:
+            raise BridgeError("Synthetic send session failed; negotiate a new session")
         self._inner(event)
         producer = event["producer"]
         if self._out_seq[producer] >= FRAME_COUNT_LIMIT:
@@ -140,10 +143,17 @@ class SyntheticFrameSession:
         packet = self.pack(event)
         try:
             written = stream.write(packet)
-        except (OSError, ValueError) as exc:
-            raise BridgeError("Synthetic frame stream write failed") from exc
+        except (OSError, ValueError, AttributeError) as exc:
+            self._send_broken = True
+            raise BridgeError("Synthetic frame stream write failed; restart session") from exc
         if written != len(packet):
+            self._send_broken = True
             raise BridgeError("Short synthetic frame write; restart session")
+        try:
+            stream.flush()
+        except (OSError, ValueError, AttributeError) as exc:
+            self._send_broken = True
+            raise BridgeError("Synthetic frame stream flush failed; restart session") from exc
 
     def receive(self, stream: BinaryIO, *, expected_producer: str,
                 now: datetime | None = None) -> dict:
