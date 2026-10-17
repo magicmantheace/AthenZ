@@ -88,6 +88,24 @@ This is a descriptive selection audit, not automatic threshold learning or
 evidence of calibrated confidence.
 A real on-device held-out improvement has not yet been demonstrated.
 
+## Review possible duplicate or contradictory approved memories
+
+Run `athenz memory-audit` locally or open **Review memory → Find possible
+duplicates…** in the desktop. AthenZ scans only **approved** memories and
+shows candidate record IDs for duplicate normalized wording or narrowly
+recognized opposite first-person preferences (for example `I prefer X`
+versus `I do not prefer X`). The desktop permits read-only inspection of
+both full records and their provenance, followed by the existing separately
+confirmed correction/revocation workflow. No model or external service is
+called, no private text is printed by the CLI, and no memory status changes
+automatically.
+
+The audit is limited to 5,000 approved records and displays at most 80 pairs
+(default), with total counts for omitted candidates. A lack of hits is
+**not proof of consistency**; synonyms, differing facts, temporal changes
+and most natural-language contradictions will not be detected. See
+[consistency audit protocol](docs/MEMORY_CONSISTENCY.md).
+
 ## Same-session conversational continuity (local, unverified)
 
 AthenZ now retains its recent ten chat turns and, when an older **user-written**
