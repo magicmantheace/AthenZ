@@ -88,7 +88,7 @@ simulation checksums as user authentication.
   revision-matching approval callback.
 - [x] Add synthetic replay, tampering, forged-origin, escalation, rejection,
   revocation, restart and privacy regression tests.
-- [ ] Prove cross-platform CI for this batch and link the validation result.
+- [x] Synthetic and full Python tests passed on Linux and Windows Python 3.11: 889 tests each (Linux 4 expected skips, Windows 10). Validation: https://github.com/magicmantheace/AthenZ/actions/runs/39038760996. Temporary one-time workflow removed before merge.
 - [ ] Implement compatible Developmental AI counterpart and real private
   consent-backed IPC transport, staged replay and end-to-end revocation
   of derived learner state; **D2 is not yet completed**.
