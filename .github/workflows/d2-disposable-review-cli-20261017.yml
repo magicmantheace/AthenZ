@@ -1,0 +1,32 @@
+name: Disposable D2 local review CLI tests
+on:
+  push:
+    branches:
+      - feature/d2-reviewed-source-cli-20261017
+permissions:
+  contents: read
+jobs:
+  python:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile CLI and source registry
+        run: python -m compileall -q athenz tests
+      - name: Exercise source review and CLI flow
+        run: |
+          python -m unittest discover -s tests -p test_developmental_consent_cli.py -v
+          python -m unittest discover -s tests -p test_developmental_consent.py -v
+          python -m unittest discover -s tests -p test_developmental_exchange.py -v
+      - name: Remove disposable workflow before full suite
+        run: python -c "from pathlib import Path; Path('.github/workflows/d2-disposable-review-cli-20261017.yml').unlink()"
+      - name: Full Linux Python regression
+        if: runner.os == 'Linux'
+        run: python -m unittest discover -s tests -q
