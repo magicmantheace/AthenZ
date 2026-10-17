@@ -78,6 +78,19 @@ optional adapter rather than a dependency. Do not put personal examples in
 either public Git repository, permit learned text to grant tools, or use
 simulation checksums as user authentication.
 
+### 2026-10-17 — D2 buffered stdio and separate-process fixture
+
+- [x] Flush signed framed messages after full stream write, fail closed
+  on short writes, flush failures or missing flush support; permanently
+  invalidate sender session after uncertain delivery.
+- [x] Introduce five buffered-send regression tests plus three distinct
+  Python-process handshake, request/reply and synthetic-revocation tests.
+- [ ] Validate focused and complete Linux/Windows suites, merge only green
+  code without disposable CI changes.
+- [ ] A fixed-key test peer is not private Developmental AI; real peer
+  attestation, credential protection, verified learning adapter and remote
+  durable ACK are outstanding.
+
 ### 2026-10-17 — D2 caller-owned OS-pipe synthetic roundtrip (candidate)
 
 - [x] Add strict bounded, canonical handshake records over already-open
