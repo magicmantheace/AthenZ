@@ -88,7 +88,7 @@ simulation checksums as user authentication.
 - [x] Re-authenticate stored envelopes and recheck the injected synthetic
   revision callback at delivery/ack time. Record AthenZ-origin source
   revocations and cancel outstanding deliveries.
-- [ ] Pass full Linux and Windows regression before merging this candidate.
+- [x] Focused 18 tests and complete Python 3.11 suites passed on Linux and Windows: 910 tests each (Linux 4 expected skips, Windows 10). [Validated workflow run](https://github.com/magicmantheace/AthenZ/actions/runs/39046001711); disposable workflow removed from the branch before merge.
 - [ ] Wire actual AthenZ source-consent service, private learner IPC,
   independently authenticated remote ACK and atomic downstream
   revocation. The fixture does not yet close the D2 gate.
