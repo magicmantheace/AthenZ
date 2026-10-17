@@ -89,8 +89,7 @@ simulation checksums as user authentication.
 - [x] Test source revoke after delivery, malformed/truncated/oversized
   handshake packets, disabled state, failed write/flush and private
   credential exclusion from hello bytes.
-- [ ] Run Linux and Windows focused tests; do not claim interprocess
-  production IPC or actual Developmental AI connection from a thread test.
+- [x] Nine new OS-pipe tests, 14 handshake and 18 frame tests passed on Linux and Windows. Complete Linux Python 3.11 regression passed 973 tests (4 skipped): [Actions evidence](https://github.com/magicmantheace/AthenZ/actions/runs/39060025385). No interprocess production IPC or actual Developmental AI connection is claimed from a thread test.
 - [ ] Protect/provision root secrets, implement verified OS peer identity
   and the real process lifecycle, atomic ACK, restart and owner consent
   before accepting D2 end-to-end integration.
