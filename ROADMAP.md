@@ -78,6 +78,23 @@ optional adapter rather than a dependency. Do not put personal examples in
 either public Git repository, permit learned text to grant tools, or use
 simulation checksums as user authentication.
 
+### 2026-10-17 — D2 AthenZ-side synthetic event envelope and journal (in progress)
+
+- [x] Implement strict sandbox-only schema-one messages with distinct
+  producer/origin claims, non-executable typed payloads, bounded identifiers,
+  UTC event times, per-producer HMAC fixture authentication and fixed scope.
+- [x] Add durable metadata-only SQLite sequence/idempotency fences,
+  synthetic source-revocation guard, explicit disabled mode and injectable
+  revision-matching approval callback.
+- [x] Add synthetic replay, tampering, forged-origin, escalation, rejection,
+  revocation, restart and privacy regression tests.
+- [x] Synthetic and full Python tests passed on Linux and Windows Python 3.11: 889 tests each (Linux 4 expected skips, Windows 10). Validation: https://github.com/magicmantheace/AthenZ/actions/runs/39038760996. Temporary one-time workflow removed before merge.
+- [ ] Implement compatible Developmental AI counterpart and real private
+  consent-backed IPC transport, staged replay and end-to-end revocation
+  of derived learner state; **D2 is not yet completed**.
+- [ ] Confirm real Windows/WSL2 and Linux deployment security, source
+  deletion propagation and owner-in-the-loop review.
+
 ### 2026-10-16 — Approved-memory consistency review
 
 - [x] Implement bounded deterministic, read-only detection of duplicate
