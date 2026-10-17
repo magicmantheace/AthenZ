@@ -16,6 +16,7 @@ import sqlite3
 from typing import Callable, Mapping
 
 from .developmental_bridge import BridgeError, _validate, _key
+from .store import private_home_path
 
 MAX_PENDING = 256
 MAX_FETCH = 20
@@ -42,7 +43,11 @@ class SyntheticExchange:
             raise BridgeError("Exchange requires two test keys and a revision checker")
         for key in keys.values():
             _key(key)
-        path = Path(file)
+        path = Path(file).absolute()
+        try:
+            private_home_path(path.parent)  # Reject Git trees and pointer ancestors.
+        except ValueError as exc:
+            raise BridgeError("Exchange requires an outside-Git private home") from exc
         if not path.parent.is_dir() or path.is_symlink() or (
                 path.exists() and not path.is_file()):
             raise BridgeError("Exchange requires an existing private parent directory")
@@ -67,6 +72,24 @@ class SyntheticExchange:
         self.db.execute("""CREATE TABLE IF NOT EXISTS d2_revoked (
             source_ref TEXT PRIMARY KEY, revision INTEGER NOT NULL)""")
         self.db.execute("PRAGMA foreign_keys=ON")
+
+    @classmethod
+    def from_registry(cls, file: Path, *, keys: Mapping[str, bytes],
+                      registry: "SyntheticSourceRegistry",
+                      enabled: bool = False) -> "SyntheticExchange":
+        """Use the private reviewed synthetic source registry, never a lax stub.
+
+        The test HMAC keys still do not authenticate the owner. Callers are
+        responsible for keeping the registry open for the exchange's lifetime.
+        """
+        from .developmental_consent import SyntheticSourceRegistry
+        if not isinstance(registry, SyntheticSourceRegistry):
+            raise BridgeError("A private synthetic source registry is required")
+        path = Path(file).absolute()
+        if path.parent != registry.home:
+            raise BridgeError("Keep the synthetic outbox in the same private home")
+        return cls(path, keys=keys,
+                   revision_check=registry.is_current, enabled=enabled)
 
     def close(self) -> None:
         self.db.close()
