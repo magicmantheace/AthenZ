@@ -78,6 +78,20 @@ optional adapter rather than a dependency. Do not put personal examples in
 either public Git repository, permit learned text to grant tools, or use
 simulation checksums as user authentication.
 
+### 2026-10-16 — Approved-memory consistency review
+
+- [x] Implement bounded deterministic, read-only detection of duplicate
+  approved-memory text and narrowly recognized opposite first-person
+  preference wording, with no inference or automatic resolution.
+- [x] Add CLI audit returning only candidate IDs, counts and generic reason
+  types, plus desktop owner-triggered candidate list and read-only complete
+  provenance comparison before existing review actions.
+- [x] Refuse partial oversized scans and suppress unrelated pending/rejected
+  claims; test no status, event, revision, training or prompt changes.
+- [ ] Evaluate owner-labeled consistency cases (including temporal changes,
+  exceptions and synonyms) on device before expanding beyond explicit
+  narrow pattern hints.
+
 ### 2026-10-16 — Bounded older same-session chat continuity
 
 - [x] Retrieve up to four older topic-matched, owner-authored excerpts
