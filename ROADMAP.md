@@ -78,6 +78,20 @@ optional adapter rather than a dependency. Do not put personal examples in
 either public Git repository, permit learned text to grant tools, or use
 simulation checksums as user authentication.
 
+### 2026-10-17 — D2 cross-repository synthetic wire compatibility
+
+- [x] Pin a canonical synthetic HMAC fixture in AthenZ and the experimental
+  Developmental AI integration branch; keep producer/origin, authority,
+  schema fields, canonical bytes and test signatures identical.
+- [x] Add three AthenZ fixture/forgery tests. Verified Windows Python 3.11
+  focused compatibility tests (3 passing) and Linux 3.11 complete regression
+  (892 tests, four expected skips): https://github.com/magicmantheace/AthenZ/actions/runs/39040877682.
+- [ ] Developmental AI's private cross-repository adapter and trace-based
+  response tests require independent execution: its first Actions run did
+  not start any test steps. Do not claim paired runtime integration complete.
+- [ ] Independently verify the full live bidirectional IPC, consent source
+  lifecycle, trusted key provisioning and durable reply replay across restarts.
+
 ### 2026-10-17 — D2 AthenZ-side synthetic event envelope and journal (in progress)
 
 - [x] Implement strict sandbox-only schema-one messages with distinct
