@@ -104,11 +104,18 @@ simulation checksums as user authentication.
   unchecked direct stale `receive(event)` pathway.
 - [x] Permit `SyntheticDeliveryAck` to issue a signed receipt after this
   journal's matching durable commit, preserving the legacy journal path.
-- [x] Add synthetic unit tests for restart/replay, revoke, tampered
-  fingerprints, bounded backlog, fixed generic messages and signed ACK.
-- [ ] Cross-platform CI, OS process peer verification and the real private
-  Developmental AI adapter remain open; this is not real-owner consent,
-  atomic cross-database revocation or exactly-once learner state updates.
+- [x] Add 15 synthetic unit tests for restart/replay, revoke, tampered
+  fingerprints, bounded backlog, fixed generic messages, signed ACK and
+  owner-only POSIX storage.
+- [x] [GitHub Actions validation](https://github.com/magicmantheace/AthenZ/actions/runs/39078855068):
+  full Python 3.11 Linux suite passed **1,010 tests (4 skipped)**;
+  Windows focused 15 receiver, 14 ACK, 3 subprocess and 18 framing
+  tests passed (receiver 2 expected POSIX-only skips). Removed the
+  temporary CI workflow before merge.
+- [ ] Windows complete 1,010-test suite, OS process peer verification and
+  the real private Developmental AI adapter remain open; this is not
+  real-owner consent, atomic cross-database revocation or exactly-once
+  learner state updates.
 
 ### 2026-10-17 — D2 signed synthetic delivery receipt (candidate)
 
