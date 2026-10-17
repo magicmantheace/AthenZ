@@ -175,6 +175,30 @@ class DeliveryReceiptTests(unittest.TestCase):
         with self.assertRaisesRegex(BridgeError, "timestamp"):
             self.verifier.accept(self.sign(ack), self.exchange)
 
+    def test_short_wire_write_permanently_poison_ack_sender(self):
+        self.record(self.proposal)
+        class PartialStream:
+            def write(self, payload):
+                return len(payload) - 1
+        with self.assertRaisesRegex(BridgeError, "Short"):
+            self.issuer.send(PartialStream(), self.proposal, self.journal)
+        with self.assertRaisesRegex(BridgeError, "new session"):
+            self.issuer.issue(self.proposal, self.journal)
+        self.assertEqual(self.exchange.pending(), [self.proposal, self.receipt])
+
+    def test_flush_failure_poison_ack_sender(self):
+        self.record(self.proposal)
+        class BrokenFlush:
+            def write(self, payload):
+                return len(payload)
+            def flush(self):
+                raise OSError("private details omitted")
+        with self.assertRaisesRegex(BridgeError, "flush failed") as raised:
+            self.issuer.send(BrokenFlush(), self.proposal, self.journal)
+        self.assertNotIn("private details", str(raised.exception))
+        with self.assertRaisesRegex(BridgeError, "new session"):
+            self.issuer.issue(self.proposal, self.journal)
+
     def test_disabled_or_wrong_producer_cannot_issue_receipt(self):
         with self.assertRaisesRegex(BridgeError, "disabled"):
             SyntheticDeliveryAck(self.frame_session).issue(self.proposal, self.journal)
