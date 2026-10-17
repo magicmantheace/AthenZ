@@ -18,6 +18,7 @@ from .developmental_bridge import (
     BridgeError, SyntheticBridgeJournal, _canonical, _validate,
 )
 from .developmental_exchange import SyntheticExchange
+from .developmental_receiver import SyntheticDurableReceiver
 from .developmental_frames import SyntheticFrameSession, _read_exact, _timestamp
 
 ACK_SCHEMA = "athenz.d2.synthetic-delivery-ack/v1"
@@ -76,16 +77,20 @@ class SyntheticDeliveryAck:
             raise BridgeError("Synthetic ACK sender failed; establish a new session")
         if self._issued >= MAX_ACK_COUNT:
             raise BridgeError("Synthetic ACK session sequence exhausted")
-        if (not isinstance(journal, SyntheticBridgeJournal)
+        if (not isinstance(journal, (SyntheticBridgeJournal, SyntheticDurableReceiver))
                 or not journal.enabled
                 or journal.keys != self.session.producer_keys):
             raise BridgeError("Authenticated durable source journal required")
         raw = self._event(event)
         digest = hashlib.sha256(raw).hexdigest()
-        saved = journal.db.execute(
-            "SELECT fingerprint FROM bridge_events WHERE event_id=? "
-            "AND producer='learner'", (event["event_id"],)).fetchone()
-        if saved is None or not hmac.compare_digest(saved[0], digest):
+        if isinstance(journal, SyntheticDurableReceiver):
+            saved_digest = journal.recorded_fingerprint(event)
+        else:
+            saved = journal.db.execute(
+                "SELECT fingerprint FROM bridge_events WHERE event_id=? "
+                "AND producer='learner'", (event["event_id"],)).fetchone()
+            saved_digest = saved[0] if saved is not None else None
+        if saved_digest is None or not hmac.compare_digest(saved_digest, digest):
             raise BridgeError("Learner envelope is not durably journaled")
         message = {
             "schema": ACK_SCHEMA, "session_id": self.session.session_id,
