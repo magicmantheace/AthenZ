@@ -78,6 +78,22 @@ optional adapter rather than a dependency. Do not put personal examples in
 either public Git repository, permit learned text to grant tools, or use
 simulation checksums as user authentication.
 
+### 2026-10-17 — D2 signed synthetic stream frame codec (candidate)
+
+- [x] Add a 4-byte bounded, canonical JSON local binary-stream frame
+  format over caller-owned stdio/pipe streams; no network listener.
+- [x] Double-authenticate producer event envelope and per-session delivery
+  frame with separate producer-scoped 32-byte-or-longer HMAC keys.
+- [x] Enforce per-producer transport sequencing, session identity, outer
+  frame freshness, strict frame size, current source-revision and authority
+  scope; allow signed old inner outbox events with *fresh* delivery frames.
+- [x] Add fixture tests for corruption/truncation, replay/skip, wrong
+  session/producer, stale clock, revocation and journal dedup.
+- [ ] Independent Windows/Linux tests and owner-PC pipe handshake pending.
+- [ ] There is NO authenticated key/session negotiation, OS peer identity,
+  live Developmental AI subprocess, production IPC, durable channel ACK or
+  actual owner consent. This cannot close D2 acceptance yet.
+
 ### 2026-10-17 — D2 local synthetic source review CLI
 
 - [x] Add terminal `status`, `preview`, and exact-digest-confirmed
