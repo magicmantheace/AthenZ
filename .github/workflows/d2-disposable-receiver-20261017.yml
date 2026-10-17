@@ -6,7 +6,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: d2-durable-framed-receiver-20261017
+  group: d2-durable-final-20261017
   cancel-in-progress: true
 jobs:
   python:
