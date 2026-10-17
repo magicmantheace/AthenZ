@@ -49,15 +49,16 @@ class PipeTests(unittest.TestCase):
               os.fdopen(from_peer_write, "wb", buffering=0) as peer_writer):
 
             def peer():
+                peer_grants = None
                 try:
-                    # SQLite connections are thread-affine; the synthetic
-                    # peer opens its *own* read-only-in-practice grant view.
-                    with SyntheticSourceRegistry(self.home) as peer_grants:
-                        session = learner_handshake(
-                            peer_reader, peer_writer, root_secret=self.root_secret,
-                            producer_keys=self.keys,
-                            revision_check=peer_grants.is_current,
-                            enabled=True)
+                    # SQLite connections are thread-affine. Hold this
+                    # independent grant connection through the whole session.
+                    peer_grants = SyntheticSourceRegistry(self.home)
+                    session = learner_handshake(
+                        peer_reader, peer_writer, root_secret=self.root_secret,
+                        producer_keys=self.keys,
+                        revision_check=peer_grants.is_current,
+                        enabled=True)
                     inbound = session.receive(peer_reader, expected_producer="athenz")
                     self.assertEqual(inbound["kind"], "observation")
                     self.assertEqual(inbound["payload"]["signal"], "trace_sha256")
@@ -77,6 +78,9 @@ class PipeTests(unittest.TestCase):
                     responses.extend((p, r))
                 except BaseException as exc:
                     errors.append(exc)
+                finally:
+                    if peer_grants is not None:
+                        peer_grants.close()
 
             worker = threading.Thread(target=peer, daemon=True)
             worker.start()
