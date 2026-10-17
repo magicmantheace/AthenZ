@@ -99,7 +99,7 @@ simulation checksums as user authentication.
 - [x] Test default-deny, stale/cross-source review, persisted revocation
   across restarts, no resurrection on reapproval, POSIX privacy and
   negative unauthorized/disabled cases.
-- [ ] Validate focused and complete Linux/Windows suites before merge.
+- [x] Linux and Windows Python 3.11 full suites passed: 925 tests each (Linux 4 skipped, Windows 11 skipped), and the focused source-registry and exchange tests passed. [Validation run](https://github.com/magicmantheace/AthenZ/actions/runs/39052458570); disposable workflow deleted before merge.
 - [ ] Real verified owner session, identity-source consent coupling,
   separate-process authentication, atomic downstream revocation,
   authorized remote ACK and runtime learner connection remain open.
