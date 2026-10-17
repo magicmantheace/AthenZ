@@ -26,7 +26,7 @@ event still requires a newly authenticated delivery frame and its exact
 HMAC signature; the private receiver tracks global event ID, digest
 and per-producer/task sequence across restarted sessions.
 
-The receiver persists **metadata only**, no original JSON/envelope text
+The receiver requires an owner-only parent directory and database file mode on POSIX systems; Windows ACL validation remains a deployment gate. It persists **metadata only**, no original JSON/envelope text
 or simulation payload. A fixed allowlist permits only signed
 `athenz` trace-digest observations and generic non-executable signed
 `learner` proposals / trace-evaluation receipts. There is a hard
