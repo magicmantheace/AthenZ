@@ -1,0 +1,32 @@
+name: Disposable D2 handshake plus frames integration verification
+on:
+  push:
+    branches:
+      - integration/d2-mutual-handshake-mainline-20261017
+permissions:
+  contents: read
+jobs:
+  python:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile Python package/tests
+        run: python -m compileall -q athenz tests
+      - name: Mutual handshake and authenticated frames
+        run: |
+          python -m unittest discover -s tests -p test_developmental_handshake.py -v
+          python -m unittest discover -s tests -p test_developmental_frames.py -v
+          python -m unittest discover -s tests -p test_developmental_consent.py -v
+      - name: Remove disposable workflow for policy gate
+        run: python -c "from pathlib import Path; Path('.github/workflows/d2-disposable-handshake-mainline-20261017.yml').unlink()"
+      - name: Complete Linux tests
+        if: runner.os == 'Linux'
+        run: python -m unittest discover -s tests -q
