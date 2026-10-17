@@ -46,6 +46,7 @@ class SyntheticDeliveryAck:
         self.enabled = enabled and session.enabled
         self._issued = 0
         self._accepted = 0
+        self._send_failed = False
 
     def _ensure(self) -> None:
         if not self.enabled:
@@ -71,6 +72,8 @@ class SyntheticDeliveryAck:
     def issue(self, event: dict, journal: SyntheticBridgeJournal) -> dict:
         """Sign only after exact signed event digest is in the durable journal."""
         self._ensure()
+        if self._send_failed:
+            raise BridgeError("Synthetic ACK sender failed; establish a new session")
         if self._issued >= MAX_ACK_COUNT:
             raise BridgeError("Synthetic ACK session sequence exhausted")
         if (not isinstance(journal, SyntheticBridgeJournal)
@@ -160,11 +163,17 @@ class SyntheticDeliveryAck:
         packet = struct.pack("!H", len(body)) + body
         try:
             written = writer.write(packet)
-            if written != len(packet):
-                raise BridgeError("Short synthetic ACK stream write")
+        except (OSError, ValueError, AttributeError) as exc:
+            self._send_failed = True
+            raise BridgeError("Synthetic ACK stream write failed; restart session") from exc
+        if written != len(packet):
+            self._send_failed = True
+            raise BridgeError("Short synthetic ACK stream write; restart session")
+        try:
             writer.flush()
         except (OSError, ValueError, AttributeError) as exc:
-            raise BridgeError("Synthetic ACK stream delivery failed") from exc
+            self._send_failed = True
+            raise BridgeError("Synthetic ACK stream flush failed; restart session") from exc
         return message
 
     def receive(self, reader: BinaryIO, exchange: SyntheticExchange) -> dict:
