@@ -94,6 +94,22 @@ simulation checksums as user authentication.
   attestation, credential protection, verified learning adapter and remote
   durable ACK are outstanding.
 
+### 2026-10-17 — D2 durable framed receiving after restart (candidate)
+
+- [x] Add private metadata-only SQLite receiver with event-ID/digest and
+  per-producer/task sequence replay fences; strict 5,000-event upper bound,
+  fail-closed approval checks and no simulator/personal payload storage.
+- [x] Accept legitimately aged producer-signed D2 events only inside a
+  **fresh authenticated frame** with source-revision revalidation; no
+  unchecked direct stale `receive(event)` pathway.
+- [x] Permit `SyntheticDeliveryAck` to issue a signed receipt after this
+  journal's matching durable commit, preserving the legacy journal path.
+- [x] Add synthetic unit tests for restart/replay, revoke, tampered
+  fingerprints, bounded backlog, fixed generic messages and signed ACK.
+- [ ] Cross-platform CI, OS process peer verification and the real private
+  Developmental AI adapter remain open; this is not real-owner consent,
+  atomic cross-database revocation or exactly-once learner state updates.
+
 ### 2026-10-17 — D2 signed synthetic delivery receipt (candidate)
 
 - [x] Add opt-in bounded ACK frames with HMAC from ephemeral negotiated
