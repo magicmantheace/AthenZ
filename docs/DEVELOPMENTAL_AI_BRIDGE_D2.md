@@ -70,3 +70,23 @@ Any real transport needs fresh, per-session trust establishment and
 OS-specific permissions on Windows/WSL2 and Linux, compatibility tests
 against the Developmental AI repo, and independent human approval before
 real device actions.
+
+
+## Cross-repository synthetic compatibility milestone (2026-10-17)
+
+The separate Developmental AI repository has an experimental mirrored
+`developmental_ai.athenz_bridge` implementation and
+`developmental_ai.athenz_sim_adapter` proposal projection. The projects
+pin identical `tests/fixtures/d2_synthetic_vector.json` fixtures and
+independently check the HMAC-signed AthenZ observation's exact canonical
+JSON digest, immutable fields and fixed sandbox authority.
+
+The learner-side fixture verifies a simulator ledger **against its original
+verified trace** and returns only generic `simulation_episode` proposal and
+evaluation receipt metadata, never a shell command or a person's history.
+AthenZ's fixed synthetic `human_record` tag on an observation is a request
+reference only and must never become a human-autobiographical memory.
+
+The two projects' tests validate **format compatibility**, not live IPC,
+owner authorization, complete durable restart replay, model learning,
+sensor reliability or safe real-world action. Full D2 acceptance stays open.
