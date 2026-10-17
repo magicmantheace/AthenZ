@@ -78,6 +78,17 @@ optional adapter rather than a dependency. Do not put personal examples in
 either public Git repository, permit learned text to grant tools, or use
 simulation checksums as user authentication.
 
+### 2026-10-17 — D2 local synthetic source review CLI
+
+- [x] Add terminal `status`, `preview`, and exact-digest-confirmed
+  `review` commands for narrow synthetic grant/withdrawal actions.
+- [x] Confirm no command auto-approves, opens the owner's personal-memory DB
+  or converts a simulator proposal to a system action.
+- [x] Run seven CLI tests on Linux and Windows, plus Linux complete regression:
+  932 tests passed (4 expected skips). [Validation run](https://github.com/magicmantheace/AthenZ/actions/runs/39052962377).
+- [ ] This CLI does not authenticate the human at the terminal or furnish
+  secure interprocess trust. Production source approval remains open.
+
 ### 2026-10-17 — D2 private synthetic approval registry
 
 - [x] Add standalone private, outside-Git registry for exactly scoped
