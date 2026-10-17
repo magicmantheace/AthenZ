@@ -81,6 +81,7 @@ class PipeTests(unittest.TestCase):
                 finally:
                     if peer_grants is not None:
                         peer_grants.close()
+                    peer_writer.close()
 
             worker = threading.Thread(target=peer, daemon=True)
             worker.start()
