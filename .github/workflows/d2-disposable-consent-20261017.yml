@@ -1,0 +1,33 @@
+name: Disposable D2 source review regression
+on:
+  push:
+    branches:
+      - integration/d2-source-approval-registry-20261017
+permissions:
+  contents: read
+concurrency:
+  group: d2-approval-20261017
+  cancel-in-progress: true
+jobs:
+  python:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 18
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Python compilation
+        run: python -m compileall -q athenz tests
+      - name: Focused synthetic approval and exchange tests
+        run: |
+          python -m unittest discover -s tests -p test_developmental_consent.py -v
+          python -m unittest discover -s tests -p test_developmental_exchange.py -v
+      - name: Remove one-off workflow from full suite checkout
+        run: python -c "from pathlib import Path; Path('.github/workflows/d2-disposable-consent-20261017.yml').unlink()"
+      - name: Full Python 3.11 regression
+        run: python -m unittest discover -s tests -q
