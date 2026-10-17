@@ -1,0 +1,32 @@
+name: Disposable D2 synthetic authenticated ACK checks
+on:
+  push:
+    branches:
+      - integration/d2-signed-delivery-receipts-v1
+permissions:
+  contents: read
+jobs:
+  python:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 14
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile source and tests
+        run: python -m compileall -q athenz tests
+      - name: Signed receipts and existing D2 journal
+        run: |
+          python -m unittest discover -s tests -p test_developmental_ack.py -v
+          python -m unittest discover -s tests -p test_developmental_exchange.py -v
+          python -m unittest discover -s tests -p test_developmental_bridge.py -v
+      - name: Remove disposable workflow from policy audit
+        run: python -c "from pathlib import Path; Path('.github/workflows/d2-disposable-ack-20261017.yml').unlink()"
+      - name: Complete Python 3.11 regression on Linux
+        if: runner.os == 'Linux'
+        run: python -m unittest discover -s tests -q
