@@ -78,6 +78,22 @@ optional adapter rather than a dependency. Do not put personal examples in
 either public Git repository, permit learned text to grant tools, or use
 simulation checksums as user authentication.
 
+### 2026-10-17 — D2 mutual-key synthetic session handshake (candidate)
+
+- [x] Add fresh random 128-bit client and peer challenges, mutual
+  proof-of-key possession, strict schema/provenance transcript binding
+  and independent HMAC-derived `athenz` and `learner` frame keys.
+- [x] Connect derived session keys to the independently validated D2
+  binary frame codec in synthetic integration tests; revocation
+  invalidates framed delivery after the handshake.
+- [x] Test forged/altered proof, wrong key, stale source revision,
+  malformed and replayed challenges, and independent session derivation.
+- [x] Validated against merged frame codec: 14 focused handshake tests plus 18 frame tests passed on Linux and Windows; full Linux Python 3.11 suite passed 964 tests (4 skipped). [Actions run](https://github.com/magicmantheace/AthenZ/actions/runs/39059539883). Temporary validation workflow removed. Full Windows regression of this stacked combination was not rerun, but Windows focused tests passed and previous frame/registry Windows suites were green.
+- [ ] Protected per-device key provisioning, Windows/Linux OS peer identity,
+  a real Developmental AI counterpart, live pipe service and authenticated
+  owner consent are still unimplemented. A local shared key is not
+  human identity or full D2 acceptance.
+
 ### 2026-10-17 — D2 signed synthetic stream frame codec (candidate)
 
 - [x] Add a 4-byte bounded, canonical JSON local binary-stream frame
