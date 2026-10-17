@@ -195,7 +195,7 @@ class SyntheticApprovalTests(unittest.TestCase):
         self.approve()
         outbox = self.outbox()
         self.registry.close()
-        with self.assertRaisesRegex(BridgeError, "check failed"):
+        with self.assertRaisesRegex(BridgeError, "no longer approved"):
             outbox.stage_pair(*self.make_pair())
 
     def test_disabled_registry_bound_exchange_does_not_stage(self):
