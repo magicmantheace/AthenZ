@@ -78,6 +78,21 @@ optional adapter rather than a dependency. Do not put personal examples in
 either public Git repository, permit learned text to grant tools, or use
 simulation checksums as user authentication.
 
+### 2026-10-17 — D2 signed synthetic delivery receipt (candidate)
+
+- [x] Add opt-in bounded ACK frames with HMAC from ephemeral negotiated
+  session keys, fixed receiver, event ID, signed envelope digest, source
+  revision, timestamp and strict per-session sequence.
+- [x] Require receiver's prior durable metadata-journal record before
+  issuing an ACK; require current synthetic source revision and exact
+  outbox digest before applying one.
+- [x] Test wrong keys, stale source approvals, missing/reordered receipts,
+  tampered metadata, extra fields and malformed/oversized frames.
+- [ ] Validate on Linux and Windows before merge.
+- [ ] Complete real process key provisioning, authoritative owner consent,
+  durable receiver replay for aged events, independent ACK persistence
+  and Developmental AI private adapter integration.
+
 ### 2026-10-17 — D2 caller-owned OS-pipe synthetic roundtrip (candidate)
 
 - [x] Add strict bounded, canonical handshake records over already-open
