@@ -128,7 +128,7 @@ class DurableFrameTests(unittest.TestCase):
 
     def test_durable_frame_receipt_enables_signed_ack_after_old_timestamp(self):
         old = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
-        proposal = self.event(created_at=old)
+        proposal = self.event(created_at=old, task_id="previous")
         self.deliver(proposal)
         request = self.event(producer="athenz",kind="observation",task_id="durable")
         receipt = self.event(seq=2,kind="evaluation_receipt")
