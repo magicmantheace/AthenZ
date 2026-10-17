@@ -36,6 +36,29 @@ There is currently no GUI prompt, password, OS session attestation,
 owner identity binding, model permission, or real private identity-source
 mapping.
 
+## Terminal review workflow
+
+This standalone command opens **only** the synthetic grant registry and does
+not initialize the private human-memory database:
+
+```bash
+python -m athenz.developmental_consent_cli status synthetic:trial
+python -m athenz.developmental_consent_cli preview synthetic:trial approve
+# Inspect the source, action, scope, revision and review_sha256 shown above.
+python -m athenz.developmental_consent_cli review synthetic:trial approve --review-sha256 <preview-sha256> --confirm
+
+python -m athenz.developmental_consent_cli preview synthetic:trial revoke
+python -m athenz.developmental_consent_cli review synthetic:trial revoke --review-sha256 <new-preview-sha256> --confirm
+```
+
+The command prints bounded JSON metadata, rejects stale/mismatched digests,
+and never has a `--force` or an auto-approve option. A shared
+`--home <private-dir>` override works when testing a separate local
+profile, but Git-checkout homes are rejected. This local command checks
+**affirmation only**, not human identity or an OS-authenticated session.
+No profile data is exported, model weights are updated, or system command
+is authorized by this approval.
+
 ## Binding to the durable outbox
 
 ```python
