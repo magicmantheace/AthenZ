@@ -78,6 +78,21 @@ optional adapter rather than a dependency. Do not put personal examples in
 either public Git repository, permit learned text to grant tools, or use
 simulation checksums as user authentication.
 
+### 2026-10-17 — D2 synthetic durable replies (implementation candidate)
+
+- [x] Add an off-by-default transactional local synthetic request/reply
+  outbox; stage one trace-ref observation and two signed, strictly generic
+  learner replies in one SQLite transaction or stage nothing on failure.
+- [x] Add persistent per-producer sequence counters, exact idempotent
+  request retries, bounded unacknowledged backlog and replay after restart.
+- [x] Re-authenticate stored envelopes and recheck the injected synthetic
+  revision callback at delivery/ack time. Record AthenZ-origin source
+  revocations and cancel outstanding deliveries.
+- [x] Focused 18 tests and complete Python 3.11 suites passed on Linux and Windows: 910 tests each (Linux 4 expected skips, Windows 10). [Validated workflow run](https://github.com/magicmantheace/AthenZ/actions/runs/39046001711); disposable workflow removed from the branch before merge.
+- [ ] Wire actual AthenZ source-consent service, private learner IPC,
+  independently authenticated remote ACK and atomic downstream
+  revocation. The fixture does not yet close the D2 gate.
+
 ### 2026-10-17 — D2 cross-repository synthetic wire compatibility
 
 - [x] Pin a canonical synthetic HMAC fixture in AthenZ and the experimental
