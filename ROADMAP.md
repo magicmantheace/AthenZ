@@ -78,6 +78,19 @@ optional adapter rather than a dependency. Do not put personal examples in
 either public Git repository, permit learned text to grant tools, or use
 simulation checksums as user authentication.
 
+### 2026-10-17 — D2 synthetic mutual-key session handshake (candidate)
+
+- [x] Add independent random client/server challenges, strict
+  allowlisted transcript fields, per-role HMAC proofs and domain-separated
+  ephemeral session/frame keys bound to current synthetic source revision.
+- [x] Test changed source, stale revision, reused/malformed challenges,
+  wrong key, forged learner/server proof, cross-transcript replay and
+  absent consent checker.
+- [ ] Validate separately on Linux/Windows before merging.
+- [ ] This module is NOT an authenticated operating-system process,
+  credential vault, live bidirectional pipe or authorization for real
+  actions and remains a building block for D2 integration.
+
 ### 2026-10-17 — D2 local synthetic source review CLI
 
 - [x] Add terminal `status`, `preview`, and exact-digest-confirmed
