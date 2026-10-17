@@ -1,12 +1,12 @@
 # Developmental AI integration contract and release gates
 
-**Status: planned, not implemented.** Created 2026-10-14 to align
+**Status: D2 AthenZ-side synthetic envelope/journal prototype started; cross-repo transport not implemented.** Created 2026-10-14 to align
 [AthenZ](https://github.com/magicmantheace/AthenZ),
 Developmental AI (separate private repository) and
 [Synveil](https://github.com/magicmantheace/Synveil) for the February 9, 2029
 integrated research target.
 
-This plan is an AthenZ-side contract and acceptance checklist, **not**
+The bounded synthetic contract fixture is documented in [DEVELOPMENTAL_AI_BRIDGE_D2.md](DEVELOPMENTAL_AI_BRIDGE_D2.md). This plan remains an acceptance checklist, **not**
 evidence that these repositories currently communicate. Developmental AI
 already has separate synthetic simulators, tabular policies, latent dynamics,
 stepwise change detection, memory experiments, quarantined candidates and
