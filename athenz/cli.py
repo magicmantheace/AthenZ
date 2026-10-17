@@ -78,6 +78,9 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument('table', choices=['writing_samples', 'train_pairs', 'experiences'])
     x.add_argument('id', type=int)
     x.add_argument('state', choices=['approved', 'pending', 'rejected'])
+    x = sub.add_parser('memory-audit')
+    x.add_argument('--limit', type=int, default=80,
+                   help='Maximum potential duplicate/conflict pairs returned (1–80)')
     x = sub.add_parser('memory-preview')
     x.add_argument('message_id', type=int, help='Owner-written message to inspect privately')
     x = sub.add_parser('memory-from-message')
@@ -198,6 +201,10 @@ def main(argv: list[str] | None = None) -> None:
             print(json.dumps(style_readiness(store), sort_keys=True))
         elif args.cmd == 'review':
             print('Updated' if store.set_review(args.table, args.id, args.state) else 'Unknown ID')
+        elif args.cmd == 'memory-audit':
+            from .memory_consistency import audit_approved_memories
+            print(json.dumps(audit_approved_memories(store, limit=args.limit),
+                             indent=2, sort_keys=True))
         elif args.cmd == 'memory-preview':
             print(json.dumps(store.memory_source_preview(args.message_id), indent=2,
                              ensure_ascii=False))
