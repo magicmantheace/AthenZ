@@ -13,7 +13,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import hashlib
 import hmac
-from io import BytesIO
 import json
 import re
 import struct
@@ -141,10 +140,10 @@ class SyntheticFrameSession:
         packet = self.pack(event)
         try:
             written = stream.write(packet)
-            if written != len(packet):
-                raise BridgeError("Short synthetic frame write; restart session")
         except (OSError, ValueError) as exc:
             raise BridgeError("Synthetic frame stream write failed") from exc
+        if written != len(packet):
+            raise BridgeError("Short synthetic frame write; restart session")
 
     def receive(self, stream: BinaryIO, *, expected_producer: str,
                 now: datetime | None = None) -> dict:
