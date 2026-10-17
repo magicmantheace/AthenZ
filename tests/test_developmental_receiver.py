@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
+import os
 from pathlib import Path
 import hashlib
 import tempfile
@@ -219,6 +220,24 @@ class DurableFrameTests(unittest.TestCase):
         self.assertEqual(self.journal.db.execute(
             "SELECT last_seq FROM d2_framed_stream WHERE producer='learner' "
             "AND task_id='durable'").fetchone()[0], 1)
+
+    def test_rejects_nonprivate_posix_directory(self):
+        if os.name == "nt":
+            self.skipTest("Windows folder privacy is enforced by ACL, not POSIX bits")
+        with tempfile.TemporaryDirectory() as t:
+            public_dir = Path(t) / "shared"
+            public_dir.mkdir(mode=0o755)
+            public_dir.chmod(0o755)
+            with self.assertRaisesRegex(BridgeError, "owner-only"):
+                SyntheticDurableReceiver(
+                    public_dir / "events.sqlite3", keys=self.keys,
+                    revision_check=self.grants.is_current, enabled=True)
+            self.assertFalse((public_dir / "events.sqlite3").exists())
+
+    def test_receiver_database_is_owner_only_on_posix(self):
+        if os.name == "nt":
+            self.skipTest("Windows ACL validation is not available")
+        self.assertEqual(self.path.stat().st_mode & 0o077, 0)
 
     def test_private_db_persists_no_signed_payload_or_person_content(self):
         event = self.event()
