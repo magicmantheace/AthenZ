@@ -155,6 +155,36 @@ class SyntheticHandshakeTests(unittest.TestCase):
                 respond(self.hello, root_secret=invalid,
                         revision_check=self.check)
 
+    def test_derived_keys_accept_frames_and_revocation_fences_delivery(self):
+        from io import BytesIO
+        from athenz.developmental_bridge import synthetic_event
+        from athenz.developmental_frames import SyntheticFrameSession
+
+        _, initiator, responder = self.complete()
+        event_keys = {"athenz": b"a" * 32, "learner": b"l" * 32}
+        common = dict(producer_keys=event_keys, revision_check=self.check,
+                      enabled=True)
+        sender = SyntheticFrameSession(**initiator, **common)
+        receiver = SyntheticFrameSession(**responder, **common)
+        event = synthetic_event(
+            producer="athenz", task_id="demo", seq=1, kind="observation",
+            source_ref=self.source, source_revision=1,
+            payload={"signal": "trace_sha256", "value": "a" * 64},
+            secret=event_keys["athenz"])
+        packet = sender.pack(event)
+        self.assertEqual(
+            receiver.receive(BytesIO(packet), expected_producer="athenz"),
+            event)
+        next_event = synthetic_event(
+            producer="athenz", task_id="demo", seq=2, kind="observation",
+            source_ref=self.source, source_revision=1,
+            payload={"signal": "trace_sha256", "value": "b" * 64},
+            secret=event_keys["athenz"])
+        pkt2 = sender.pack(next_event)
+        self.revision = 2
+        with self.assertRaisesRegex(BridgeError, "approval"):
+            receiver.receive(BytesIO(pkt2), expected_producer="athenz")
+
     def test_frame_key_use_with_synthetic_codec(self):
         # The framing codec is available on a separate integration branch;
         # this frozen-material test exercises the handshake on its own.
