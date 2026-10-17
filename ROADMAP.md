@@ -88,7 +88,7 @@ simulation checksums as user authentication.
   invalidates framed delivery after the handshake.
 - [x] Test forged/altered proof, wrong key, stale source revision,
   malformed and replayed challenges, and independent session derivation.
-- [ ] Validate merged-code Linux and Windows tests before claiming done.
+- [x] Validated against merged frame codec: 14 focused handshake tests plus 18 frame tests passed on Linux and Windows; full Linux Python 3.11 suite passed 964 tests (4 skipped). [Actions run](https://github.com/magicmantheace/AthenZ/actions/runs/39059539883). Temporary validation workflow removed. Full Windows regression of this stacked combination was not rerun, but Windows focused tests passed and previous frame/registry Windows suites were green.
 - [ ] Protected per-device key provisioning, Windows/Linux OS peer identity,
   a real Developmental AI counterpart, live pipe service and authenticated
   owner consent are still unimplemented. A local shared key is not
