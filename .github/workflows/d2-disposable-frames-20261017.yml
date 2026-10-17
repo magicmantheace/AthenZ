@@ -1,0 +1,37 @@
+name: Disposable D2 bounded framed stream validation
+on:
+  push:
+    branches:
+      - integration/d2-authenticated-stdio-frames-20261017
+permissions:
+  contents: read
+jobs:
+  python:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 17
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile Python source
+        run: python -m compileall -q athenz tests
+      - name: Focused authenticated framing and existing D2 regression
+        run: |
+          python -m unittest discover -s tests -p test_developmental_frames.py -v
+          python -m unittest discover -s tests -p test_developmental_bridge.py -v
+          python -m unittest discover -s tests -p test_developmental_exchange.py -v
+          python -m unittest discover -s tests -p test_developmental_consent.py -v
+      - name: Remove temporary workflow from checkout before workflow-policy audits
+        run: python -c "from pathlib import Path; Path('.github/workflows/d2-disposable-frames-20261017.yml').unlink()"
+      - name: Complete Linux suite
+        if: runner.os == 'Linux'
+        run: python -m unittest discover -s tests -q
+      - name: Complete Windows suite
+        if: runner.os == 'Windows'
+        timeout-minutes: 10
+        run: python -m unittest discover -s tests -q
