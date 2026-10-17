@@ -78,6 +78,22 @@ optional adapter rather than a dependency. Do not put personal examples in
 either public Git repository, permit learned text to grant tools, or use
 simulation checksums as user authentication.
 
+### 2026-10-17 — D2 private synthetic approval registry
+
+- [x] Add standalone private, outside-Git registry for exactly scoped
+  synthetic sandbox source approvals, with explicit preview/review digest,
+  owner-facing `confirmed=True` and monotonic approval/revoke revisions.
+- [x] Bind the durable AthenZ synthetic outbox to the registry with a
+  constrained constructor; prevent queuing inside Git working trees.
+- [x] Test default-deny, stale/cross-source review, persisted revocation
+  across restarts, no resurrection on reapproval, POSIX privacy and
+  negative unauthorized/disabled cases.
+- [x] Linux and Windows Python 3.11 full suites passed: 925 tests each (Linux 4 skipped, Windows 11 skipped), and the focused source-registry and exchange tests passed. [Validation run](https://github.com/magicmantheace/AthenZ/actions/runs/39052458570); disposable workflow deleted before merge.
+- [ ] Real verified owner session, identity-source consent coupling,
+  separate-process authentication, atomic downstream revocation,
+  authorized remote ACK and runtime learner connection remain open.
+  A review digest or local confirmed flag is NOT authenticated consent.
+
 ### 2026-10-17 — D2 synthetic durable replies (implementation candidate)
 
 - [x] Add an off-by-default transactional local synthetic request/reply
