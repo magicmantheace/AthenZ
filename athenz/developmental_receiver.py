@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import hashlib
+import os
 from pathlib import Path
 import re
 import sqlite3
@@ -45,6 +46,8 @@ class SyntheticDurableReceiver:
         if not path.parent.is_dir() or path.is_symlink() or (
                 path.exists() and not path.is_file()):
             raise BridgeError("Receiver requires an existing private database directory")
+        if os.name != "nt" and path.parent.stat().st_mode & 0o077:
+            raise BridgeError("Receiver directory must be owner-only")
         self.keys = dict(keys)
         self.revision_check = revision_check
         self.enabled = enabled
@@ -60,6 +63,8 @@ class SyntheticDurableReceiver:
         self.db.execute("""CREATE TABLE IF NOT EXISTS d2_framed_stream (
             producer TEXT NOT NULL, task_id TEXT NOT NULL, last_seq INTEGER NOT NULL,
             PRIMARY KEY(producer,task_id))""")
+        if os.name != "nt":
+            path.chmod(0o600)
 
     def close(self) -> None:
         self.db.close()
