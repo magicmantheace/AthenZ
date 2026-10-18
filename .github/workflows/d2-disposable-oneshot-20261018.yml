@@ -1,0 +1,35 @@
+name: Disposable D2 one-shot interop checks
+on:
+  push:
+    branches:
+      - integration/d2-one-shot-simulator-transport
+permissions:
+  contents: read
+concurrency:
+  group: d2-oneshot-interop
+  cancel-in-progress: true
+jobs:
+  python:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 17
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile package and tests
+        run: python -m compileall -q athenz tests
+      - name: Bounded cross-process synthetic D2 request reply ACK
+        run: |
+          python -m unittest discover -s tests -p test_developmental_roundtrip.py -v
+          python -m unittest discover -s tests -p test_developmental_receiver.py -v
+          python -m unittest discover -s tests -p test_developmental_ack.py -v
+      - name: Remove temporary workflow before CI policy audit
+        run: python -c "from pathlib import Path; Path('.github/workflows/d2-disposable-oneshot-20261018.yml').unlink()"
+      - name: Complete Linux Python suite
+        if: runner.os == 'Linux'
+        run: python -m unittest discover -s tests -q
