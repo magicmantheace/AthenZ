@@ -70,7 +70,11 @@ def synthetic_trace_roundtrip(
     replies = []
     for expected_kind in ("action_proposed", "evaluation_receipt"):
         received = receiver.receive_frame(
-            session, reader, expected_producer="learner", include_event=True)
+            session, reader, expected_producer="learner", include_event=True,
+            expected_task_id=request["task_id"],
+            expected_kind=expected_kind,
+            expected_source_ref=source,
+            expected_source_revision=revision)
         event = received["event"]
         if (event["kind"] != expected_kind
                 or event["task_id"] != request["task_id"]
