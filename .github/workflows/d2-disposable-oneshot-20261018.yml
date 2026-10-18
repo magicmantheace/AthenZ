@@ -24,7 +24,9 @@ jobs:
       - name: Compile package and tests
         run: python -m compileall -q athenz tests
       - name: Bounded cross-process synthetic D2 request reply ACK
+        shell: bash
         run: |
+          set -euo pipefail
           python -m unittest discover -s tests -p test_developmental_roundtrip.py -v
           python -m unittest discover -s tests -p test_developmental_receiver.py -v
           python -m unittest discover -s tests -p test_developmental_ack.py -v
