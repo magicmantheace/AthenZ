@@ -48,6 +48,7 @@ class SyntheticDurableReceiver:
             raise BridgeError("Receiver requires an existing private database directory")
         if os.name != "nt" and path.parent.stat().st_mode & 0o077:
             raise BridgeError("Receiver directory must be owner-only")
+        self.db_file_home = path.parent
         self.keys = dict(keys)
         self.revision_check = revision_check
         self.enabled = enabled
