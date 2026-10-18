@@ -111,7 +111,10 @@ class OneShotRoundtripTests(unittest.TestCase):
             "SELECT count(*) FROM d2_outbox WHERE state='pending'").fetchone()[0], 2)
         self.assertEqual(self.receiver.db.execute(
             "SELECT count(*) FROM d2_framed_received").fetchone()[0], 2)
-        with sqlite3.connect(self.home / "d2_fixture_peer_outbox.sqlite3") as db:
+        # sqlite3.Connection.__exit__ commits but does not close. Windows
+        # will not remove this temporary database while its handle is open.
+        from contextlib import closing
+        with closing(sqlite3.connect(self.home / "d2_fixture_peer_outbox.sqlite3")) as db:
             self.assertEqual(db.execute(
                 "SELECT count(*) FROM d2_outbox WHERE state='acked'").fetchone()[0], 2)
 
