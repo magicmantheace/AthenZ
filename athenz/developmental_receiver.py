@@ -109,7 +109,11 @@ class SyntheticDurableReceiver:
 
     def receive_frame(self, session: SyntheticFrameSession, reader: BinaryIO, *,
                       expected_producer: str = "learner",
-                      include_event: bool = False) -> dict:
+                      include_event: bool = False,
+                      expected_task_id: str | None = None,
+                      expected_kind: str | None = None,
+                      expected_source_ref: str | None = None,
+                      expected_source_revision: int | None = None) -> dict:
         """Persist metadata after verifying fresh frame, signed event and approval."""
         if not self.enabled:
             return {"status": "disabled", "actions_executed": False}
@@ -121,9 +125,22 @@ class SyntheticDurableReceiver:
             raise BridgeError("Durable receiver producer keys differ from session")
         if expected_producer not in ("athenz", "learner"):
             raise BridgeError("Expected receiver producer is invalid")
+        for value in (expected_task_id, expected_kind, expected_source_ref):
+            if value is not None and (type(value) is not str or not 1 <= len(value) <= 80):
+                raise BridgeError("Invalid expected D2 event field")
+        if (expected_source_revision is not None
+                and (type(expected_source_revision) is not int
+                     or not 1 <= expected_source_revision <= 1000000)):
+            raise BridgeError("Invalid expected D2 source revision")
         # Session must authenticate a fresh outer frame before the signed
         # *inner* event can be read from an old durable sender outbox.
         event = session.receive(reader, expected_producer=expected_producer)
+        if (expected_task_id is not None and event["task_id"] != expected_task_id
+                or expected_kind is not None and event["kind"] != expected_kind
+                or expected_source_ref is not None and event["source_ref"] != expected_source_ref
+                or expected_source_revision is not None
+                and event["source_revision"] != expected_source_revision):
+            raise BridgeError("Authenticated D2 event does not match expected request")
         self._narrow(event)
         stamp = datetime.fromisoformat(event["created_at"])
         raw = _validate(event, self.keys, now=stamp)

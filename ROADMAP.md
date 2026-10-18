@@ -94,6 +94,24 @@ simulation checksums as user authentication.
   attestation, credential protection, verified learning adapter and remote
   durable ACK are outstanding.
 
+### 2026-10-18 — D2 expected reply binding before durable commit
+
+- [x] Enforce explicitly expected event kind, task ID, source and revision
+  **after** authenticated frame verification but **before** SQLite receipt
+  insertion. A validly signed unrelated learner event cannot occupy a
+  different task's durable sequence slot.
+- [x] Preserve existing default behavior for standalone D2 receiver users
+  and reject invalid expected fields without reading any stream bytes.
+- [x] Add three negative regression tests for mismatched kind, task,
+  revision and invalid caller-provided expectations.
+- [x] [Cross-platform run](https://github.com/magicmantheace/AthenZ/actions/runs/39162538508):
+  18 receiver, seven one-shot exchange and 14 signed-ACK focused tests
+  passed on Linux and Windows. Full Linux Python 3.11 suite passed
+  **1,020 tests (four expected skips)**. Full Windows suite was not
+  rerun; only focused Windows D2 tests were executed.
+- [ ] Real private Developmental AI peer validation, OS trust and
+  owner consent remain release-blocking tasks.
+
 ### 2026-10-18 — D2 one-shot private-learner interface (candidate)
 
 - [x] Add an explicitly enabled, fixed `synthetic:interop` trace-reference
