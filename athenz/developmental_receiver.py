@@ -107,10 +107,13 @@ class SyntheticDurableReceiver:
             raise BridgeError("Unknown synthetic event producer")
 
     def receive_frame(self, session: SyntheticFrameSession, reader: BinaryIO, *,
-                      expected_producer: str = "learner") -> dict:
+                      expected_producer: str = "learner",
+                      include_event: bool = False) -> dict:
         """Persist metadata after verifying fresh frame, signed event and approval."""
         if not self.enabled:
             return {"status": "disabled", "actions_executed": False}
+        if type(include_event) is not bool:
+            raise BridgeError("Invalid durable receiver event visibility option")
         if not isinstance(session, SyntheticFrameSession):
             raise BridgeError("Durable receiving requires authenticated D2 frame session")
         if session.producer_keys != self.keys:
@@ -135,7 +138,7 @@ class SyntheticDurableReceiver:
                 if existing[0] != fingerprint:
                     raise BridgeError("Conflicting durable framed event replay")
                 self.db.execute("COMMIT")
-                return {"status": "duplicate", "actions_executed": False}
+                return {"status": "duplicate", "actions_executed": False, **({"event": event} if include_event else {})}
             last = self.db.execute(
                 "SELECT last_seq FROM d2_framed_stream WHERE producer=? AND task_id=?",
                 (event["producer"], event["task_id"])).fetchone()
@@ -157,7 +160,7 @@ class SyntheticDurableReceiver:
                 (event["producer"], event["task_id"], event["seq"]))
             self._approval(event)
             self.db.execute("COMMIT")
-            return {"status": "accepted", "actions_executed": False}
+            return {"status": "accepted", "actions_executed": False, **({"event": event} if include_event else {})}
         except BaseException:
             self.db.execute("ROLLBACK")
             raise
