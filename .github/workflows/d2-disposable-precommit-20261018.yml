@@ -1,0 +1,34 @@
+name: Disposable D2 strict precommit reply binding
+on:
+  push:
+    branches:
+      - fix/d2-receiver-expected-fields-before-commit
+permissions:
+  contents: read
+jobs:
+  python:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 16
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile Python
+        run: python -m compileall -q athenz tests
+      - name: Expected D2 reply before commit regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p test_developmental_receiver.py -v
+          python -m unittest discover -s tests -p test_developmental_roundtrip.py -v
+          python -m unittest discover -s tests -p test_developmental_ack.py -v
+      - name: Remove disposable CI file before policy test
+        run: python -c "from pathlib import Path; Path('.github/workflows/d2-disposable-precommit-20261018.yml').unlink()"
+      - name: Complete Linux suite
+        if: runner.os == 'Linux'
+        run: python -m unittest discover -s tests -q
