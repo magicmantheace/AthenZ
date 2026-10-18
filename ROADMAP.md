@@ -94,6 +94,22 @@ simulation checksums as user authentication.
   attestation, credential protection, verified learning adapter and remote
   durable ACK are outstanding.
 
+### 2026-10-18 — D2 one-shot private-learner interface (candidate)
+
+- [x] Add an explicitly enabled, fixed `synthetic:interop` trace-reference
+  roundtrip over caller-owned binary streams: mutual-key handshake,
+  request frame, two durably verified simulator reply frames, atomic
+  reply-pair validation/staging and two signed ACKs after commit.
+- [x] Add separately launched public test peer with per-session random
+  synthetic signing/transport keys passed through binary stdin and an
+  independent transactional outbox requiring both signed ACKs.
+- [x] Allow durable receiver to return an authenticated event only
+  after persisted metadata commit, with unchanged default return format.
+- [x] Final cross-platform validation: [GitHub Actions run 39161779916](https://github.com/magicmantheace/AthenZ/actions/runs/39161779916) passed all 7 new separate-process integration tests, 15 receiver tests and 14 ACK tests on both platforms; full **1,017 Python tests** passed on Linux (4 expected skips). Windows full suite was not rerun for this change. The disposable workflow was removed before merge.
+- [ ] Real private Developmental AI trace producer, safe process lifetime
+  and OS identity, protected secrets, retry of aged inbound requests and
+  human consent are still open.
+
 ### 2026-10-17 — D2 durable framed receiving after restart (candidate)
 
 - [x] Add private metadata-only SQLite receiver with event-ID/digest and
