@@ -51,6 +51,7 @@ class SyntheticExchange:
         if not path.parent.is_dir() or path.is_symlink() or (
                 path.exists() and not path.is_file()):
             raise BridgeError("Exchange requires an existing private parent directory")
+        self.db_file_home = path.parent
         self.keys = dict(keys)
         self.revision_check = revision_check
         self.enabled = enabled
