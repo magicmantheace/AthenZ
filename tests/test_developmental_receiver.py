@@ -239,6 +239,49 @@ class DurableFrameTests(unittest.TestCase):
             self.skipTest("Windows ACL validation is not available")
         self.assertEqual(self.path.stat().st_mode & 0o077, 0)
 
+    def test_request_mismatch_rejected_before_durable_journal_write(self):
+        for bad in (self.event(kind="evaluation_receipt"),
+                    self.event(task_id="different")):
+            with self.subTest(kind=bad["kind"], task=bad["task_id"]):
+                sender, receiver = self.sessions("8" * 32)
+                packet = sender.pack(bad)
+                with self.assertRaisesRegex(BridgeError, "expected request"):
+                    self.journal.receive_frame(
+                        receiver, BytesIO(packet), expected_producer="learner",
+                        expected_task_id="durable",
+                        expected_kind="action_proposed",
+                        expected_source_ref=self.source,
+                        expected_source_revision=1)
+                self.assertEqual(self.journal.db.execute(
+                    "SELECT count(*) FROM d2_framed_received").fetchone()[0], 0)
+        self.assertEqual(self.deliver(self.event(), sid="9" * 32)["status"],
+                         "accepted")
+
+    def test_expected_revision_rejected_before_durable_journal_write(self):
+        sender, receiver = self.sessions("8" * 32)
+        stream = BytesIO(sender.pack(self.event()))
+        with self.assertRaisesRegex(BridgeError, "expected request"):
+            self.journal.receive_frame(
+                receiver, stream, expected_producer="learner",
+                expected_source_revision=2)
+        self.assertEqual(self.journal.db.execute(
+            "SELECT count(*) FROM d2_framed_received").fetchone()[0], 0)
+
+    def test_invalid_expectation_fails_without_consuming_stream(self):
+        sender, receiver = self.sessions("8" * 32)
+        stream = BytesIO(sender.pack(self.event()))
+        for value in (True, 0, "x" * 100):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(BridgeError, "expected"):
+                    self.journal.receive_frame(
+                        receiver, stream, expected_producer="learner",
+                        expected_task_id=value)
+                self.assertEqual(stream.tell(), 0)
+        with self.assertRaisesRegex(BridgeError, "source revision"):
+            self.journal.receive_frame(
+                receiver, stream, expected_source_revision=True)
+        self.assertEqual(stream.tell(), 0)
+
     def test_private_db_persists_no_signed_payload_or_person_content(self):
         event = self.event()
         self.deliver(event)
