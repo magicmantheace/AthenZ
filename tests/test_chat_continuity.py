@@ -86,13 +86,32 @@ class ContinuityTests(unittest.TestCase):
         self.assertIn("OLDER USER-WRITTEN", messages[2]["content"])
         self.assertIn("isolated adapter", messages[2]["content"])
         self.assertNotIn("ASSISTANT_INVENTED_MEMORY", messages[2]["content"])
-        self.assertEqual(messages[3]["role"], "user")
+        self.assertEqual(messages[3]["role"], "system")
+        self.assertIn("RECENT SAME-SESSION CHAT", messages[3]["content"])
+        self.assertIn("model-generated, not owner memories", messages[3]["content"])
+        self.assertEqual(messages[4]["role"], "user")
         self.assertEqual(messages[-1]["content"], self.prompt)
         self.assertNotIn("isolated adapter", sig)
         no_session = context_snapshot(
             self.store, self.prompt, "twin", self.recent())[1]
         self.assertFalse(any("OLDER USER-WRITTEN" in m["content"]
                              for m in no_session))
+
+    def test_recent_generated_assistant_claims_remain_unverified(self):
+        history = self.recent()
+        _, messages = context_snapshot(
+            self.store, "Where did the owner grow up?", "twin", history, "work")
+        self.assertIn("RECENT SAME-SESSION CHAT", str(messages))
+        self.assertIn("Previous assistant replies are model-generated",
+                      str(messages))
+        self.assertNotIn("ASSISTANT_INVENTED_MEMORY",
+                         messages[1]["content"])
+        self.assertTrue(any(
+            item["role"] == "user" and
+            "Unrelated filler" in item["content"]
+            for item in messages[4:-1]))
+        self.assertIn("No topically matching approved owner fact",
+                      messages[0]["content"])
 
     def test_mode_and_session_isolation_in_actual_desktop_request(self):
         messages = []
