@@ -116,6 +116,9 @@ def _selected_identity(store: IdentityStore, query: str, *,
     direct_bio = bool(re.search(
         r"\b(who am i|describe me|about me|my background|my profile)\b",
         query.lower()))
+    direct_preferences = bool(re.search(
+        r"\b(my preferences|what do i prefer|what do i like)\b",
+        query.lower()))
     backbone, topical = [], []
     for r in store.db.execute(
         "SELECT id, kind, text, source, confidence FROM identity "
@@ -127,7 +130,7 @@ def _selected_identity(store: IdentityStore, query: str, *,
         rank = (score, r["confidence"], r["id"])
         if (r["kind"] in {"style", "value"} or
                 (r["kind"] == "preference" and
-                 (mode == "agent" or score or direct_bio))):
+                 (mode == "agent" or score or direct_bio or direct_preferences))):
             # A generic Twin question should not drag in five unrelated
             # approved preferences and invite invented owner-specific claims.
             _keep_best(backbone, rank, item, 5)
@@ -227,10 +230,14 @@ def _twin_evidence_note(candidates: dict[str, list[dict]], query: str) -> str:
     broad_profile_question = bool(re.search(
         r"\b(who am i|describe me|about me|my background|my profile)\b",
         query.lower()))
+    broad_preferences_question = bool(re.search(
+        r"\b(my preferences|what do i prefer|what do i like)\b",
+        query.lower()))
     topical_identity = any(
         row["kind"] != "style" and
         (_overlap(terms, row["text"]) or
-         (broad_profile_question and row["kind"] == "identity"))
+         (broad_profile_question and row["kind"] == "identity") or
+         (broad_preferences_question and row["kind"] == "preference"))
         for row in candidates["approved_identity"])
     topical_other = bool(
         candidates["approved_decisions"] or
