@@ -173,6 +173,13 @@ inference and the everyday persistence path—not GPU use, model quality,
 personality fidelity, autonomous learning, or installed-model integrity.
 No inference is triggered by app startup or ordinary prerequisite checks.
 
+For a deeper five-request check on an already installed local model, run
+`athenz-chat-smoke --model qwen3.5:2b --twin-lifecycle --confirm`.
+This optional synthetic workflow tests session reopening, staged preference
+correction, separate approval, and revocation through the same desktop
+service. It checks persistence and reviewed prompt references, **not** whether
+the model's generated replies accurately represent the owner.
+
 See [the local chat smoke protocol](docs/LOCAL_CHAT_SMOKE.md).
 
 ## Inspect, correct, revoke or forget memories in the desktop
