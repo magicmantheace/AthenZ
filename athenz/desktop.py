@@ -902,8 +902,14 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
             'Read-only approved context preview. Topic matching is not proof '
             'of your answer. No model or network request occurs.'),
             wraplength=755, padding=12).pack(anchor='w')
-        details = tk.Text(popup, wrap='word', padx=10, pady=10)
-        details.pack(fill='both', expand=True, padx=12, pady=(0, 8))
+        evidence_frame = ttk.Frame(popup)
+        evidence_frame.pack(fill='both', expand=True, padx=12, pady=(0, 8))
+        details = tk.Text(evidence_frame, wrap='word', padx=10, pady=10)
+        details.pack(side='left', fill='both', expand=True)
+        scrollbar = ttk.Scrollbar(
+            evidence_frame, orient='vertical', command=details.yview)
+        scrollbar.pack(side='right', fill='y')
+        details.configure(yscrollcommand=scrollbar.set)
         details.insert('end', 'Evidence status: ' + report['status'] + '\n')
         details.insert('end',
             'Only packed approved references are shown. Session chat is not '
