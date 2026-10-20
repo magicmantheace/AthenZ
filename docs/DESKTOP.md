@@ -19,6 +19,33 @@ When a reviewed Ollama tag is selected, the same digest/consent checks used by
 the existing CLI are applied. Ollama HTTP is loopback-only, with proxies and
 redirects disabled. The desktop does not install Ollama or models.
 
+## Twin-first conversation and evidence inspection (2026-10-20)
+
+The **Chat** tab opens in **Twin** mode by default. The owner can still
+explicitly switch to Agent Mode; both histories remain independent.
+
+Enter a Twin question and choose **Preview Twin evidence** to inspect the
+*actual serialized, bounded and approved* reference profile that would be
+supplied to the local model. The private read-only dialog shows evidence
+types, provenance and selected excerpts without opening Ollama, updating
+memory, sending messages or examining unreviewed session history.
+
+- A positive evidence-status label means topically matched approved reference
+  *was packed into the model prompt*; it does **not** prove that the reference
+  answers the question or that model output will be true.
+- Missing, pending, revoked, held-out and too-large omitted references do
+  not appear as approved personal facts. A question with no packed topical
+  personal references is explicitly marked insufficient.
+- The preview is a point-in-time owner-local view, not a lock. Source review,
+  model routing or chat content may change before the owner actually sends.
+  The normal chat pipeline rechecks changes before persisting generated turns.
+- When Twin Mode uses recent session history, that **unreviewed conversation**
+  is separately labeled and is not shown in this approved-only preview.
+
+The preview's synthetic tests verify selection and consent separation.
+**No Windows GUI validation, owner personality comparison or model-quality
+measurement is implied by committing these changes.**
+
 ## Available screens
 
 **Chat:** Choose *Agent* or *Twin*, select a named private session, send local
