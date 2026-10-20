@@ -92,3 +92,30 @@ via `tests/test_twin_benchmark.py`.
 This tests retrieval mechanics and owner revocation, **not** real owner style
 fidelity, semantic memory quality or model reasoning. Those require an
 independent, explicitly approved local evaluation dataset.
+
+
+## 2026-10-20 Twin-first evidence and continuity increment
+
+- Tiny, deterministic synonym support in approved identity retrieval covers
+  English `favorite/favourite`, `color/colour`, and explicit childhood /
+  growing-up questions that may be worded as `raised` in reviewed records.
+  This is not embedding search, broad semantic retrieval or demonstrated
+  owner resemblance. If an approved record is revoked, it is no longer
+  returned by this path.
+- Twin prompts now distinguish whether any *topically matching approved*
+  personal reference was retrieved. General writing style alone cannot be
+  treated as proof of autobiography or personal choices. Model instructions
+  require uncertainty for unsupported owner-specific questions, while
+  ordinary nonpersonal chat should still work.
+- Recent same-session turns keep their original ordering and role labels but
+  receive an explicit unreviewed provenance boundary. AI-written earlier
+  replies cannot become verified facts merely by appearing in the current
+  chat. Direct conversational recall may quote prior statements as unverified.
+- These are **prompt/retrieval improvements only**. A local model may still
+  fail to obey uncertainty instructions. Synthetic unit tests check data
+  inclusion and instruction assembly, not actual hallucination frequency,
+  writing-style match or decision accuracy.
+- Run `python -m unittest tests.test_twin_context tests.test_chat_continuity -v`
+  and the full `python -m unittest discover -s tests -v` on a checked-out
+  copy of this branch. Windows inference and blinded real-owner comparison
+  remain unverified until performed and recorded.
