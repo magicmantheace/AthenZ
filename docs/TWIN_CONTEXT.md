@@ -107,6 +107,13 @@ independent, explicitly approved local evaluation dataset.
   treated as proof of autobiography or personal choices. Model instructions
   require uncertainty for unsupported owner-specific questions, while
   ordinary nonpersonal chat should still work.
+
+- Generic owner-question framing words (such as `prefer`, `favorite`, or
+  `choose`) no longer alone qualify unrelated preferences, training choices,
+  or episodes as topical evidence. Broad explicit preference questions still
+  admit approved preference summaries. Episode ranking applies the substantive
+  topic filter **before** the top-five selection, so newer generic matches
+  cannot obscure an older topical episode.
 - Recent same-session turns keep their original ordering and role labels but
   receive an explicit unreviewed provenance boundary. AI-written earlier
   replies cannot become verified facts merely by appearing in the current
