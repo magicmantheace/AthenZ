@@ -258,6 +258,48 @@ class TwinContextTests(unittest.TestCase):
         self.assertIn("synthetic reviewable analysis 269", str(selected))
         self.assertNotIn("synthetic reviewable analysis 0", str(selected))
 
+    def test_childhood_synonym_retrieves_only_approved_history(self):
+        approved = self.store.propose(
+            "identity", "SYNTHETIC_OWNER was raised in a fictional valley",
+            source="synthetic", approved=True)
+        self.store.propose(
+            "identity", "PENDING_OWNER was raised on a secret moon",
+            source="synthetic", approved=False)
+        question = "Where did I grow up?"
+        result = json.dumps(profile(self.store, question))
+        self.assertIn("SYNTHETIC_OWNER", result)
+        self.assertNotIn("PENDING_OWNER", result)
+        self.assertIn("Approved topical reference data",
+                      build_messages(self.store, question, "twin")[0]["content"])
+        self.store.status(approved, "rejected")
+        revoked = json.dumps(profile(self.store, question))
+        self.assertNotIn("SYNTHETIC_OWNER", revoked)
+        self.assertIn("No topically matching approved owner fact",
+                      build_messages(self.store, question, "twin")[0]["content"])
+
+    def test_favorite_colour_spelling_retrieves_reviewed_preference(self):
+        self.store.propose(
+            "preference", "My favourite colour is ultraviolet",
+            source="synthetic", approved=True)
+        result = profile(self.store, "What is my favorite color?")
+        self.assertIn("ultraviolet", json.dumps(result))
+        self.assertIn("Approved topical reference data",
+                      build_messages(self.store, "What is my favorite color?",
+                                     "twin")[0]["content"])
+
+    def test_style_does_not_count_as_supported_owner_biography(self):
+        self.store.propose("style", "Use crisp short paragraphs",
+                           source="synthetic", approved=True)
+        self.store.propose("identity", "SYNTHETIC_OWNER studies astronomy",
+                           source="synthetic", approved=True)
+        messages = build_messages(self.store, "What is my favorite animal?", "twin")
+        self.assertIn("Use crisp short paragraphs", messages[1]["content"])
+        self.assertNotIn("SYNTHETIC_OWNER", messages[1]["content"])
+        self.assertIn("No topically matching approved owner fact",
+                      messages[0]["content"])
+        self.assertNotIn("TWIN EVIDENCE STATUS",
+                         build_messages(self.store, "Do my work", "agent")[0]["content"])
+
     def test_input_without_evidence_abstains_from_personal_claims(self):
         p = profile(self.store, "What would my position be on this?")
         self.assertEqual(p["approved_identity"], [])
