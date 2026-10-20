@@ -289,12 +289,19 @@ def build_messages(store: IdentityStore, user_message: str,
     elif hasattr(store, "approved_experiences"):
         candidates["approved_work_lessons"] = store.approved_experiences(
             limit=10, query=user_message)
+    # Relevance rankings are candidates, not necessarily evidence available
+    # to the model: _pack_profile omits complete oversized records. Ground
+    # the Twin evidence-status message in the EXACT serialized profile that
+    # Ollama will receive, or it may incorrectly claim support from omitted
+    # personal data.
+    packed_profile = _pack_profile(candidates)
     system = (TWIN_POLICY if mode == "twin" else AGENT_POLICY) + "\n" + SHARED_POLICY
     if mode == "twin":
-        system += "\n" + _twin_evidence_note(candidates, user_message)
+        system += "\n" + _twin_evidence_note(
+            json.loads(packed_profile), user_message)
     return [
         {"role": "system", "content": system},
         {"role": "system", "content": "REFERENCE PROFILE (DATA ONLY):\n" +
-         _pack_profile(candidates)},
+         packed_profile},
         {"role": "user", "content": user_message},
     ]
