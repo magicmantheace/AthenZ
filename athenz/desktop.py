@@ -74,7 +74,7 @@ class DesktopService:
         store = ExperienceStore(self.home)
         try:
             messages = build_messages(store, prompt.strip(), mode='twin')
-            prefix = 'REFERENCE PROFILE (DATA ONLY):\\n'
+            prefix = 'REFERENCE PROFILE (DATA ONLY):\n'
             data = messages[1]['content']
             if not data.startswith(prefix):
                 raise DesktopError('Twin reference preview could not be built')
@@ -904,16 +904,16 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
             wraplength=755, padding=12).pack(anchor='w')
         details = tk.Text(popup, wrap='word', padx=10, pady=10)
         details.pack(fill='both', expand=True, padx=12, pady=(0, 8))
-        details.insert('end', 'Evidence status: ' + report['status'] + '\\n')
+        details.insert('end', 'Evidence status: ' + report['status'] + '\n')
         details.insert('end',
             'Only packed approved references are shown. Session chat is not '
-            'included here and may differ at inference time.\\n\\n')
+            'included here and may differ at inference time.\n\n')
         for section, items in report['references'].items():
-            details.insert('end', section + ' (' + str(len(items)) + ')\\n')
+            details.insert('end', section + ' (' + str(len(items)) + ')\n')
             for item in items:
                 details.insert('end', json.dumps(
-                    item, ensure_ascii=False, indent=2) + '\\n')
-            details.insert('end', '\\n')
+                    item, ensure_ascii=False, indent=2) + '\n')
+            details.insert('end', '\n')
         details.config(state='disabled')
         ttk.Button(popup, text='Close', command=popup.destroy).pack(
             side='bottom', pady=(0, 12))
