@@ -26,7 +26,7 @@ class SyntheticChatSmokeError(ValueError):
 
 def check_synthetic_chat(*, model: str, confirmed: bool = False,
                          twin_lifecycle: bool = False) -> dict:
-    """Exercise Twin and Agent via DesktopService with two local replies.
+    """Exercise Twin and Agent via DesktopService, optionally five inferences.
 
     A success is evidence of local request/response and mode-separated
     persistence, NOT a user-Twin fidelity, GPU, performance or training score.
