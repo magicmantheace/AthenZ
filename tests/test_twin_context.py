@@ -323,6 +323,25 @@ class TwinContextTests(unittest.TestCase):
         self.assertEqual(profile(self.store, "Do I prefer thunderstorms?")[
             "approved_relevant_episodes"], [])
 
+    def test_older_topical_episode_survives_generic_word_crowding(self):
+        target = self.store.observe(
+            "Synthetic thunderstorms", "SYNTHETIC_RAIN_TARGET checked forecast",
+            tags=[], source="synthetic")
+        self.store.review_episode(target, "approved")
+        for i in range(12):
+            unrelated = self.store.observe(
+                "Unrelated synthetic ceramics " + str(i),
+                "I prefer pottery in synthetic study",
+                tags=[], source="synthetic")
+            self.store.review_episode(unrelated, "approved")
+        evidence = profile(self.store, "Do I prefer thunderstorms?")
+        self.assertIn("SYNTHETIC_RAIN_TARGET",
+                      json.dumps(evidence["approved_relevant_episodes"]))
+        self.assertNotIn("pottery", json.dumps(evidence))
+        self.assertIn("Approved topical reference data",
+                      build_messages(self.store, "Do I prefer thunderstorms?",
+                                     "twin")[0]["content"])
+
     def test_broad_preference_question_retrieves_approved_preferences(self):
         self.store.propose("preference", "I prefer synthetic granite counters",
                            source="synthetic", approved=True)
