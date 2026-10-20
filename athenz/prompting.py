@@ -275,17 +275,15 @@ def build_messages(store: IdentityStore, user_message: str,
         "approved_decisions": _selected_decisions(store, user_message),
     }
     if hasattr(store, "relevant_episodes"):
-        candidates["approved_relevant_episodes"] = store.relevant_episodes(
-            user_message, limit=5)
+        # Rank episodes by the actual personal subject rather than generic
+        # framing words. Filter BEFORE top-K, or unrelated recent episodes
+        # could crowd an older, genuinely topical approved reference out.
+        episode_query = (" ".join(sorted(_topical_terms(user_message)))
+                         if mode == "twin" else user_message)
+        candidates["approved_relevant_episodes"] = (
+            store.relevant_episodes(episode_query, limit=5)
+            if episode_query else [])
     if mode == "twin":
-        # Do not mistake a generic verb in the prompt ("prefer", "choose")
-        # for topical relevance of an otherwise unrelated approved episode.
-        terms = _topical_terms(user_message)
-        candidates["approved_relevant_episodes"] = [
-            r for r in candidates.get("approved_relevant_episodes", ())
-            if _overlap(terms, r["topic"] + " " + r["detail"] +
-                        " " + " ".join(r.get("tags", ())))
-        ]
         candidates["approved_writing_examples"] = _selected_writing(
             store, user_message)
     elif hasattr(store, "approved_experiences"):
