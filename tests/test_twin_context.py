@@ -302,6 +302,43 @@ class TwinContextTests(unittest.TestCase):
         self.assertNotIn("TWIN EVIDENCE STATUS",
                          build_messages(self.store, "Do my work", "agent")[0]["content"])
 
+    def test_generic_preference_words_do_not_make_unrelated_evidence_topical(self):
+        self.store.propose("preference", "I prefer synthetic granite counters",
+                           source="synthetic", approved=True)
+        self.store.add_decision(
+            "Would I choose synthetic granite for the kitchen?",
+            "Granite", "Granite finish preference", source="synthetic",
+            approved=True)
+        episode_id = self.store.observe(
+            "Synthetic granite purchase", "I prefer synthetic granite",
+            tags=["granite"], source="synthetic")
+        self.store.review_episode(episode_id, "approved")
+        messages = build_messages(self.store, "Do I prefer thunderstorms?", "twin")
+        contents = messages[1]["content"]
+        self.assertNotIn("synthetic granite", contents)
+        self.assertIn("No topically matching approved owner fact",
+                      messages[0]["content"])
+        self.assertEqual(profile(self.store, "Do I prefer thunderstorms?")[
+            "approved_decisions"], [])
+        self.assertEqual(profile(self.store, "Do I prefer thunderstorms?")[
+            "approved_relevant_episodes"], [])
+
+    def test_broad_preference_question_retrieves_approved_preferences(self):
+        self.store.propose("preference", "I prefer synthetic granite counters",
+                           source="synthetic", approved=True)
+        messages = build_messages(self.store, "What are my preferences?", "twin")
+        self.assertIn("synthetic granite counters", messages[1]["content"])
+        self.assertIn("Approved topical reference data",
+                      messages[0]["content"])
+
+    def test_specific_question_does_not_confuse_different_favorites(self):
+        self.store.propose("preference", "My favorite synthetic color is copper",
+                           source="synthetic", approved=True)
+        msgs = build_messages(self.store, "What is my favorite animal?", "twin")
+        self.assertNotIn("synthetic color is copper", msgs[1]["content"])
+        self.assertIn("No topically matching approved owner fact",
+                      msgs[0]["content"])
+
     def test_input_without_evidence_abstains_from_personal_claims(self):
         p = profile(self.store, "What would my position be on this?")
         self.assertEqual(p["approved_identity"], [])
