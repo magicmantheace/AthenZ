@@ -1,5 +1,11 @@
 # AthenZ
 
+**Current owner priority (October 20, 2026): a working, independently usable
+personal Twin on Windows.** Developmental AI, Synveil, and unrelated Agent
+expansion are deferred until real owner evaluation demonstrates a useful Twin.
+See [the revised roadmap](ROADMAP.md). No real-owner similarity claim has been
+established by the synthetic test suite.
+
 Private, local-first digital twin and coding assistant. **Twin Mode** simulates
 style and choices based on approved examples; **Agent Mode** provides independent
 assistance without claiming to be the owner. Neither mode changes model weights
