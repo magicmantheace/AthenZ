@@ -302,6 +302,30 @@ class TwinContextTests(unittest.TestCase):
         self.assertNotIn("TWIN EVIDENCE STATUS",
                          build_messages(self.store, "Do my work", "agent")[0]["content"])
 
+    def test_oversized_relevant_memory_does_not_claim_available_evidence(self):
+        self.store.propose(
+            "identity", "SYNTHETIC_ULTRA_FICTIONAL quantumzebra " + ("x" * 8000),
+            source="synthetic", approved=True)
+        messages = build_messages(
+            self.store, "What is my quantumzebra identity?", "twin")
+        self.assertNotIn("SYNTHETIC_ULTRA_FICTIONAL",
+                         messages[1]["content"])
+        self.assertIn("No topically matching approved owner fact",
+                      messages[0]["content"])
+        self.assertEqual(
+            json.loads(messages[1]["content"].split("\n", 1)[1])["approved_identity"],
+            [])
+
+    def test_topically_relevant_packed_memory_counts_as_available(self):
+        self.store.propose(
+            "identity", "SYNTHETIC_OWNER researched quantumzebra mapping",
+            source="synthetic", approved=True)
+        messages = build_messages(
+            self.store, "What is my quantumzebra research?", "twin")
+        self.assertIn("SYNTHETIC_OWNER", messages[1]["content"])
+        self.assertIn("Approved topical reference data",
+                      messages[0]["content"])
+
     def test_generic_preference_words_do_not_make_unrelated_evidence_topical(self):
         self.store.propose("preference", "I prefer synthetic granite counters",
                            source="synthetic", approved=True)
