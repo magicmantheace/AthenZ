@@ -18,6 +18,14 @@ feedback, episodic memory and the review-gated foreground controller are
 implemented. There is no unattended daemon, automatic cloud publishing, automatic
 model promotion, or verified GPU fine-tuning on the target Windows/WSL2 system.
 
+**Twin-first desktop workflow (unvalidated on owner hardware):** the Chat
+tab now defaults to Twin Mode, with Agent remaining selectable. Before
+sending, type a question and select **Preview Twin evidence** to inspect
+the approved, packed references and their provenance without inference or
+saving the draft. Topical matches are prompts for review, not proof of an
+owner-specific fact; excluded/oversized evidence does not count as available.
+See [desktop details](docs/DESKTOP.md).
+
 The current Twin-first relevance work includes
 [approved personality, decision and writing-style retrieval](docs/TWIN_CONTEXT.md).
 This is deterministic prompt preparation, not evidence of measured owner
