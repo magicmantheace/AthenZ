@@ -297,6 +297,8 @@ class TwinContextTests(unittest.TestCase):
         self.assertNotIn("SYNTHETIC_OWNER", messages[1]["content"])
         self.assertIn("No topically matching approved owner fact",
                       messages[0]["content"])
+        self.assertIn("Ordinary nonpersonal conversation can proceed normally",
+                      build_messages(self.store, "Tell me a joke", "twin")[0]["content"])
         self.assertNotIn("TWIN EVIDENCE STATUS",
                          build_messages(self.store, "Do my work", "agent")[0]["content"])
 
