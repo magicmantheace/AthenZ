@@ -68,6 +68,22 @@ def _query_terms(query: str) -> set[str]:
     return terms
 
 
+# These words indicate the *kind* of owner question, but not its topic.
+# E.g. "Do I prefer apples?" must not match a memory only because it says
+# "I prefer tea". They are retained for style retrieval, not factual support.
+_PERSONAL_FRAMING = frozenset((
+    "favorite favourite prefer prefers preferred preference preferences "
+    "like likes liked liking choose chooses choosing choice choices decided "
+    "decision decisions think thinks thought thoughts believe believes "
+    "opinion opinions feel feels feeling feelings want wants usually typical "
+    "typically personal personally mine owner"
+).split())
+
+
+def _topical_terms(query: str) -> set[str]:
+    return _query_terms(query) - _PERSONAL_FRAMING
+
+
 def _overlap(query: set[str], text: str) -> int:
     return len(query.intersection(tokens(text))) if query else 0
 
@@ -89,13 +105,14 @@ def _ranked_rows(heap: list) -> list[dict]:
     return [item[-1] for item in sorted(heap, reverse=True)]
 
 
-def _selected_identity(store: IdentityStore, query: str) -> list[dict]:
+def _selected_identity(store: IdentityStore, query: str, *,
+                       mode: str = "agent") -> list[dict]:
     """Scan every approved identity record with bounded, deterministic top-K.
 
     Maintain a general style/value/preference backbone plus topical evidence,
     instead of silently restricting retrieval to the newest 200 approvals.
     """
-    terms = _query_terms(query)
+    terms = _topical_terms(query)
     direct_bio = bool(re.search(
         r"\b(who am i|describe me|about me|my background|my profile)\b",
         query.lower()))
@@ -108,7 +125,11 @@ def _selected_identity(store: IdentityStore, query: str) -> list[dict]:
         item = {"id": r["id"], "kind": r["kind"], "text": r["text"],
                 "source": r["source"], "confidence": r["confidence"]}
         rank = (score, r["confidence"], r["id"])
-        if r["kind"] in {"style", "value", "preference"}:
+        if (r["kind"] in {"style", "value"} or
+                (r["kind"] == "preference" and
+                 (mode == "agent" or score or direct_bio))):
+            # A generic Twin question should not drag in five unrelated
+            # approved preferences and invite invented owner-specific claims.
             _keep_best(backbone, rank, item, 5)
         if score or (direct_bio and r["kind"] == "identity"):
             _keep_best(topical, rank, item, 20)
@@ -122,7 +143,7 @@ def _selected_identity(store: IdentityStore, query: str) -> list[dict]:
 
 def _selected_decisions(store: IdentityStore, query: str) -> list[dict]:
     """Scan all approved training decisions, without ever reading held-out gold."""
-    terms = tokens(query)
+    terms = _topical_terms(query)
     best = []
     for r in store.db.execute(
         "SELECT id, scenario, choice, rationale, exception FROM decisions "
@@ -202,7 +223,7 @@ def _twin_evidence_note(candidates: dict[str, list[dict]], query: str) -> str:
     evidence entails a particular choice or autobiographical claim.
     Writing samples and generic style context must not be promoted to facts.
     """
-    terms = _query_terms(query)
+    terms = _topical_terms(query)
     broad_profile_question = bool(re.search(
         r"\b(who am i|describe me|about me|my background|my profile)\b",
         query.lower()))
@@ -243,13 +264,21 @@ def build_messages(store: IdentityStore, user_message: str,
     # The prompt remains bounded by the top-K heaps and JSON packing, and
     # held-out decisions are never even fetched from the evaluation splits.
     candidates: dict[str, list[dict]] = {
-        "approved_identity": _selected_identity(store, user_message),
+        "approved_identity": _selected_identity(store, user_message, mode=mode),
         "approved_decisions": _selected_decisions(store, user_message),
     }
     if hasattr(store, "relevant_episodes"):
         candidates["approved_relevant_episodes"] = store.relevant_episodes(
             user_message, limit=5)
     if mode == "twin":
+        # Do not mistake a generic verb in the prompt ("prefer", "choose")
+        # for topical relevance of an otherwise unrelated approved episode.
+        terms = _topical_terms(user_message)
+        candidates["approved_relevant_episodes"] = [
+            r for r in candidates.get("approved_relevant_episodes", ())
+            if _overlap(terms, r["topic"] + " " + r["detail"] +
+                        " " + " ".join(r.get("tags", ())))
+        ]
         candidates["approved_writing_examples"] = _selected_writing(
             store, user_message)
     elif hasattr(store, "approved_experiences"):
