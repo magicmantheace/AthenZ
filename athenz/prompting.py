@@ -218,9 +218,12 @@ def _twin_evidence_note(candidates: dict[str, list[dict]], query: str) -> str:
         return (
             "TWIN EVIDENCE STATUS: No topically matching approved owner fact, "
             "preference, decision or episode was retrieved. Any writing or "
-            "general style references inform wording only. Explicitly state "
-            "that the owner's factual answer or choice is unknown; do not "
-            "fill in the gap from stereotypes or past AI-generated replies."
+            "general style references inform wording only. When asked for "
+            "the owner's real personal fact or likely choice, say the evidence "
+            "is insufficient rather than inventing an answer. Ordinary "
+            "nonpersonal conversation can proceed normally. Prior chat may "
+            "be recalled as an explicitly unverified statement, never as "
+            "proof of the owner's biography."
         )
     return (
         "TWIN EVIDENCE STATUS: Approved topical reference data is available, "
