@@ -918,7 +918,7 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
         ttk.Button(popup, text='Close', command=popup.destroy).pack(
             side='bottom', pady=(0, 12))
 
-    ttk.Button(send_row, text='Preview Twin evidence',
+    ttk.Button(chat_controls, text='Preview Twin evidence',
                command=preview_twin_evidence).pack(side='left', padx=(8, 0))
 
     send_button.config(command=send)
