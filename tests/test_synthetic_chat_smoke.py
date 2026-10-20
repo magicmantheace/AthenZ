@@ -188,6 +188,16 @@ class SyntheticChatSmokeTests(unittest.TestCase):
             with self.assertRaises(SyntheticChatSmokeError):
                 main(["--model", "synthetic:1"])
 
+    def test_cli_extended_twin_lifecycle_reports_only_sanitized_flags(self):
+        with mock.patch("athenz.desktop.OllamaClient", FakeModel), \
+             mock.patch("builtins.print") as printer:
+            main(["--model", "synthetic:1", "--twin-lifecycle", "--confirm"])
+        report = json.loads(printer.call_args.args[0])
+        self.assertEqual(report["status"], "synthetic-twin-lifecycle-observed")
+        self.assertEqual(report["inference_calls_attempted"], 5)
+        self.assertTrue(report["temporary_profile_removed"])
+        self.assertNotIn("fictional software projects", json.dumps(report))
+
     def test_cli_exits_nonzero_on_unavailable_model(self):
         with mock.patch("athenz.synthetic_chat_smoke.check_synthetic_chat",
                         return_value={"status": "local-smoke-unavailable"}), \
