@@ -90,7 +90,7 @@ class DesktopService:
                 'references': references,
                 'model_called': False,
                 'unreviewed_chat_included': False,
-                'training_data_included': False,
+                'heldout_evaluation_examples_included': False,
             }
         finally:
             store.close()
