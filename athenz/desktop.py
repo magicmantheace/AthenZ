@@ -487,7 +487,7 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
     chat_controls = ttk.Frame(chat_tab)
     chat_controls.pack(fill='x')
     ttk.Label(chat_controls, text='Mode').pack(side='left', padx=(0, 6))
-    mode = tk.StringVar(value='agent')
+    mode = tk.StringVar(value='twin')
     modes = ttk.Combobox(chat_controls, values=('agent', 'twin'), width=9,
                          state='readonly', textvariable=mode)
     modes.pack(side='left', padx=(0, 12))
@@ -1294,6 +1294,9 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
         if len(book.tabs()) != 4:
             window.destroy()
             raise DesktopError('GUI smoke did not create the expected tabs')
+        if mode.get() != 'twin':
+            window.destroy()
+            raise DesktopError('GUI smoke did not default to the Twin conversation mode')
         if 'Getting started with AthenZ' not in setup_text.get('1.0', 'end'):
             window.destroy()
             raise DesktopError('GUI smoke did not render offline setup guidance')
