@@ -115,7 +115,7 @@ independent, explicitly approved local evaluation dataset.
   fail to obey uncertainty instructions. Synthetic unit tests check data
   inclusion and instruction assembly, not actual hallucination frequency,
   writing-style match or decision accuracy.
-- Run `python -m unittest tests.test_twin_context tests.test_chat_continuity -v`
+- Run `python -m unittest tests.test_twin_context tests.test_chat_continuity tests.test_twin_first_lifecycle -v`
   and the full `python -m unittest discover -s tests -v` on a checked-out
   copy of this branch. Windows inference and blinded real-owner comparison
   remain unverified until performed and recorded.
