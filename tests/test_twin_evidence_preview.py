@@ -44,7 +44,7 @@ class TwinEvidencePreviewTests(unittest.TestCase):
         self.assertEqual(report["status"], "approved-topical-evidence-candidate")
         self.assertFalse(report["model_called"])
         self.assertFalse(report["unreviewed_chat_included"])
-        self.assertFalse(report["training_data_included"])
+        self.assertFalse(report["heldout_evaluation_examples_included"])
         payload = json.dumps(report["references"])
         self.assertIn("I prefer synthetic tangerine soup", payload)
         for forbidden in (
