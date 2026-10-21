@@ -258,6 +258,179 @@ class TwinContextTests(unittest.TestCase):
         self.assertIn("synthetic reviewable analysis 269", str(selected))
         self.assertNotIn("synthetic reviewable analysis 0", str(selected))
 
+    def test_childhood_synonym_retrieves_only_approved_history(self):
+        approved = self.store.propose(
+            "identity", "SYNTHETIC_OWNER was raised in a fictional valley",
+            source="synthetic", approved=True)
+        self.store.propose(
+            "identity", "PENDING_OWNER was raised on a secret moon",
+            source="synthetic", approved=False)
+        question = "Where did I grow up?"
+        result = json.dumps(profile(self.store, question))
+        self.assertIn("SYNTHETIC_OWNER", result)
+        self.assertNotIn("PENDING_OWNER", result)
+        self.assertIn("Approved topical reference data",
+                      build_messages(self.store, question, "twin")[0]["content"])
+        self.store.status(approved, "rejected")
+        revoked = json.dumps(profile(self.store, question))
+        self.assertNotIn("SYNTHETIC_OWNER", revoked)
+        self.assertIn("No topically matching approved owner fact",
+                      build_messages(self.store, question, "twin")[0]["content"])
+
+    def test_growing_up_and_hometown_phrasings_retrieve_approved_origin(self):
+        self.store.propose(
+            "identity", "SYNTHETIC_ORIGIN was raised in a fictional valley",
+            source="synthetic", approved=True)
+        for question in (
+            "Where did I grow up?",
+            "Where did I grew up?",
+            "Where have I grown up?",
+            "Tell me about my childhood",
+            "What is my hometown?",
+        ):
+            with self.subTest(question=question):
+                result = profile(self.store, question)
+                self.assertIn("SYNTHETIC_ORIGIN", json.dumps(result))
+                self.assertIn(
+                    "Approved topical reference data",
+                    build_messages(self.store, question, "twin")[0]["content"])
+
+    def test_favorite_colour_spelling_retrieves_reviewed_preference(self):
+        self.store.propose(
+            "preference", "My favourite colour is ultraviolet",
+            source="synthetic", approved=True)
+        result = profile(self.store, "What is my favorite color?")
+        self.assertIn("ultraviolet", json.dumps(result))
+        self.assertIn("Approved topical reference data",
+                      build_messages(self.store, "What is my favorite color?",
+                                     "twin")[0]["content"])
+
+    def test_style_does_not_count_as_supported_owner_biography(self):
+        self.store.propose("style", "Use crisp short paragraphs",
+                           source="synthetic", approved=True)
+        self.store.propose("identity", "SYNTHETIC_OWNER studies astronomy",
+                           source="synthetic", approved=True)
+        messages = build_messages(self.store, "What is my favorite animal?", "twin")
+        self.assertIn("Use crisp short paragraphs", messages[1]["content"])
+        self.assertNotIn("SYNTHETIC_OWNER", messages[1]["content"])
+        self.assertIn("No topically matching approved owner fact",
+                      messages[0]["content"])
+        self.assertIn("Ordinary nonpersonal conversation can proceed normally",
+                      build_messages(self.store, "Tell me a joke", "twin")[0]["content"])
+        self.assertNotIn("TWIN EVIDENCE STATUS",
+                         build_messages(self.store, "Do my work", "agent")[0]["content"])
+
+    def test_oversized_relevant_memory_does_not_claim_available_evidence(self):
+        self.store.propose(
+            "identity", "SYNTHETIC_ULTRA_FICTIONAL quantumzebra " + ("x" * 8000),
+            source="synthetic", approved=True)
+        messages = build_messages(
+            self.store, "What is my quantumzebra identity?", "twin")
+        self.assertNotIn("SYNTHETIC_ULTRA_FICTIONAL",
+                         messages[1]["content"])
+        self.assertIn("No topically matching approved owner fact",
+                      messages[0]["content"])
+        self.assertEqual(
+            json.loads(messages[1]["content"].split("\n", 1)[1])["approved_identity"],
+            [])
+
+    def test_topically_relevant_packed_memory_counts_as_available(self):
+        self.store.propose(
+            "identity", "SYNTHETIC_OWNER researched quantumzebra mapping",
+            source="synthetic", approved=True)
+        messages = build_messages(
+            self.store, "What is my quantumzebra research?", "twin")
+        self.assertIn("SYNTHETIC_OWNER", messages[1]["content"])
+        self.assertIn("Approved topical reference data",
+                      messages[0]["content"])
+
+    def test_generic_preference_words_do_not_make_unrelated_evidence_topical(self):
+        self.store.propose("preference", "I prefer synthetic granite counters",
+                           source="synthetic", approved=True)
+        self.store.add_decision(
+            "Would I choose synthetic granite for the kitchen?",
+            "Granite", "Granite finish preference", source="synthetic",
+            approved=True)
+        episode_id = self.store.observe(
+            "Synthetic granite purchase", "I prefer synthetic granite",
+            tags=["granite"], source="synthetic")
+        self.store.review_episode(episode_id, "approved")
+        messages = build_messages(self.store, "Do I prefer thunderstorms?", "twin")
+        contents = messages[1]["content"]
+        self.assertNotIn("synthetic granite", contents)
+        self.assertIn("No topically matching approved owner fact",
+                      messages[0]["content"])
+        self.assertEqual(profile(self.store, "Do I prefer thunderstorms?")[
+            "approved_decisions"], [])
+        self.assertEqual(profile(self.store, "Do I prefer thunderstorms?")[
+            "approved_relevant_episodes"], [])
+
+    def test_older_topical_episode_survives_generic_word_crowding(self):
+        target = self.store.observe(
+            "Synthetic thunderstorms", "SYNTHETIC_RAIN_TARGET checked forecast",
+            tags=[], source="synthetic")
+        self.store.review_episode(target, "approved")
+        for i in range(12):
+            unrelated = self.store.observe(
+                "Unrelated synthetic ceramics " + str(i),
+                "I prefer pottery in synthetic study",
+                tags=[], source="synthetic")
+            self.store.review_episode(unrelated, "approved")
+        evidence = profile(self.store, "Do I prefer thunderstorms?")
+        self.assertIn("SYNTHETIC_RAIN_TARGET",
+                      json.dumps(evidence["approved_relevant_episodes"]))
+        self.assertNotIn("pottery", json.dumps(evidence))
+        self.assertIn("Approved topical reference data",
+                      build_messages(self.store, "Do I prefer thunderstorms?",
+                                     "twin")[0]["content"])
+
+    def test_question_scaffolding_does_not_select_unrelated_choices(self):
+        self.store.add_decision(
+            "Which synthetic fence coating would I choose?",
+            "Blue coating", "A synthetic fence design",
+            source="synthetic", approved=True)
+        self.store.propose(
+            "preference", "Which synthetic fence coating do I prefer?",
+            source="synthetic", approved=True)
+        result = build_messages(
+            self.store, "Which kitchen tool do I prefer?", "twin")
+        self.assertEqual(
+            json.loads(result[1]["content"].split("\n", 1)[1])[
+                "approved_decisions"], [])
+        self.assertNotIn("synthetic fence coating", result[1]["content"])
+        self.assertIn("No topically matching approved owner fact",
+                      result[0]["content"])
+
+    def test_twin_specific_filter_does_not_change_agent_retrieval(self):
+        self.store.add_decision(
+            "Which synthetic fixture should I choose?",
+            "Fixture A", "Older independent Agent retrieval behavior",
+            source="synthetic", approved=True)
+        question = "Which kitchen appliance should I choose?"
+        twin = profile(self.store, question, "twin")
+        agent = profile(self.store, question, "agent")
+        self.assertEqual(twin["approved_decisions"], [])
+        self.assertIn("Fixture A", json.dumps(agent["approved_decisions"]))
+        self.assertNotIn(
+            "TWIN EVIDENCE STATUS",
+            build_messages(self.store, question, "agent")[0]["content"])
+
+    def test_broad_preference_question_retrieves_approved_preferences(self):
+        self.store.propose("preference", "I prefer synthetic granite counters",
+                           source="synthetic", approved=True)
+        messages = build_messages(self.store, "What are my preferences?", "twin")
+        self.assertIn("synthetic granite counters", messages[1]["content"])
+        self.assertIn("Approved topical reference data",
+                      messages[0]["content"])
+
+    def test_specific_question_does_not_confuse_different_favorites(self):
+        self.store.propose("preference", "My favorite synthetic color is copper",
+                           source="synthetic", approved=True)
+        msgs = build_messages(self.store, "What is my favorite animal?", "twin")
+        self.assertNotIn("synthetic color is copper", msgs[1]["content"])
+        self.assertIn("No topically matching approved owner fact",
+                      msgs[0]["content"])
+
     def test_input_without_evidence_abstains_from_personal_claims(self):
         p = profile(self.store, "What would my position be on this?")
         self.assertEqual(p["approved_identity"], [])

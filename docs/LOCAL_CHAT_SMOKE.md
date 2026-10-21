@@ -54,3 +54,41 @@ For a separate single-synthetic-prompt transport check, use
 \`athenz-inference-check --model <installed-tag> --confirm\`. For GPU
 inventory, CUDA and real private-owner fidelity tests, use their separate
 consent-gated protocols. No owner's real private test data belongs in CI.
+
+
+## Optional five-inference Twin memory lifecycle
+
+To test more of the **real local Ollama** conversation and owner-review pipeline
+without opening a private profile, use:
+
+```sh
+athenz-chat-smoke --model qwen3.5:2b --twin-lifecycle --confirm
+```
+
+This is **opt-in** and makes five local model requests, rather than the two
+used by the default smoke. It begins with the ordinary disposable Twin and
+Agent chat, then:
+
+1. Opens the same Twin session through a new desktop-service object.
+2. Stages a fictional preference correction; confirms that neither the old
+   nor the pending replacement appears in the **approved profile context**.
+3. Generates another Twin turn while the correction is pending.
+4. Reviews/approves that correction; checks the new approved profile context
+   and generates another Twin turn.
+5. Revokes the fictional preference, checks the approved context again,
+   generates a final Twin turn, and verifies that all four Twin chat turns
+   and the separate Agent turn persisted across fresh service objects.
+
+On successful completion the fixed status code is
+`synthetic-twin-lifecycle-observed`. The sanitized report also exposes
+which lifecycle checks succeeded. A failure returns a nonzero exit code.
+All content, prompt text, model output, local profile path, and installed
+model tag remain excluded from the report. The temporary profile is never
+the ordinary owner profile. No model is installed, downloaded or fine-tuned.
+
+**Important limitations:** The test verifies that pending and revoked text
+is absent from **approved memory references**, not that an LLM cannot repeat
+unverified earlier chat or infer a formerly approved fact. The model's reply
+content is not semantically scored. It is neither proof of correct responses,
+owner resemblance, predictive accuracy, secure erasure, GPU use nor performance.
+A Windows/RTX 3060 run must occur on the actual computer to validate hardware.

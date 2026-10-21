@@ -11,6 +11,7 @@ import json
 import re
 
 from .experience import tokens
+from .prompting import _topical_terms
 from .store import IdentityStore
 
 _MAX_OLDER = 4
@@ -49,7 +50,10 @@ def same_session_user_excerpts(store: IdentityStore, *, session: str,
             or mode not in ("twin", "agent") or not isinstance(prompt, str)
             or len(prompt) > _MAX_INPUT_QUERY_CHARS):
         raise ValueError("Invalid same-session continuity request")
-    query = tokens(prompt)
+    # A Twin asking "Which tool do I prefer?" should not retrieve old
+    # messages merely because both contain "which" or "prefer".
+    # Agent-mode continuity retains its existing broad word selection.
+    query = _topical_terms(prompt) if mode == "twin" else tokens(prompt)
     if not query:
         return None
     recent_ids = {

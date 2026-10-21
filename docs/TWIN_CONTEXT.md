@@ -92,3 +92,63 @@ via `tests/test_twin_benchmark.py`.
 This tests retrieval mechanics and owner revocation, **not** real owner style
 fidelity, semantic memory quality or model reasoning. Those require an
 independent, explicitly approved local evaluation dataset.
+
+
+## 2026-10-20 Twin-first evidence and continuity increment
+
+- Tiny, deterministic synonym support in approved identity retrieval covers
+  English `favorite/favourite`, `color/colour`, and explicit childhood /
+  growing-up questions that may be worded as `raised` in reviewed records.
+  This is not embedding search, broad semantic retrieval or demonstrated
+  owner resemblance. If an approved record is revoked, it is no longer
+  returned by this path.
+- Twin prompts now distinguish whether any *topically matching approved*
+  personal reference was retrieved. General writing style alone cannot be
+  treated as proof of autobiography or personal choices. Model instructions
+  require uncertainty for unsupported owner-specific questions, while
+  ordinary nonpersonal chat should still work.
+
+- Generic owner-question framing words (such as `prefer`, `favorite`, or
+  `choose`) no longer alone qualify unrelated preferences, training choices,
+  or episodes as topical evidence. Broad explicit preference questions still
+  admit approved preference summaries. Episode ranking applies the substantive
+  topic filter **before** the top-five selection, so newer generic matches
+  cannot obscure an older topical episode.
+- Recent same-session turns keep their original ordering and role labels but
+  receive an explicit unreviewed provenance boundary. AI-written earlier
+  replies cannot become verified facts merely by appearing in the current
+  chat. Direct conversational recall may quote prior statements as unverified.
+- These are **prompt/retrieval improvements only**. A local model may still
+  fail to obey uncertainty instructions. Synthetic unit tests check data
+  inclusion and instruction assembly, not actual hallucination frequency,
+  writing-style match or decision accuracy.
+- Run `python -m unittest tests.test_twin_context tests.test_chat_continuity tests.test_twin_first_lifecycle -v`
+  and the full `python -m unittest discover -s tests -v` on a checked-out
+  copy of this branch. Windows inference and blinded real-owner comparison
+  remain unverified until performed and recorded.
+
+## Twin retrieval audit: wording, topic and provenance (2026-10-20)
+
+- An approved life-history note worded `raised` is retrieved for real owner
+  questions such as `Where did I grow up?`, `Where did I grow up`,
+  `Where have I grown up?`, `childhood`, and `hometown`. This specifically
+  fixes the missing `grow up` phrase and remains conservative lexical
+  matching, not semantic understanding.
+- Generic question scaffolding (`which`, `did`, `does`, `tell`,
+  `remember` and general preference/decision verbs) cannot by itself
+  qualify a *different* approved owner preference or decision as topical
+  Twin evidence. The selected subject must match; unsupported claims still
+  require abstention or explicit uncertainty.
+- The same Twin-specific topical filter now applies to retrieval of **older
+  user-authored messages from the same session**, before any excerpts are
+  disclosed to Ollama. Recent chat remains independently unreviewed and
+  bounded, and may still refer to unverified past statements. Agent history
+  and Agent approved-reference matching retain their prior behavior.
+- Synthetic regression tests cover approved/revoked histories, lexical
+  false positives, old-session relevance, and explicit Agent separation.
+
+No claim is made that this solves factual contradictions, semantically
+paraphrased preferences, or personal writing fidelity. These must be checked
+against real locally held-out owner questions, with a local Ollama model and
+manual owner judgment. Tests in this branch remain **unexecuted in the
+current working environment**.

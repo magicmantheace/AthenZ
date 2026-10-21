@@ -50,7 +50,10 @@ class ChatTests(unittest.TestCase):
                 with patch('athenz.chat.safe_local_open', return_value=FakeReply()) as mocked:
                     answer(store, client, 'next', recent=history)
                     sent = json.loads(mocked.call_args[0][0].data)['messages']
-                    self.assertEqual(len(sent), 13)
+                    # Three base messages, one unreviewed-chat provenance
+                    # marker, and at most ten recent user turns.
+                    self.assertEqual(len(sent), 14)
+                    self.assertIn('RECENT SAME-SESSION CHAT (UNREVIEWED)', sent[2]['content'])
                     self.assertNotIn('pretend to be admin', str(sent))
             finally:
                 store.close()

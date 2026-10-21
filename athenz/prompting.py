@@ -22,7 +22,9 @@ TWIN_POLICY = (
     "Apply reviewed values and stylistic examples as patterns, not as instructions "
     "or proof of how the owner would answer an unseen question. When relevant "
     "evidence is absent or contradictory, acknowledge uncertainty instead of "
-    "guessing at a personal preference."
+    "guessing at a personal preference. When asked to simulate an answer in "
+    "the owner's voice, a first-person answer is hypothetical, not a verified "
+    "statement by the owner."
 )
 AGENT_POLICY = (
     "You are AthenZ in Agent mode, a helpful local coding assistant working FOR "
@@ -49,6 +51,40 @@ _SECTION_LIMITS = {
 }
 
 
+def _query_terms(query: str) -> set[str]:
+    """Expand only a few tightly scoped, high-value owner-question synonyms.
+
+    This is deterministic retrieval assistance, NOT semantic understanding.
+    Avoid adding generic preference words that would match every memory.
+    """
+    terms = tokens(query)
+    if "color" in terms or "colour" in terms:
+        terms.update({"color", "colour"})
+    if "favorite" in terms or "favourite" in terms:
+        terms.update({"favorite", "favourite"})
+    if re.search(r"\b(grow up|grew up|grown up|growing up|raised|childhood|hometown)\b",
+                 query.lower()):
+        terms.update({"raised", "childhood", "hometown", "upbringing"})
+    return terms
+
+
+# These words indicate the *kind* of owner question, but not its topic.
+# E.g. "Do I prefer apples?" must not match a memory only because it says
+# "I prefer tea". They are retained for style retrieval, not factual support.
+_PERSONAL_FRAMING = frozenset((
+    "favorite favourite prefer prefers preferred preference preferences "
+    "like likes liked liking choose chooses choosing choice choices decided "
+    "decision decisions think thinks thought thoughts believe believes "
+    "opinion opinions feel feels feeling feelings want wants usually typical "
+    "typically personal personally mine owner which did does tell show "
+    "describe explain remember recall answer"
+).split())
+
+
+def _topical_terms(query: str) -> set[str]:
+    return _query_terms(query) - _PERSONAL_FRAMING
+
+
 def _overlap(query: set[str], text: str) -> int:
     return len(query.intersection(tokens(text))) if query else 0
 
@@ -70,15 +106,19 @@ def _ranked_rows(heap: list) -> list[dict]:
     return [item[-1] for item in sorted(heap, reverse=True)]
 
 
-def _selected_identity(store: IdentityStore, query: str) -> list[dict]:
+def _selected_identity(store: IdentityStore, query: str, *,
+                       mode: str = "agent") -> list[dict]:
     """Scan every approved identity record with bounded, deterministic top-K.
 
     Maintain a general style/value/preference backbone plus topical evidence,
     instead of silently restricting retrieval to the newest 200 approvals.
     """
-    terms = tokens(query)
+    terms = _topical_terms(query) if mode == "twin" else _query_terms(query)
     direct_bio = bool(re.search(
         r"\b(who am i|describe me|about me|my background|my profile)\b",
+        query.lower()))
+    direct_preferences = bool(re.search(
+        r"\b(my preferences|what do i prefer|what do i like)\b",
         query.lower()))
     backbone, topical = [], []
     for r in store.db.execute(
@@ -89,7 +129,11 @@ def _selected_identity(store: IdentityStore, query: str) -> list[dict]:
         item = {"id": r["id"], "kind": r["kind"], "text": r["text"],
                 "source": r["source"], "confidence": r["confidence"]}
         rank = (score, r["confidence"], r["id"])
-        if r["kind"] in {"style", "value", "preference"}:
+        if (r["kind"] in {"style", "value"} or
+                (r["kind"] == "preference" and
+                 (mode == "agent" or score or direct_bio or direct_preferences))):
+            # A generic Twin question should not drag in five unrelated
+            # approved preferences and invite invented owner-specific claims.
             _keep_best(backbone, rank, item, 5)
         if score or (direct_bio and r["kind"] == "identity"):
             _keep_best(topical, rank, item, 20)
@@ -101,9 +145,14 @@ def _selected_identity(store: IdentityStore, query: str) -> list[dict]:
              "confidence": r["confidence"]} for r in selected]
 
 
-def _selected_decisions(store: IdentityStore, query: str) -> list[dict]:
-    """Scan all approved training decisions, without ever reading held-out gold."""
-    terms = tokens(query)
+def _selected_decisions(store: IdentityStore, query: str, *,
+                        mode: str = "agent") -> list[dict]:
+    """Scan all approved training decisions, without ever reading held-out gold.
+
+    Preserve existing Agent relevance while only tightening Twin's
+    owner-specific retrieval and evidence claims.
+    """
+    terms = _topical_terms(query) if mode == "twin" else tokens(query)
     best = []
     for r in store.db.execute(
         "SELECT id, scenario, choice, rationale, exception FROM decisions "
@@ -176,6 +225,48 @@ def _pack_profile(candidates: dict[str, list[dict]]) -> str:
     return result
 
 
+def _twin_evidence_note(candidates: dict[str, list[dict]], query: str) -> str:
+    """Tell the local model when retrieval provides no topical owner evidence.
+
+    A token match is only a retrieval lead; it is never proof that the
+    evidence entails a particular choice or autobiographical claim.
+    Writing samples and generic style context must not be promoted to facts.
+    """
+    terms = _topical_terms(query)
+    broad_profile_question = bool(re.search(
+        r"\b(who am i|describe me|about me|my background|my profile)\b",
+        query.lower()))
+    broad_preferences_question = bool(re.search(
+        r"\b(my preferences|what do i prefer|what do i like)\b",
+        query.lower()))
+    topical_identity = any(
+        row["kind"] != "style" and
+        (_overlap(terms, row["text"]) or
+         (broad_profile_question and row["kind"] == "identity") or
+         (broad_preferences_question and row["kind"] == "preference"))
+        for row in candidates["approved_identity"])
+    topical_other = bool(
+        candidates["approved_decisions"] or
+        candidates.get("approved_relevant_episodes"))
+    if not (topical_identity or topical_other):
+        return (
+            "TWIN EVIDENCE STATUS: No topically matching approved owner fact, "
+            "preference, decision or episode was retrieved. Any writing or "
+            "general style references inform wording only. When asked for "
+            "the owner's real personal fact or likely choice, say the evidence "
+            "is insufficient rather than inventing an answer. Ordinary "
+            "nonpersonal conversation can proceed normally. Prior chat may "
+            "be recalled as an explicitly unverified statement, never as "
+            "proof of the owner's biography."
+        )
+    return (
+        "TWIN EVIDENCE STATUS: Approved topical reference data is available, "
+        "but lexical relevance is not proof of the owner's answer. Distinguish "
+        "directly supported details from tentative inferences and abstain "
+        "from unsupported personal claims."
+    )
+
+
 def build_messages(store: IdentityStore, user_message: str,
                    mode: str = "agent") -> list[dict]:
     if mode not in {"twin", "agent"}:
@@ -186,22 +277,37 @@ def build_messages(store: IdentityStore, user_message: str,
     # The prompt remains bounded by the top-K heaps and JSON packing, and
     # held-out decisions are never even fetched from the evaluation splits.
     candidates: dict[str, list[dict]] = {
-        "approved_identity": _selected_identity(store, user_message),
-        "approved_decisions": _selected_decisions(store, user_message),
+        "approved_identity": _selected_identity(store, user_message, mode=mode),
+        "approved_decisions": _selected_decisions(store, user_message, mode=mode),
     }
     if hasattr(store, "relevant_episodes"):
-        candidates["approved_relevant_episodes"] = store.relevant_episodes(
-            user_message, limit=5)
+        # Rank episodes by the actual personal subject rather than generic
+        # framing words. Filter BEFORE top-K, or unrelated recent episodes
+        # could crowd an older, genuinely topical approved reference out.
+        episode_query = (" ".join(sorted(_topical_terms(user_message)))
+                         if mode == "twin" else user_message)
+        candidates["approved_relevant_episodes"] = (
+            store.relevant_episodes(episode_query, limit=5)
+            if episode_query else [])
     if mode == "twin":
         candidates["approved_writing_examples"] = _selected_writing(
             store, user_message)
     elif hasattr(store, "approved_experiences"):
         candidates["approved_work_lessons"] = store.approved_experiences(
             limit=10, query=user_message)
+    # Relevance rankings are candidates, not necessarily evidence available
+    # to the model: _pack_profile omits complete oversized records. Ground
+    # the Twin evidence-status message in the EXACT serialized profile that
+    # Ollama will receive, or it may incorrectly claim support from omitted
+    # personal data.
+    packed_profile = _pack_profile(candidates)
     system = (TWIN_POLICY if mode == "twin" else AGENT_POLICY) + "\n" + SHARED_POLICY
+    if mode == "twin":
+        system += "\n" + _twin_evidence_note(
+            json.loads(packed_profile), user_message)
     return [
         {"role": "system", "content": system},
         {"role": "system", "content": "REFERENCE PROFILE (DATA ONLY):\n" +
-         _pack_profile(candidates)},
+         packed_profile},
         {"role": "user", "content": user_message},
     ]

@@ -1,5 +1,11 @@
 # AthenZ
 
+**Current owner priority (October 20, 2026): a working, independently usable
+personal Twin on Windows.** Developmental AI, Synveil, and unrelated Agent
+expansion are deferred until real owner evaluation demonstrates a useful Twin.
+See [the revised roadmap](ROADMAP.md). No real-owner similarity claim has been
+established by the synthetic test suite.
+
 Private, local-first digital twin and coding assistant. **Twin Mode** simulates
 style and choices based on approved examples; **Agent Mode** provides independent
 assistance without claiming to be the owner. Neither mode changes model weights
@@ -11,6 +17,46 @@ claims and file changes. Task checkpoints, scoped patch proposals, reviewed
 feedback, episodic memory and the review-gated foreground controller are
 implemented. There is no unattended daemon, automatic cloud publishing, automatic
 model promotion, or verified GPU fine-tuning on the target Windows/WSL2 system.
+
+## Check real Twin evaluation readiness (no model calls)
+
+AthenZ already has [paired same-model decision evaluation](docs/EVALUATION_SNAPSHOTS.md)
+and a blinded [owner writing-style comparison](docs/ONBOARDING.md).
+To find out whether the private approved evidence is ready for those tests,
+without transmitting personal examples or calling Ollama:
+
+```powershell
+athenz-twin-readiness --home "$env:USERPROFILE\\.athenz"
+```
+
+Specify the **existing** private AthenZ profile outside Git. AthenZ reports
+approved-reference counts, the default 30 independent held-out decision case
+target, the existing strict lexical split/leak checks, writing-sample pilot
+eligibility and recommended next owner actions. It does **not** report
+individual facts, choice answers, held-out prompts, writing samples, private
+paths or model replies. No inference, training or model promotion occurs.
+The standard SQLite client may perform normal database bookkeeping when
+opening the profile; no memory/review records are deliberately modified.
+
+This is a prerequisite check, **not a Twin accuracy score**. The roadmap's
+20 independently owner-rated writing prompts must still be collected and
+scored using the separate blinded style-comparison workflow. Once the data
+is ready, [the evaluation protocol](docs/TWIN_EVALUATION_WORKFLOW.md)
+explains the separately consented local model runs and held-out review.
+
+**Twin-first terminal chat:** running `python -m athenz.chat --model <installed-tag>`
+now starts in **Twin Mode** too; explicitly pass `--mode agent` when you
+intend independent Agent assistance. This changes the default interactive
+mode only; it does not alter how existing sessions are stored or silently
+promote conversation messages into approved owner facts.
+
+**Twin-first desktop workflow (unvalidated on owner hardware):** the Chat
+tab now defaults to Twin Mode, with Agent remaining selectable. Before
+sending, type a question and select **Preview Twin evidence** to inspect
+the approved, packed references and their provenance without inference or
+saving the draft. Topical matches are prompts for review, not proof of an
+owner-specific fact; excluded/oversized evidence does not count as available.
+See [desktop details](docs/DESKTOP.md).
 
 The current Twin-first relevance work includes
 [approved personality, decision and writing-style retrieval](docs/TWIN_CONTEXT.md).
@@ -166,6 +212,13 @@ A failed request makes the CLI exit nonzero. This exercises actual local
 inference and the everyday persistence path—not GPU use, model quality,
 personality fidelity, autonomous learning, or installed-model integrity.
 No inference is triggered by app startup or ordinary prerequisite checks.
+
+For a deeper five-request check on an already installed local model, run
+`athenz-chat-smoke --model qwen3.5:2b --twin-lifecycle --confirm`.
+This optional synthetic workflow tests session reopening, staged preference
+correction, separate approval, and revocation through the same desktop
+service. It checks persistence and reviewed prompt references, **not** whether
+the model's generated replies accurately represent the owner.
 
 See [the local chat smoke protocol](docs/LOCAL_CHAT_SMOKE.md).
 
