@@ -24,6 +24,18 @@ Immediate order:
    regressions, and real latency/GPU/CPU/RAM consumption.
 5. Fix demonstrated failures and release a standalone Twin-first candidate.
 
+**Twin evaluation entrypoint (2026-10-21):** An owner-selected,
+existing private profile can now be checked with
+`athenz-twin-readiness --home <private-profile>`. This aggregates the existing
+held-out decision preflight (target: 30 independent approved final-test cases)
+and blinded writing pilot prerequisites (three training + three independent
+test samples), and lists actionable gaps without calling Ollama or exposing
+owner examples. The separate target of **20 blinded, owner-rated writing
+comparisons** is not measured by this readiness check. Use the already
+implemented same-model paired decision evaluator and blinded style comparison
+for actual scores. A green CI suite verifies code paths, **not** personal
+fidelity or RTX 3060 performance.
+
 **Milestone not yet validated:** software/synthetic tests and passing CI do not
 establish owner personality fidelity. Run on Windows 11 / RTX 3060, collect
 private held-out owner judgments outside Git, and report failures as well as wins.
