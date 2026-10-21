@@ -18,6 +18,32 @@ feedback, episodic memory and the review-gated foreground controller are
 implemented. There is no unattended daemon, automatic cloud publishing, automatic
 model promotion, or verified GPU fine-tuning on the target Windows/WSL2 system.
 
+## Check real Twin evaluation readiness (no model calls)
+
+AthenZ already has [paired same-model decision evaluation](docs/EVALUATION_SNAPSHOTS.md)
+and a blinded [owner writing-style comparison](docs/ONBOARDING.md).
+To find out whether the private approved evidence is ready for those tests,
+without transmitting personal examples or calling Ollama:
+
+```powershell
+athenz-twin-readiness --home "$env:USERPROFILE\\.athenz"
+```
+
+Specify the **existing** private AthenZ profile outside Git. AthenZ reports
+approved-reference counts, the default 30 independent held-out decision case
+target, the existing strict lexical split/leak checks, writing-sample pilot
+eligibility and recommended next owner actions. It does **not** report
+individual facts, choice answers, held-out prompts, writing samples, private
+paths or model replies. No inference, training or model promotion occurs.
+The standard SQLite client may perform normal database bookkeeping when
+opening the profile; no memory/review records are deliberately modified.
+
+This is a prerequisite check, **not a Twin accuracy score**. The roadmap's
+20 independently owner-rated writing prompts must still be collected and
+scored using the separate blinded style-comparison workflow. Once the data
+is ready, [the evaluation protocol](docs/TWIN_EVALUATION_WORKFLOW.md)
+explains the separately consented local model runs and held-out review.
+
 **Twin-first terminal chat:** running `python -m athenz.chat --model <installed-tag>`
 now starts in **Twin Mode** too; explicitly pass `--mode agent` when you
 intend independent Agent assistance. This changes the default interactive
