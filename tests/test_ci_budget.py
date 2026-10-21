@@ -53,23 +53,23 @@ class CIBudgetTests(unittest.TestCase):
             directory = Path(tmp) / '.github' / 'workflows'
             directory.mkdir(parents=True)
             for name in WORKFLOWS:
-                content = 'on:\\n  workflow_dispatch:\\n'
+                content = 'on:\n  workflow_dispatch:\n'
                 if name == 'tests.yml':
                     content = (
-                        'on:\\n  push:\\n    branches:\\n      - ' +
-                        TWIN_TEST_BRANCH + '\\n  workflow_dispatch:\\n')
+                        'on:\n  push:\n    branches:\n      - ' +
+                        TWIN_TEST_BRANCH + '\n  workflow_dispatch:\n')
                 (directory / name).write_text(content)
             result = audit_workflows(Path(tmp))
             self.assertEqual(result['tests.yml'], ('push', 'workflow_dispatch'))
             for bad in ('main', '*', 'feature/*', TWIN_TEST_BRANCH + '-extra'):
                 (directory / 'tests.yml').write_text(
-                    'on:\\n  push:\\n    branches:\\n      - ' + bad +
-                    '\\n  workflow_dispatch:\\n')
+                    'on:\n  push:\n    branches:\n      - ' + bad +
+                    '\n  workflow_dispatch:\n')
                 with self.subTest(branch=bad), self.assertRaises(CIBudgetError):
                     audit_workflows(Path(tmp))
             (directory / 'tests.yml').write_text(
-                'on:\\n  push:\\n    branches:\\n      - ' +
-                TWIN_TEST_BRANCH + '\\n      - main\\n  workflow_dispatch:\\n')
+                'on:\n  push:\n    branches:\n      - ' +
+                TWIN_TEST_BRANCH + '\n      - main\n  workflow_dispatch:\n')
             with self.assertRaises(CIBudgetError):
                 audit_workflows(Path(tmp))
 
