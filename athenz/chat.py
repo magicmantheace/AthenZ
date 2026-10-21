@@ -154,7 +154,7 @@ def answer(store: IdentityStore, model: OllamaClient, prompt: str,
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(description="Chat privately with local Ollama using approved AthenZ context")
     p.add_argument("--home", type=Path)
-    p.add_argument("--mode", choices=["twin", "agent"], default="agent")
+    p.add_argument("--mode", choices=["twin", "agent"], default="twin")
     p.add_argument("--model", default=None)
     p.add_argument("--session", default="default", help="Persistent session ID; stored locally")
     args = p.parse_args(argv)
