@@ -18,6 +18,12 @@ feedback, episodic memory and the review-gated foreground controller are
 implemented. There is no unattended daemon, automatic cloud publishing, automatic
 model promotion, or verified GPU fine-tuning on the target Windows/WSL2 system.
 
+**Twin-first terminal chat:** running `python -m athenz.chat --model <installed-tag>`
+now starts in **Twin Mode** too; explicitly pass `--mode agent` when you
+intend independent Agent assistance. This changes the default interactive
+mode only; it does not alter how existing sessions are stored or silently
+promote conversation messages into approved owner facts.
+
 **Twin-first desktop workflow (unvalidated on owner hardware):** the Chat
 tab now defaults to Twin Mode, with Agent remaining selectable. Before
 sending, type a question and select **Preview Twin evidence** to inspect
