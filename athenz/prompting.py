@@ -62,7 +62,7 @@ def _query_terms(query: str) -> set[str]:
         terms.update({"color", "colour"})
     if "favorite" in terms or "favourite" in terms:
         terms.update({"favorite", "favourite"})
-    if re.search(r"\b(grew up|growing up|raised|childhood|hometown)\b",
+    if re.search(r"\b(grow up|grew up|grown up|growing up|raised|childhood|hometown)\b",
                  query.lower()):
         terms.update({"raised", "childhood", "hometown", "upbringing"})
     return terms
