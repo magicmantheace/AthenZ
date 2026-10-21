@@ -104,8 +104,9 @@ class ChatSafetyTests(unittest.TestCase):
                 main(['--home', str(home), '--model','synthetic:1'])
             check=ExperienceStore(home)
             try:
-                self.assertEqual([(r['role'],r['content']) for r in check.conversation('default','agent')],
+                self.assertEqual([(r['role'],r['content']) for r in check.conversation('default','twin')],
                                  [('user','USER-MESSAGE'),('assistant','SUCCESS')])
+                self.assertEqual(check.conversation('default','agent'), [])
             finally:check.close()
 
 if __name__ == '__main__':
