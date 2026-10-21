@@ -126,3 +126,29 @@ independent, explicitly approved local evaluation dataset.
   and the full `python -m unittest discover -s tests -v` on a checked-out
   copy of this branch. Windows inference and blinded real-owner comparison
   remain unverified until performed and recorded.
+
+## Twin retrieval audit: wording, topic and provenance (2026-10-20)
+
+- An approved life-history note worded `raised` is retrieved for real owner
+  questions such as `Where did I grow up?`, `Where did I grow up`,
+  `Where have I grown up?`, `childhood`, and `hometown`. This specifically
+  fixes the missing `grow up` phrase and remains conservative lexical
+  matching, not semantic understanding.
+- Generic question scaffolding (`which`, `did`, `does`, `tell`,
+  `remember` and general preference/decision verbs) cannot by itself
+  qualify a *different* approved owner preference or decision as topical
+  Twin evidence. The selected subject must match; unsupported claims still
+  require abstention or explicit uncertainty.
+- The same Twin-specific topical filter now applies to retrieval of **older
+  user-authored messages from the same session**, before any excerpts are
+  disclosed to Ollama. Recent chat remains independently unreviewed and
+  bounded, and may still refer to unverified past statements. Agent history
+  and Agent approved-reference matching retain their prior behavior.
+- Synthetic regression tests cover approved/revoked histories, lexical
+  false positives, old-session relevance, and explicit Agent separation.
+
+No claim is made that this solves factual contradictions, semantically
+paraphrased preferences, or personal writing fidelity. These must be checked
+against real locally held-out owner questions, with a local Ollama model and
+manual owner judgment. Tests in this branch remain **unexecuted in the
+current working environment**.
