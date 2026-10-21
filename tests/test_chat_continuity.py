@@ -77,6 +77,31 @@ class ContinuityTests(unittest.TestCase):
         self.assertIsNone(self.historical(prompt="orbital giant botanical orchids"))
         self.assertNotIn(str(new_id), self.historical())
 
+    def test_twin_older_chat_recall_requires_real_subject_overlap(self):
+        unrelated = self.store.add_message(
+            "subject-precision", "twin", "user",
+            "Which hydraulic tractor would I choose?")
+        pertinent = self.store.add_message(
+            "subject-precision", "twin", "user",
+            "Which ceramic saucepan would I choose?")
+        for i in range(12):
+            self.store.add_message(
+                "subject-precision", "twin", "user",
+                "Neutral session filler " + str(i))
+        recent = self.store.conversation(
+            "subject-precision", "twin", limit=10)
+        old = same_session_user_excerpts(
+            self.store, session="subject-precision", mode="twin",
+            prompt="Which ceramic saucepan would I choose?", recent=recent)
+        self.assertIsNotNone(old)
+        self.assertIn(str(pertinent), old)
+        self.assertNotIn(str(unrelated), old)
+        self.assertNotIn("hydraulic tractor", old)
+        # With no subject at all, do not leak otherwise unrelated old chat.
+        self.assertIsNone(same_session_user_excerpts(
+            self.store, session="subject-precision", mode="twin",
+            prompt="Which would I choose?", recent=recent))
+
     def test_context_snapshot_separates_approved_profile_and_older_untrusted(self):
         sig, messages = context_snapshot(
             self.store, self.prompt, "twin", self.recent(), "work")
