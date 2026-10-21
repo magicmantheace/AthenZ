@@ -76,7 +76,8 @@ _PERSONAL_FRAMING = frozenset((
     "like likes liked liking choose chooses choosing choice choices decided "
     "decision decisions think thinks thought thoughts believe believes "
     "opinion opinions feel feels feeling feelings want wants usually typical "
-    "typically personal personally mine owner"
+    "typically personal personally mine owner which did does tell show "
+    "describe explain remember recall answer"
 ).split())
 
 
