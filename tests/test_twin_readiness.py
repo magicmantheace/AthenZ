@@ -22,12 +22,22 @@ class TwinReadinessTests(unittest.TestCase):
         self.addCleanup(self.store.close)
 
     def add_writing(self):
-        for split in ("train", "test"):
-            for i in range(3):
+        # Different domains/syntax keep held-out examples independent from
+        # training samples under the existing lexical near-copy guard.
+        training = (
+            "Fictional lighthouse keeper repairs rusted pulleys in heavy rain.",
+            "An imaginary mechanic explains gearbox lubrication for toy trains.",
+            "A pretend botanist describes unusual moss on distant cliff faces.",
+        )
+        heldout = (
+            "The painted observatory dome rotates toward six distant galaxies.",
+            "A quiet ceramic studio glazes bowls using mineral-rich pigments.",
+            "Morning orchestra rehearsal begins with cellos tuning long notes.",
+        )
+        for split, texts in (("train", training), ("test", heldout)):
+            for text in texts:
                 mid = self.store.add_sample(
-                    "Synthetic unique " + split + " writing example " +
-                    str(i) + " with a distinct small paragraph.",
-                    source="synthetic", split=split)
+                    text, source="synthetic", split=split)
                 self.store.set_review("writing_samples", mid, "approved")
 
     def add_heldout(self, total=2):
@@ -111,8 +121,8 @@ class TwinReadinessTests(unittest.TestCase):
         for target, limit in ((True, 50), (1, 30), (20, 10),
                               (2, 1001), (2, 2.5)):
             with self.subTest(target=target, limit=limit):
-                with patch.object(self.store.db, "execute",
-                                  side_effect=AssertionError("unexpected query")):
+                with patch("athenz.twin_readiness.style_readiness",
+                           side_effect=AssertionError("unexpected query")):
                     with self.assertRaises(ValueError):
                         inspect_twin_readiness(
                             self.store, decision_target=target,
