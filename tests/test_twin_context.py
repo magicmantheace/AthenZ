@@ -384,6 +384,23 @@ class TwinContextTests(unittest.TestCase):
                       build_messages(self.store, "Do I prefer thunderstorms?",
                                      "twin")[0]["content"])
 
+    def test_question_scaffolding_does_not_select_unrelated_choices(self):
+        self.store.add_decision(
+            "Which synthetic fence coating would I choose?",
+            "Blue coating", "A synthetic fence design",
+            source="synthetic", approved=True)
+        self.store.propose(
+            "preference", "Which synthetic fence coating do I prefer?",
+            source="synthetic", approved=True)
+        result = build_messages(
+            self.store, "Which kitchen tool do I prefer?", "twin")
+        self.assertEqual(
+            json.loads(result[1]["content"].split("\n", 1)[1])[
+                "approved_decisions"], [])
+        self.assertNotIn("synthetic fence coating", result[1]["content"])
+        self.assertIn("No topically matching approved owner fact",
+                      result[0]["content"])
+
     def test_broad_preference_question_retrieves_approved_preferences(self):
         self.store.propose("preference", "I prefer synthetic granite counters",
                            source="synthetic", approved=True)
