@@ -113,7 +113,7 @@ def _selected_identity(store: IdentityStore, query: str, *,
     Maintain a general style/value/preference backbone plus topical evidence,
     instead of silently restricting retrieval to the newest 200 approvals.
     """
-    terms = _topical_terms(query)
+    terms = _topical_terms(query) if mode == "twin" else _query_terms(query)
     direct_bio = bool(re.search(
         r"\b(who am i|describe me|about me|my background|my profile)\b",
         query.lower()))
@@ -145,9 +145,14 @@ def _selected_identity(store: IdentityStore, query: str, *,
              "confidence": r["confidence"]} for r in selected]
 
 
-def _selected_decisions(store: IdentityStore, query: str) -> list[dict]:
-    """Scan all approved training decisions, without ever reading held-out gold."""
-    terms = _topical_terms(query)
+def _selected_decisions(store: IdentityStore, query: str, *,
+                        mode: str = "agent") -> list[dict]:
+    """Scan all approved training decisions, without ever reading held-out gold.
+
+    Preserve existing Agent relevance while only tightening Twin's
+    owner-specific retrieval and evidence claims.
+    """
+    terms = _topical_terms(query) if mode == "twin" else tokens(query)
     best = []
     for r in store.db.execute(
         "SELECT id, scenario, choice, rationale, exception FROM decisions "
@@ -273,7 +278,7 @@ def build_messages(store: IdentityStore, user_message: str,
     # held-out decisions are never even fetched from the evaluation splits.
     candidates: dict[str, list[dict]] = {
         "approved_identity": _selected_identity(store, user_message, mode=mode),
-        "approved_decisions": _selected_decisions(store, user_message),
+        "approved_decisions": _selected_decisions(store, user_message, mode=mode),
     }
     if hasattr(store, "relevant_episodes"):
         # Rank episodes by the actual personal subject rather than generic
