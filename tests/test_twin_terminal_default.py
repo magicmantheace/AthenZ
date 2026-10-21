@@ -15,8 +15,8 @@ class TerminalTwinDefaultTests(unittest.TestCase):
         with TemporaryDirectory(prefix="athenz-terminal-test-") as scratch:
             home = Path(scratch) / "fictional-private"
             argv = ["--home", str(home), "--model", "synthetic-local", *options]
-            with patch("athenz.chat.OllamaClient") as client, \\
-                 patch("builtins.input", return_value="/exit"), \\
+            with patch("athenz.chat.OllamaClient") as client, \
+                 patch("builtins.input", return_value="/exit"), \
                  patch("builtins.print") as output:
                 client.return_value.model = "synthetic-local"
                 main(argv)
