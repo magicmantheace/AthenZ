@@ -22,7 +22,8 @@ class CIBudgetTests(unittest.TestCase):
         self.assertIn('default: smoke', text)
         self.assertIn("if: github.event_name == 'push' || inputs.coverage == 'smoke'", text)
         self.assertIn("      - " + TWIN_TEST_BRANCH, text)
-        self.assertIn("if: inputs.coverage == 'full'", text)
+        self.assertIn("inputs.coverage == 'full'", text)
+        self.assertIn("contains(github.event.head_commit.message, '[full-ci]')", text)
         self.assertEqual(text.count('runs-on: ubuntu-latest'), 1)
         self.assertIn('os: windows-latest', text)
 
