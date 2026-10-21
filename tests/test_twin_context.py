@@ -401,6 +401,20 @@ class TwinContextTests(unittest.TestCase):
         self.assertIn("No topically matching approved owner fact",
                       result[0]["content"])
 
+    def test_twin_specific_filter_does_not_change_agent_retrieval(self):
+        self.store.add_decision(
+            "Which synthetic fixture should I select?",
+            "Fixture A", "Older independent Agent retrieval behavior",
+            source="synthetic", approved=True)
+        question = "Which kitchen appliance should I select?"
+        twin = profile(self.store, question, "twin")
+        agent = profile(self.store, question, "agent")
+        self.assertEqual(twin["approved_decisions"], [])
+        self.assertIn("Fixture A", json.dumps(agent["approved_decisions"]))
+        self.assertNotIn(
+            "TWIN EVIDENCE STATUS",
+            build_messages(self.store, question, "agent")[0]["content"])
+
     def test_broad_preference_question_retrieves_approved_preferences(self):
         self.store.propose("preference", "I prefer synthetic granite counters",
                            source="synthetic", approved=True)
