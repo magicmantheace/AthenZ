@@ -42,7 +42,7 @@ jobs:
         run: python -m unittest tests.test_ci_budget -v
 
   full:
-    if: inputs.coverage == 'full'
+    if: inputs.coverage == 'full' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[full-ci]'))
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
