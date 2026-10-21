@@ -403,10 +403,10 @@ class TwinContextTests(unittest.TestCase):
 
     def test_twin_specific_filter_does_not_change_agent_retrieval(self):
         self.store.add_decision(
-            "Which synthetic fixture should I select?",
+            "Which synthetic fixture should I choose?",
             "Fixture A", "Older independent Agent retrieval behavior",
             source="synthetic", approved=True)
-        question = "Which kitchen appliance should I select?"
+        question = "Which kitchen appliance should I choose?"
         twin = profile(self.store, question, "twin")
         agent = profile(self.store, question, "agent")
         self.assertEqual(twin["approved_decisions"], [])
