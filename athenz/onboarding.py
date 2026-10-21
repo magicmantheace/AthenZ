@@ -13,7 +13,7 @@ import json
 STEPS = (
     ('Private profile', 'Your identity, chats, approvals and task state stay in the private AthenZ profile outside Git. Backups are plaintext unless protected separately.'),
     ('Local Ollama', 'Install Ollama and a supported model yourself, then use Probe Ollama to check the loopback connection. The probe does not send conversations.'),
-    ('Try Agent / Twin', 'Agent answers independently. Twin simulates your reviewed preferences, not your identity. Replies are only generated after you send a prompt.'),
+    ('Try your Twin first', 'Chat opens in Twin Mode. Ask a question and use Preview Twin evidence to inspect approved context before sending; a match is not proof of your answer. Agent Mode remains an explicit alternative. Replies are generated only when you send a prompt.'),
     ('Review memory', 'Pending memories and training examples remain unapproved until you inspect the complete record and explicitly approve it.'),
     ('Supervised coding', 'Coding requires your trusted Git repository, named file scopes and approval of the exact patch SHA-256; the scheduler is off by default.'),
     ('Back up safely', 'Before substantial use, explicitly create and verify a private backup or selected-file bundle. Existing backups are unencrypted and excludes installed Ollama weights.'),
