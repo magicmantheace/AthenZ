@@ -277,6 +277,24 @@ class TwinContextTests(unittest.TestCase):
         self.assertIn("No topically matching approved owner fact",
                       build_messages(self.store, question, "twin")[0]["content"])
 
+    def test_growing_up_and_hometown_phrasings_retrieve_approved_origin(self):
+        self.store.propose(
+            "identity", "SYNTHETIC_ORIGIN was raised in a fictional valley",
+            source="synthetic", approved=True)
+        for question in (
+            "Where did I grow up?",
+            "Where did I grew up?",
+            "Where have I grown up?",
+            "Tell me about my childhood",
+            "What is my hometown?",
+        ):
+            with self.subTest(question=question):
+                result = profile(self.store, question)
+                self.assertIn("SYNTHETIC_ORIGIN", json.dumps(result))
+                self.assertIn(
+                    "Approved topical reference data",
+                    build_messages(self.store, question, "twin")[0]["content"])
+
     def test_favorite_colour_spelling_retrieves_reviewed_preference(self):
         self.store.propose(
             "preference", "My favourite colour is ultraviolet",
