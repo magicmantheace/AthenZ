@@ -52,7 +52,14 @@ records, screenshot dialogs or private SQLite/WAL files into a public repo.
 
 A `rejected` record remains in the private database and can only become
 approved again by an explicit later owner action. **Forgetting** removes a
-live identity and all its revision history, but is not secure erasure from
-backups, WAL, SSD blocks, logs outside this application or copies already
-shared elsewhere. A reviewed memory is still an owner-approved assertion,
+live identity and all its revision history, and the erasure paths (delete,
+source purge, episode/session/message forgetting) then physically scrub the
+profile: the connection runs with SQLite `secure_delete` on, and each
+erasure finishes by truncating the write-ahead log and rebuilding the
+database with `VACUUM`, so the forgotten bytes do not survive in the live
+database file, its WAL, or any backup taken afterwards — synthetic threat
+tests scan the raw files and post-erasure backups to prove it. Forgetting
+still cannot reach backups taken *before* the erasure, SSD block-level
+remnants below the filesystem, logs outside this application or copies
+already shared elsewhere. A reviewed memory is still an owner-approved assertion,
 not proof of historical truth or a demonstration of digital-person identity.

@@ -75,6 +75,57 @@ class SyntheticChatSmokeTests(unittest.TestCase):
                            "athenz-synthetic-chat-", "A synthetic local model reply"):
             self.assertNotIn(prohibited, serialized)
 
+    def test_opt_in_twin_lifecycle_uses_five_real_service_turns(self):
+        with mock.patch("athenz.desktop.OllamaClient", FakeModel):
+            report = check_synthetic_chat(
+                model="synthetic:1", confirmed=True, twin_lifecycle=True)
+        self.assertEqual(report["status"], "synthetic-twin-lifecycle-observed")
+        self.assertTrue(report["temporary_profile_removed"])
+        self.assertEqual(report["inference_calls_attempted"], 5)
+        self.assertEqual(len(FakeModel.calls), 5)
+        self.assertTrue(report["session_reopened"])
+        self.assertTrue(report["pending_correction_excluded_from_approved_context"])
+        self.assertTrue(report["approved_correction_in_approved_context"])
+        self.assertTrue(report["revoked_memory_excluded_from_approved_context"])
+        self.assertTrue(report["lifecycle_conversation_persisted"])
+        self.assertFalse(report["model_answer_quality_measured"])
+        self.assertIn("I prefer a review before release",
+                      FakeModel.calls[0][1]["content"])
+        self.assertNotIn("I prefer a review before release",
+                         FakeModel.calls[2][1]["content"])
+        self.assertIn("I prefer staged review before release",
+                      FakeModel.calls[3][1]["content"])
+        self.assertNotIn("I prefer staged review before release",
+                         FakeModel.calls[4][1]["content"])
+        self.assertNotIn("synthetic:1", json.dumps(report))
+        self.assertNotIn("staged review before release", json.dumps(report))
+
+    def test_lifecycle_failure_is_bounded_and_sanitized(self):
+        class FailsFourth(FakeModel):
+            def generate(self, messages, **kw):
+                FakeModel.calls.append(messages)
+                if len(FakeModel.calls) == 4:
+                    raise RuntimeError("PRIVATE SYNTHETIC MODEL SECRET")
+                return "Synthetic local response"
+        with mock.patch("athenz.desktop.OllamaClient", FailsFourth):
+            report = check_synthetic_chat(
+                model="synthetic:1", confirmed=True, twin_lifecycle=True)
+        self.assertEqual(report["status"], "local-smoke-unavailable")
+        self.assertEqual(report["inference_calls_attempted"], 4)
+        self.assertFalse(report["real_twin_fidelity_validated"])
+        self.assertNotIn("PRIVATE", json.dumps(report))
+        self.assertNotIn("SECRET", json.dumps(report))
+
+    def test_lifecycle_flag_requires_boolean_and_owner_confirmation(self):
+        with mock.patch("athenz.synthetic_chat_smoke.tempfile.TemporaryDirectory",
+                        side_effect=AssertionError("should not create scratch")):
+            with self.assertRaises(SyntheticChatSmokeError):
+                check_synthetic_chat(
+                    model="synthetic:1", confirmed=False, twin_lifecycle=True)
+            with self.assertRaises(SyntheticChatSmokeError):
+                check_synthetic_chat(
+                    model="synthetic:1", confirmed=True, twin_lifecycle="yes")
+
     def test_second_inference_failure_does_not_expose_model_error(self):
         class FailsSecond(FakeModel):
             def generate(self, messages, **kw):
@@ -136,6 +187,16 @@ class SyntheticChatSmokeTests(unittest.TestCase):
         with mock.patch("builtins.print"):
             with self.assertRaises(SyntheticChatSmokeError):
                 main(["--model", "synthetic:1"])
+
+    def test_cli_extended_twin_lifecycle_reports_only_sanitized_flags(self):
+        with mock.patch("athenz.desktop.OllamaClient", FakeModel), \
+             mock.patch("builtins.print") as printer:
+            main(["--model", "synthetic:1", "--twin-lifecycle", "--confirm"])
+        report = json.loads(printer.call_args.args[0])
+        self.assertEqual(report["status"], "synthetic-twin-lifecycle-observed")
+        self.assertEqual(report["inference_calls_attempted"], 5)
+        self.assertTrue(report["temporary_profile_removed"])
+        self.assertNotIn("fictional software projects", json.dumps(report))
 
     def test_cli_exits_nonzero_on_unavailable_model(self):
         with mock.patch("athenz.synthetic_chat_smoke.check_synthetic_chat",

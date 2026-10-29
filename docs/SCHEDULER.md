@@ -20,6 +20,9 @@ athenz-sequence review fix-math            # inspect FULL diff and exact SHA-256
 # When the next stage is ready, re-arm with explicit authorization:
 athenz-scheduler arm fix-math --confirm
 athenz-scheduler pause fix-math
+# To revoke a job permanently (it can never run again):
+athenz-scheduler cancel fix-math --confirm
+athenz-scheduler remove fix-math --confirm   # frees the key for a fresh queue entry
 ```
 
 For a limited polling session, explicitly start `athenz-scheduler serve --confirm
@@ -70,6 +73,19 @@ trusted-local-user boundary.
 - To remove a queue entry without deleting reviewed code or worktrees, pause
   the entry and run `athenz-scheduler remove TASK --confirm`. A job still
   running or holding an unreconciled lease cannot be removed.
+- **Cancellation is terminal, unlike pause.** `athenz-scheduler cancel TASK
+  --confirm` works from any state (paused, armed, running or review): it
+  revokes the lease and advances the job's monotonic **fencing epoch**, which
+  every claim increments and every persistence fence re-checks. An in-flight
+  worker from before the cancellation — or from before a recovery — therefore
+  cannot persist its result even if it still holds the old lease value; its
+  output is discarded and the row stays cancelled. A cancelled job cannot be
+  paused, armed or recovered; remove it to free the key, then register fresh.
+  Cancelling an already-cancelled job is a no-op. Backup recovery pauses all
+  jobs but never un-cancels a cancelled one, and recovery drills treat a
+  cancelled, leaseless job as safely disarmed. Cancellation still cannot
+  forcibly interrupt an in-flight Ollama HTTP request; it revokes the
+  request's permission to persist, exactly like pause, but permanently.
 
 ## Important limitations
 

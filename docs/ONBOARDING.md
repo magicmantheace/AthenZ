@@ -2,6 +2,14 @@
 
 The **Setup** tab opens with a read-only Getting started guide. Click **Getting started** at any time to see it again. It explains local Ollama installation, Agent/Twin differences, reviewed memory, the off-by-default proposal scheduler, and manual backup and readiness checks.
 
+The first interactive chat now opens in **Twin Mode** in both the desktop
+and the terminal. In the desktop, enter a question and choose **Preview Twin
+evidence** to see the actual approved reference excerpts without sending them
+to a model. Review or correct missing memories separately; the preview cannot
+approve new facts, measure resemblance or prove a claim. For independent
+assistance, switch the desktop mode to Agent or pass `--mode agent` in the
+terminal.
+
 There is no background setup assistant, telemetry, sign-up, model download, license acceptance, cloud sync or automatic memory training. Viewing the guide does **not** grant permissions to start the scheduler, run a model, access hardware, write a training record, apply a patch or contact Ollama.
 
 The text-only and JSON variants can be printed offline without starting the desktop or private database:

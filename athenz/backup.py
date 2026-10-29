@@ -204,7 +204,8 @@ def disarm_recovered_database(db_path: Path) -> None:
             db.execute("UPDATE checkpoints SET status='paused' WHERE status='running'")
             if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='proposal_schedule'").fetchone():
                 db.execute("""UPDATE proposal_schedule SET state='paused', lease=NULL,
-                    last_result='Recovered offline: owner reauthorization required'""")
+                    last_result='Recovered offline: owner reauthorization required'
+                    WHERE state!='cancelled'""")
         if db.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
             raise BackupError('Recovered SQLite changes failed integrity check')
 

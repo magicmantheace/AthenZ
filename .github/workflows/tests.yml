@@ -1,8 +1,11 @@
-name: Python tests (manual, budget-controlled)
+name: Python tests (Twin branch and manual)
 
-# NO automatic push, pull_request, scheduled, or release runs.
-# Do not enable additional triggers without explicit owner approval.
+# Explicit owner approval (2026-10-20): run Linux smoke on pushes to
+# the Twin development branch. Full Linux/Windows matrix stays manual.
 on:
+  push:
+    branches:
+      - feat/twin-first-evidence-boundaries-20261020
   workflow_dispatch:
     inputs:
       coverage:
@@ -18,12 +21,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: athenz-manual-python-${{ github.ref }}
+  group: athenz-twin-python-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   smoke:
-    if: inputs.coverage == 'smoke'
+    if: github.event_name == 'push' || inputs.coverage == 'smoke'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -35,11 +38,11 @@ jobs:
         run: python -m pip install -e .
       - name: Run Python tests
         run: python -m unittest discover -s tests -v
-      - name: Confirm manual-only CI policy
+      - name: Confirm bounded CI policy
         run: python -m unittest tests.test_ci_budget -v
 
   full:
-    if: inputs.coverage == 'full'
+    if: inputs.coverage == 'full' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[full-ci]'))
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
@@ -63,5 +66,5 @@ jobs:
         run: python -m pip install -e .
       - name: Run Python tests
         run: python -m unittest discover -s tests -v
-      - name: Confirm manual-only CI policy
+      - name: Confirm bounded CI policy
         run: python -m unittest tests.test_ci_budget -v

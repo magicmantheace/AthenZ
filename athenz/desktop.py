@@ -60,6 +60,41 @@ class DesktopService:
         finally:
             store.close()
 
+    def twin_evidence_preview(self, prompt: str) -> dict:
+        """Read the exact packed approved references for a proposed Twin turn.
+
+        This is read-only: no inference, chat-history access, feedback,
+        memory approval, learning, or external requests. Preview is not a
+        prediction or evidence that a local model will obey its instructions.
+        """
+        if (type(prompt) is not str or not prompt.strip()
+                or len(prompt) > 4000):
+            raise DesktopError('Enter a Twin question of 1–4000 characters')
+        from .prompting import build_messages
+        store = ExperienceStore(self.home)
+        try:
+            messages = build_messages(store, prompt.strip(), mode='twin')
+            prefix = 'REFERENCE PROFILE (DATA ONLY):\n'
+            data = messages[1]['content']
+            if not data.startswith(prefix):
+                raise DesktopError('Twin reference preview could not be built')
+            references = json.loads(data[len(prefix):])
+            # Derive from the same policy message used for generation, which
+            # itself now evaluates only the final packed model references.
+            status = ('approved-topical-evidence-candidate'
+                      if 'Approved topical reference data is available'
+                      in messages[0]['content']
+                      else 'insufficient-topical-evidence')
+            return {
+                'status': status,
+                'references': references,
+                'model_called': False,
+                'unreviewed_chat_included': False,
+                'heldout_evaluation_examples_included': False,
+            }
+        finally:
+            store.close()
+
     def sessions(self, *, limit: int = 100) -> list[dict]:
         """Owner-only metadata for recent chat sessions, without message text."""
         if type(limit) is not int or not 1 <= limit <= 200:
@@ -487,7 +522,7 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
     chat_controls = ttk.Frame(chat_tab)
     chat_controls.pack(fill='x')
     ttk.Label(chat_controls, text='Mode').pack(side='left', padx=(0, 6))
-    mode = tk.StringVar(value='agent')
+    mode = tk.StringVar(value='twin')
     modes = ttk.Combobox(chat_controls, values=('agent', 'twin'), width=9,
                          state='readonly', textvariable=mode)
     modes.pack(side='left', padx=(0, 12))
@@ -845,6 +880,52 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
     ttk.Button(send_row, text='Correct reply', command=lambda: rate_reply('down')).pack(side='left', padx=(8, 0))
     ttk.Button(send_row, text='Remember my message',
                command=remember_last_user_message).pack(side='left', padx=(8, 0))
+
+    def preview_twin_evidence() -> None:
+        if active['pending']:
+            messagebox.showinfo('Twin busy', 'Finish or cancel the current reply first.')
+            return
+        if mode.get() != 'twin':
+            messagebox.showinfo('Twin evidence', 'Select Twin Mode to inspect its approved context.')
+            return
+        try:
+            report = service.twin_evidence_preview(prompt.get())
+        except Exception:
+            # The public error must not disclose a private profile or DB path.
+            messagebox.showerror('Twin evidence', 'Could not inspect the approved local context.')
+            return
+        popup = tk.Toplevel(window)
+        popup.title('Approved evidence for this Twin question')
+        popup.geometry('800x530')
+        popup.transient(window)
+        ttk.Label(popup, text=(
+            'Read-only approved context preview. Topic matching is not proof '
+            'of your answer. No model or network request occurs.'),
+            wraplength=755, padding=12).pack(anchor='w')
+        evidence_frame = ttk.Frame(popup)
+        evidence_frame.pack(fill='both', expand=True, padx=12, pady=(0, 8))
+        details = tk.Text(evidence_frame, wrap='word', padx=10, pady=10)
+        details.pack(side='left', fill='both', expand=True)
+        scrollbar = ttk.Scrollbar(
+            evidence_frame, orient='vertical', command=details.yview)
+        scrollbar.pack(side='right', fill='y')
+        details.configure(yscrollcommand=scrollbar.set)
+        details.insert('end', 'Evidence status: ' + report['status'] + '\n')
+        details.insert('end',
+            'Only packed approved references are shown. Session chat is not '
+            'included here and may differ at inference time.\n\n')
+        for section, items in report['references'].items():
+            details.insert('end', section + ' (' + str(len(items)) + ')\n')
+            for item in items:
+                details.insert('end', json.dumps(
+                    item, ensure_ascii=False, indent=2) + '\n')
+            details.insert('end', '\n')
+        details.config(state='disabled')
+        ttk.Button(popup, text='Close', command=popup.destroy).pack(
+            side='bottom', pady=(0, 12))
+
+    ttk.Button(chat_controls, text='Preview Twin evidence',
+               command=preview_twin_evidence).pack(side='left', padx=(8, 0))
 
     send_button.config(command=send)
     prompt.bind('<Return>', send)
@@ -1294,6 +1375,9 @@ def launch(home: Path | None = None, *, smoke_duration_ms: int | None = None) ->
         if len(book.tabs()) != 4:
             window.destroy()
             raise DesktopError('GUI smoke did not create the expected tabs')
+        if mode.get() != 'twin':
+            window.destroy()
+            raise DesktopError('GUI smoke did not default to the Twin conversation mode')
         if 'Getting started with AthenZ' not in setup_text.get('1.0', 'end'):
             window.destroy()
             raise DesktopError('GUI smoke did not render offline setup guidance')

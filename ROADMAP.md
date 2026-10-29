@@ -4,6 +4,42 @@ Mission: a local-first digital twin of the owner's preferred style and decisions
 a bounded coding assistant that learns from verified work and carefully gated
 periodic model updates. It is not a literal copy of a human consciousness.
 
+## Active development priority (2026-10-20): standalone personal Twin FIRST
+
+**Owner directive: critical.** Make existing Windows-compatible Twin Mode genuinely
+useful before undertaking any more Developmental AI, Synveil, cross-project bridge,
+or unrelated coding-agent features. Existing completed interfaces remain dormant,
+not deleted. Development on those integrations resumes only after an
+owner-validated Twin milestone and explicit approval.
+
+Immediate order:
+1. Verify local Twin chat, same-session restart continuity, and reviewed-memory
+   retrieval/correction/revocation on real hardware.
+2. Improve evidence selection, no-invention behavior, stylistic consistency,
+   and review-controlled feedback without silently training on chats.
+3. Establish a frozen owner-held-out baseline: target 30 independent decision
+   cases across several categories and 20 independently evaluated writing
+   prompts; compare to the same unpersonalized Ollama model.
+4. Measure held-out decision accuracy, coverage, abstention, style preference,
+   regressions, and real latency/GPU/CPU/RAM consumption.
+5. Fix demonstrated failures and release a standalone Twin-first candidate.
+
+**Twin evaluation entrypoint (2026-10-21):** An owner-selected,
+existing private profile can now be checked with
+`athenz-twin-readiness --home <private-profile>`. This aggregates the existing
+held-out decision preflight (target: 30 independent approved final-test cases)
+and blinded writing pilot prerequisites (three training + three independent
+test samples), and lists actionable gaps without calling Ollama or exposing
+owner examples. The separate target of **20 blinded, owner-rated writing
+comparisons** is not measured by this readiness check. Use the already
+implemented same-model paired decision evaluator and blinded style comparison
+for actual scores. A green CI suite verifies code paths, **not** personal
+fidelity or RTX 3060 performance.
+
+**Milestone not yet validated:** software/synthetic tests and passing CI do not
+establish owner personality fidelity. Run on Windows 11 / RTX 3060, collect
+private held-out owner judgments outside Git, and report failures as well as wins.
+
 ## Safety contracts
 - Twin estimates owner behavior; Agent works for owner. Never invent lived history.
 - Keep four distinct learning tracks: approved context, reviewed/test-backed

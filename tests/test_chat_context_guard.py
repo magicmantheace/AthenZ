@@ -145,7 +145,7 @@ class ChatContextGuardTests(unittest.TestCase):
 
     def test_context_snapshot_contains_no_raw_private_prompt_in_digest(self):
         digest, messages = context_snapshot(
-            self.store, "What about deployment?", "twin")
+            self.store, "What about deployments?", "twin")
         self.assertEqual(len(digest), 64)
         self.assertTrue(all(c in "0123456789abcdef" for c in digest))
         self.assertNotIn("Synthetic owner", digest)

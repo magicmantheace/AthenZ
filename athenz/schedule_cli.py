@@ -17,6 +17,7 @@ def parser() -> argparse.ArgumentParser:
     x = sub.add_parser('add'); x.add_argument('key'); x.add_argument('--model', required=True); x.add_argument('--confirm', action='store_true')
     x = sub.add_parser('arm'); x.add_argument('key'); x.add_argument('--confirm', action='store_true')
     x = sub.add_parser('pause'); x.add_argument('key')
+    x = sub.add_parser('cancel'); x.add_argument('key'); x.add_argument('--confirm', action='store_true')
     x = sub.add_parser('remove'); x.add_argument('key'); x.add_argument('--confirm', action='store_true')
     x = sub.add_parser('recover'); x.add_argument('key'); x.add_argument('--confirm', action='store_true')
     x = sub.add_parser('tick'); x.add_argument('--confirm', action='store_true')
@@ -33,6 +34,7 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == 'add': result = queue.register(args.key, model=args.model, confirmed=args.confirm)
     elif args.command == 'arm': result = queue.arm(args.key, confirmed=args.confirm)
     elif args.command == 'pause': result = queue.pause(args.key)
+    elif args.command == 'cancel': result = queue.cancel(args.key, confirmed=args.confirm)
     elif args.command == 'remove': result = {'removed': queue.remove(args.key, confirmed=args.confirm)}
     elif args.command == 'recover': result = queue.recover(args.key, confirmed=args.confirm)
     elif args.command == 'tick': result = queue.run_once(confirmed=args.confirm)

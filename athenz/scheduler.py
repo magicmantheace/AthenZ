@@ -55,13 +55,57 @@ class ProposalScheduler:
                 task_key TEXT PRIMARY KEY,
                 scope_sha256 TEXT NOT NULL,
                 model_name TEXT NOT NULL,
-                state TEXT NOT NULL CHECK(state IN ('paused','armed','running','review')),
+                state TEXT NOT NULL CHECK(state IN ('paused','armed','running','review','cancelled')),
                 lease TEXT,
+                fence_epoch INTEGER NOT NULL DEFAULT 0,
                 last_result TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )''')
+            self._migrate(store)
             store.db.commit()
+
+    @staticmethod
+    def _migrate(store: ExperienceStore) -> None:
+        """Forward-only upgrades for queue tables created by older versions.
+
+        Adds the fencing epoch column and rebuilds the table when its state
+        CHECK predates the terminal 'cancelled' state. Existing rows and
+        leases are preserved exactly; no state is rewritten.
+        """
+        columns = {row[1] for row in store.db.execute(
+            'PRAGMA table_info(proposal_schedule)')}
+        schema = store.db.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='proposal_schedule'"
+        ).fetchone()[0]
+        if 'cancelled' not in schema:
+            epoch = 'fence_epoch' if 'fence_epoch' in columns else '0'
+            with store.db:
+                store.db.execute('BEGIN IMMEDIATE')
+                store.db.execute('''CREATE TABLE proposal_schedule_v2 (
+                    task_key TEXT PRIMARY KEY,
+                    scope_sha256 TEXT NOT NULL,
+                    model_name TEXT NOT NULL,
+                    state TEXT NOT NULL CHECK(state IN ('paused','armed','running','review','cancelled')),
+                    lease TEXT,
+                    fence_epoch INTEGER NOT NULL DEFAULT 0,
+                    last_result TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )''')
+                store.db.execute(f'''INSERT INTO proposal_schedule_v2
+                    (task_key,scope_sha256,model_name,state,lease,fence_epoch,
+                     last_result,created_at,updated_at)
+                    SELECT task_key,scope_sha256,model_name,state,lease,{epoch},
+                           last_result,created_at,updated_at
+                    FROM proposal_schedule''')
+                store.db.execute('DROP TABLE proposal_schedule')
+                store.db.execute(
+                    'ALTER TABLE proposal_schedule_v2 RENAME TO proposal_schedule')
+        elif 'fence_epoch' not in columns:
+            store.db.execute(
+                'ALTER TABLE proposal_schedule ADD COLUMN '
+                'fence_epoch INTEGER NOT NULL DEFAULT 0')
 
     @contextmanager
     def _open(self):
@@ -145,10 +189,40 @@ class ProposalScheduler:
                 row = store.db.execute('SELECT state FROM proposal_schedule WHERE task_key=?', (key,)).fetchone()
                 if not row:
                     raise SchedulerError('No such scheduled task')
+                if row['state'] == 'cancelled':
+                    raise SchedulerError('Job is cancelled; remove it or register a new job instead')
                 # Pausing an in-flight inference does not abort it: the lease
                 # persists, and completion cannot re-arm this job.
                 store.db.execute("UPDATE proposal_schedule SET state='paused',updated_at=? WHERE task_key=?",
                                  (utc_now(), key))
+        return self.get(key)
+
+    def cancel(self, key: str, *, confirmed: bool = False) -> dict:
+        """Permanently revoke a job's authority; it can never run again.
+
+        Unlike pause, cancellation is terminal: any lease is revoked and the
+        fencing epoch advances, so an in-flight worker's result is discarded
+        at the persistence fence even if its HTTP request later completes.
+        Cancellation cannot forcibly interrupt an in-flight Ollama request.
+        The queue entry remains for inspection until the owner removes it;
+        only removal frees the key for a fresh registration. Cancelling an
+        already-cancelled job is a no-op that returns its current row.
+        """
+        if not confirmed:
+            raise SchedulerError('Explicit owner confirmation required to cancel a scheduled job')
+        self._key(key)
+        with self._open() as store:
+            with store.db:
+                store.db.execute('BEGIN IMMEDIATE')
+                row = store.db.execute('SELECT state FROM proposal_schedule WHERE task_key=?', (key,)).fetchone()
+                if not row:
+                    raise SchedulerError('No such scheduled task')
+                if row['state'] != 'cancelled':
+                    store.db.execute('''UPDATE proposal_schedule
+                        SET state='cancelled',lease=NULL,fence_epoch=fence_epoch+1,
+                            last_result='owner-cancelled: job will not run; remove the entry to re-register',
+                            updated_at=? WHERE task_key=?''',
+                        (utc_now(), key))
         return self.get(key)
 
     def remove(self, key: str, *, confirmed: bool = False) -> bool:
@@ -162,7 +236,7 @@ class ProposalScheduler:
                 row = store.db.execute('SELECT state,lease FROM proposal_schedule WHERE task_key=?', (key,)).fetchone()
                 if not row:
                     return False
-                if row['state'] not in ('paused', 'review') or row['lease']:
+                if row['state'] not in ('paused', 'review', 'cancelled') or row['lease']:
                     raise SchedulerError('Pause and reconcile active inference before removing a job')
                 store.db.execute('DELETE FROM proposal_schedule WHERE task_key=?', (key,))
         return True
@@ -195,6 +269,7 @@ class ProposalScheduler:
                     raise SchedulerError('Scheduled task authority changed')
                 target = 'review' if seq['phase'] == 'awaiting_review' else 'paused'
                 store.db.execute('''UPDATE proposal_schedule SET state=?,lease=NULL,
+                    fence_epoch=fence_epoch+1,
                     last_result='owner-reconciled: no automatic retry',updated_at=? WHERE task_key=?''',
                     (target, utc_now(), key))
         return self.get(key)
@@ -211,8 +286,11 @@ class ProposalScheduler:
                     return {'status': 'idle', 'proposals': 0}
                 key = row['task_key']
                 lease = uuid.uuid4().hex
-                store.db.execute("UPDATE proposal_schedule SET state='running',lease=?,updated_at=? WHERE task_key=? AND state='armed'",
+                store.db.execute("UPDATE proposal_schedule SET state='running',lease=?,fence_epoch=fence_epoch+1,updated_at=? WHERE task_key=? AND state='armed'",
                                  (lease, utc_now(), key))
+                epoch = store.db.execute(
+                    'SELECT fence_epoch FROM proposal_schedule WHERE task_key=?',
+                    (key,)).fetchone()[0]
 
             # Every side effect is outside the DB lease transaction, so other
             # processes can pause while local inference is in flight.
@@ -230,10 +308,11 @@ class ProposalScheduler:
                     # blocks persistence if permission changes after sending.
                     def generate(self, *args, **kwargs):
                         status = store.db.execute(
-                            'SELECT state,lease FROM proposal_schedule WHERE task_key=?',
+                            'SELECT state,lease,fence_epoch FROM proposal_schedule WHERE task_key=?',
                             (key,)).fetchone()
                         if (status is None or status['state'] != 'running'
-                                or status['lease'] != lease):
+                                or status['lease'] != lease
+                                or status['fence_epoch'] != epoch):
                             raise SchedulerError('Model request was paused or revoked before generation')
                         return model.generate(*args, **kwargs)
 
@@ -243,10 +322,11 @@ class ProposalScheduler:
                     # A concurrent pause that commits first invalidates the
                     # lease, and its response is discarded without persistence.
                     current = store.db.execute(
-                        'SELECT state,lease,scope_sha256 FROM proposal_schedule WHERE task_key=?',
+                        'SELECT state,lease,fence_epoch,scope_sha256 FROM proposal_schedule WHERE task_key=?',
                         (key,)).fetchone()
                     if (current is None or current['state'] != 'running'
                             or current['lease'] != lease
+                            or current['fence_epoch'] != epoch
                             or current['scope_sha256'] != row['scope_sha256']):
                         raise SchedulerError('Proposal authorization was paused or revoked')
                     verified_ctl, verified_item, verified_seq = self._load(store, key)
@@ -268,8 +348,12 @@ class ProposalScheduler:
                 result = {'status': 'refused', 'task_key': key, 'error': reason}
             with store.db:
                 store.db.execute('BEGIN IMMEDIATE')
-                actual = store.db.execute('SELECT state,lease FROM proposal_schedule WHERE task_key=?', (key,)).fetchone()
-                if actual and actual['lease'] == lease:
+                actual = store.db.execute('SELECT state,lease,fence_epoch FROM proposal_schedule WHERE task_key=?', (key,)).fetchone()
+                if actual and actual['state'] == 'cancelled':
+                    # Cancellation wins over any in-flight outcome: the row
+                    # stays cancelled and nothing about the run is recorded.
+                    outcome = 'cancelled'
+                elif actual and actual['lease'] == lease and actual['fence_epoch'] == epoch:
                     if actual['state'] == 'running':
                         store.db.execute('''UPDATE proposal_schedule SET state=?,lease=NULL,
                             last_result=?,updated_at=? WHERE task_key=?''',
