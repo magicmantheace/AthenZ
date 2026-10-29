@@ -113,7 +113,7 @@ def rehearse_sqlite_backup(home: Path | None, identifier: str, *,
             pending_scheduler = 0
             if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='proposal_schedule'").fetchone():
                 pending_scheduler = db.execute(
-                    "SELECT count(*) FROM proposal_schedule WHERE state!='paused' OR lease IS NOT NULL"
+                    "SELECT count(*) FROM proposal_schedule WHERE state NOT IN ('paused','cancelled') OR lease IS NOT NULL"
                 ).fetchone()[0]
             active_route = db.execute("SELECT count(*) FROM checkpoints WHERE task_key='ollama_runtime'").fetchone()[0]
             active_checkpoints = db.execute("SELECT count(*) FROM checkpoints WHERE status='running'").fetchone()[0]
@@ -181,7 +181,7 @@ def rehearse_profile_bundle(home: Path | None, identifier: str, *,
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name='proposal_schedule'"
             ).fetchone()
             active_jobs = (db.execute(
-                "SELECT count(*) FROM proposal_schedule WHERE state!='paused' OR lease IS NOT NULL"
+                "SELECT count(*) FROM proposal_schedule WHERE state NOT IN ('paused','cancelled') OR lease IS NOT NULL"
             ).fetchone()[0] if scheduling else 0)
             runtime_routes = db.execute(
                 "SELECT count(*) FROM checkpoints WHERE task_key='ollama_runtime'"

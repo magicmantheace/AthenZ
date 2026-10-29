@@ -114,6 +114,8 @@ class ExperienceStore(LearningStore):
             cur = self.db.execute("DELETE FROM episodes WHERE id=?", (episode_id,))
             if cur.rowcount:
                 self._event("deleted", "episodes", episode_id)
+        if cur.rowcount:
+            self.scrub_erased_content()
         return bool(cur.rowcount)
 
     def checkpoint(self, key: str, task: str, state: dict, *,
@@ -166,6 +168,8 @@ class ExperienceStore(LearningStore):
             cur = self.db.execute("DELETE FROM checkpoints WHERE task_key=?", (key,))
             if cur.rowcount:
                 self._event("deleted", "checkpoints", None)
+        if cur.rowcount:
+            self.scrub_erased_content()
         return bool(cur.rowcount)
 
     def dispute(self, first_id: int, second_id: int, note: str) -> int:

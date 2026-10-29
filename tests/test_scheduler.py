@@ -501,7 +501,101 @@ class SchedulerTests(unittest.TestCase):
             self.scheduler.register('demo', model='valid\nunsafe', confirmed=True)
         self.assertEqual(self.scheduler.list(), [])
 
+    def test_cancel_requires_confirmation_and_is_terminal(self):
+        self.add(); self.scheduler.arm('demo', confirmed=True)
+        with self.assertRaisesRegex(SchedulerError, 'confirmation'):
+            self.scheduler.cancel('demo')
+        cancelled = self.scheduler.cancel('demo', confirmed=True)
+        self.assertEqual(cancelled['state'], 'cancelled')
+        self.assertIsNone(cancelled['lease'])
+        self.assertEqual(self.scheduler.run_once(confirmed=True)['status'], 'idle')
+        with self.assertRaises(SchedulerError):
+            self.scheduler.arm('demo', confirmed=True)
+        with self.assertRaisesRegex(SchedulerError, 'cancelled'):
+            self.scheduler.pause('demo')
+        # Cancellation is idempotent: the job stays cancelled, never revives.
+        self.assertEqual(self.scheduler.cancel('demo', confirmed=True)['state'], 'cancelled')
+        # Removal frees the key for a completely fresh registration.
+        self.assertTrue(self.scheduler.remove('demo', confirmed=True))
+        self.add()
+        self.assertEqual(self.scheduler.get('demo')['state'], 'paused')
+        with self.assertRaisesRegex(SchedulerError, 'No such scheduled task'):
+            self.scheduler.cancel('missing', confirmed=True)
+
+    def test_cancel_during_inference_discards_response(self):
+        self.add(); self.scheduler.arm('demo', confirmed=True)
+        scheduler = self.scheduler
+        class CancellingModel(Model):
+            def generate(self, messages, **kwargs):
+                scheduler.cancel('demo', confirmed=True)
+                return super().generate(messages, **kwargs)
+        result = scheduler.run_once(confirmed=True, model_factory=lambda _: CancellingModel())
+        self.assertEqual(result['status'], 'cancelled')
+        row = scheduler.get('demo')
+        self.assertEqual(row['state'], 'cancelled')
+        self.assertIsNone(row['lease'])
+        self.assertEqual(self.ui.detail('demo')['phase'], 'ready')
+        with scheduler._open() as store:
+            self.assertEqual(store.db.execute('SELECT count(*) FROM proposals').fetchone()[0], 0)
+
+    def test_cancel_interrupted_lease_needs_no_recovery(self):
+        self.add(); self.scheduler.arm('demo', confirmed=True)
+        with self.scheduler._open() as store:
+            with store.db:
+                store.db.execute("UPDATE proposal_schedule SET state='running',lease='dead-job' WHERE task_key='demo'")
+        cancelled = self.scheduler.cancel('demo', confirmed=True)
+        self.assertEqual(cancelled['state'], 'cancelled')
+        self.assertIsNone(cancelled['lease'])
+        with self.assertRaisesRegex(SchedulerError, 'No interrupted job'):
+            self.scheduler.recover('demo', confirmed=True)
+        self.assertEqual(self.scheduler.run_once(confirmed=True)['status'], 'idle')
+
+    def test_fence_epoch_change_discards_generation_with_same_lease(self):
+        self.add(); self.scheduler.arm('demo', confirmed=True)
+        scheduler = self.scheduler
+        class EpochBumpingModel(Model):
+            def generate(self, messages, **kwargs):
+                with scheduler._open() as store:
+                    with store.db:
+                        store.db.execute('BEGIN IMMEDIATE')
+                        store.db.execute("UPDATE proposal_schedule SET fence_epoch=fence_epoch+1 WHERE task_key='demo'")
+                return super().generate(messages, **kwargs)
+        result = scheduler.run_once(confirmed=True, model_factory=lambda _: EpochBumpingModel())
+        self.assertEqual(result['status'], 'paused')
+        with scheduler._open() as store:
+            self.assertEqual(store.db.execute('SELECT count(*) FROM proposals').fetchone()[0], 0)
+
+    def test_fence_epoch_advances_on_claim_and_cancel(self):
+        self.add()
+        self.assertEqual(self.scheduler.get('demo')['fence_epoch'], 0)
+        self.scheduler.arm('demo', confirmed=True)
+        self.scheduler.run_once(confirmed=True, model_factory=lambda _: Model())
+        claimed = self.scheduler.get('demo')['fence_epoch']
+        self.assertGreaterEqual(claimed, 1)
+        self.scheduler.cancel('demo', confirmed=True)
+        self.assertEqual(self.scheduler.get('demo')['fence_epoch'], claimed + 1)
+
+    def test_legacy_schedule_table_migrates_preserving_rows(self):
+        import sqlite3
+        legacy_home = self.base / 'legacy-private'
+        legacy_home.mkdir()
+        db_path = legacy_home / 'identity.sqlite3'
+        db = sqlite3.connect(db_path)
+        db.execute('''CREATE TABLE proposal_schedule (
+            task_key TEXT PRIMARY KEY, scope_sha256 TEXT NOT NULL,
+            model_name TEXT NOT NULL,
+            state TEXT NOT NULL CHECK(state IN ('paused','armed','running','review')),
+            lease TEXT, last_result TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL, updated_at TEXT NOT NULL)''')
+        db.execute("INSERT INTO proposal_schedule VALUES ('old','abc','synthetic:local','armed',NULL,'','t0','t0')")
+        db.commit(); db.close()
+        migrated = ProposalScheduler(legacy_home)
+        row = migrated.get('old')
+        self.assertEqual(row['state'], 'armed')
+        self.assertEqual(row['fence_epoch'], 0)
+        self.assertEqual(migrated.cancel('old', confirmed=True)['state'], 'cancelled')
+
     def test_cli_available_but_never_automatically_armed(self):
         commands = parser()._subparsers._group_actions[0].choices
-        self.assertEqual(set(commands), {'list', 'show', 'add', 'arm', 'pause', 'remove', 'recover', 'tick', 'serve'})
+        self.assertEqual(set(commands), {'list', 'show', 'add', 'arm', 'pause', 'cancel', 'remove', 'recover', 'tick', 'serve'})
         self.assertFalse(parser().parse_args(['tick']).confirm)

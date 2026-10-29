@@ -152,6 +152,9 @@ class DesktopTasks:
     def schedule_pause(self, key: str) -> dict:
         return ProposalScheduler(self.home).pause(self._key(key))
 
+    def schedule_cancel(self, key: str, *, confirmed: bool = False) -> dict:
+        return ProposalScheduler(self.home).cancel(self._key(key), confirmed=confirmed)
+
     def schedule_recover(self, key: str, *, confirmed: bool = False) -> dict:
         return ProposalScheduler(self.home).recover(self._key(key), confirmed=confirmed)
 

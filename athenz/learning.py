@@ -261,6 +261,8 @@ class LearningStore(IdentityStore):
             cur = self.db.execute(f'DELETE FROM {table} WHERE id=?', (item_id,))
             if cur.rowcount:
                 self._event('deleted', table, item_id)
+        if cur.rowcount:
+            self.scrub_erased_content()
         return bool(cur.rowcount)
 
     def delete_mode_session(self, session: str, mode: str) -> int:
@@ -283,6 +285,12 @@ class LearningStore(IdentityStore):
                 "DELETE FROM messages WHERE session=? AND mode=?", (session, mode))
             if cur.rowcount:
                 self._event("session-mode-deleted", "messages", None)
+        # Scrub only when this call owned the transaction; under a
+        # caller-held transaction the caller commits later and a VACUUM
+        # here would fail, so physical scrubbing is deferred to the next
+        # erasure on this store or an explicit scrub_erased_content().
+        if cur.rowcount and not self.db.in_transaction:
+            self.scrub_erased_content()
         return int(cur.rowcount)
 
     def delete_session(self, session: str) -> int:
@@ -291,4 +299,6 @@ class LearningStore(IdentityStore):
             cur = self.db.execute('DELETE FROM messages WHERE session=?', (session,))
             if cur.rowcount:
                 self._event('session-deleted', 'messages', None)
+        if cur.rowcount:
+            self.scrub_erased_content()
         return cur.rowcount

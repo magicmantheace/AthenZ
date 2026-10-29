@@ -48,8 +48,15 @@ private held-out owner judgments outside Git, and report failures as well as win
   updates (experimental; target-device training/inference not yet validated).
 - Imported chat data remains pending by default; training export only includes
   reviewed data. No private data or corpora in Git.
-- Explicit file scope, review and human action precede any code write; no
-  unattended code execution, commit, push, purchase, deployment or messages.
+- **Current implementation:** explicit file scope, review and owner action precede
+  any code write; there is no unattended code execution, commit, push, purchase,
+  deployment or messaging.
+- **Proposed pre-v1.0 task-autonomy mode (not enabled):** one explicit, revocable,
+  time-limited owner grant may later authorize repeated *sandbox-only* edits and
+  tests within fixed repository/worktree/path boundaries. Never infer broader
+  authority from a project goal, model output, learned preference or stored memory.
+  Remote push, merge, release, deployment, self-update, host/OS actions, secret
+  access and outward communication require separate owner authorization.
 - Evidence and evaluation determine promotion; rollbacks must revoke lessons
   tied to reverted changes.
 
@@ -65,7 +72,80 @@ private held-out owner judgments outside Git, and report failures as well as win
 | v0.7 | Held-out identity and decision evaluation | Predictions improve without leaking test cases into prompts |
 | v0.8 | Optional voice and local connectors | Per-integration opt-in and disable controls |
 | v0.9 | Privacy and reliability hardening, installer and Windows validation | Backup/erasure threat tests and regression gates pass |
-| v1.0 | Stable personalized local agent with controlled learning | Identity, coding, privacy, recoverability benchmarks met |
+| pre-v1.0 (planned task-autonomy gate) | Owner-directed, persistent, repo-scoped development work inside an isolated sandbox | Single standing grant, bounded multi-task execution, verified tests, interruption/restart recovery and no out-of-scope or unapproved external actions |
+| v1.0 | Stable personalized local agent with controlled learning | Identity, coding, privacy, recoverability benchmarks met; task-autonomy mode passes its separate owner-hardware gate before shipping enabled |
+
+## Owner-directed persistent coding autonomy — pre-v1.0 (planned)
+
+**Priority and scope:** Preserve the current Twin-first implementation and owner
+Windows/Ollama validation as the active priority. This is a future AthenZ coding
+milestone, not an instruction to the current worker to switch tracks or an
+implemented capability. It builds on v0.4 isolated worktree proposals and the
+v0.6 owner-armed supervised queue; it does not rename those partial features
+or claim that their existing manual per-stage approvals already implement it.
+
+**Owner experience:** The owner can say once, for example, "Work on the AthenZ
+repository against its roadmap." With a separately reviewed *standing task
+grant*, AthenZ can inspect that repository and its issue/roadmap backlog,
+select eligible improvements, plan and implement one scoped change at a time,
+run tests, diagnose failures, revise the patch and continue with the next
+eligible task **without another chat prompt for every step**. When blocked by
+an ambiguous choice, policy boundary or exhausted budget, it must stop and
+request further authorization rather than guessing. No grant means the
+existing supervised/manual behavior remains the default.
+
+### Development slices and acceptance gates
+
+- [ ] **A1 — Read-only project planner:** inspect an explicitly selected Git
+  repository, roadmap, tests and owner-approved issues; propose a bounded,
+  prioritized task queue with dependencies, success criteria, risk and scope.
+  Don't invent owner priorities, rewrite the roadmap or expand permitted files.
+- [ ] **A2 — Narrow standing authorization:** an explicit local review grants
+  a *specific* repository/worktree, task classes, allowed files, permitted
+  tools and network policy, duration, resource/test/retry limits and expiry.
+  Store a provenance-linked revocable grant. Default to off; never treat
+  remembered preferences or the AI's own ideas as permission. Support
+  immediate pause, cancellation and audit of every attempted operation.
+- [ ] **A3 — Isolated execution and feedback loop:** use disposable worktrees/
+  branches and a constrained runner (e.g., a pinned, policy-limited test
+  container), not unrestricted host shell commands. Iterate plan → edit →
+  syntax/targeted tests → broader regression → diagnose → retry with bounded
+  attempts. Record actual test results and diffs, including failures; do not
+  substitute model self-assessment or passing unit tests for task success.
+  Prevent access to private Twin data, credentials and other repositories.
+- [ ] **A4 — Durable, inspectable operations:** persist the task queue, model/
+  code/permission fingerprints, stage state, output summaries and checkpoints
+  across shutdowns or model changes. Verify grants, file scope and base
+  revisions on resume; avoid duplicate commits or replayed side effects.
+  Detect loops and stalls, enforce time/compute budgets and allow the owner
+  to see what was attempted, changed, tested, blocked or left unfinished.
+- [ ] **A5 — Promotion and self-development boundary:** candidate edits and
+  explicitly granted *local checkpoint commits* may occur only in isolated
+  branches. No unattended remote push, merge to a protected branch, release,
+  package installation, deployment, update of the running AthenZ executable,
+  removal of safeguards or cross-project action. Those remain separately
+  reviewed owner decisions with regression and rollback checks; an update
+  must not replace the currently functioning Twin on its own.
+- [ ] **A6 — Owner-device acceptance:** on the intended Windows/WSL2 host,
+  complete at least two independently selected eligible roadmap/issue tasks
+  from one reviewed objective, including a real failing-test/debug/retest
+  cycle, restart/resume and owner interrupt/revoke exercises. Produce
+  reproducible passing targeted and regression tests, reviewable candidate
+  diffs, truthful failure reports and zero observed out-of-scope writes or
+  unauthorized push/merge/host effects. A clean blocked stop is preferable
+  to violating scope; failed tasks must not be counted as completed.
+
+**Architectural ownership:** AthenZ owns user-issued objectives, the task
+controller, coding tools, permission decisions and the visible work journal.
+The later Developmental AI D5 track concerns *self-selected goals and learned
+motivations*, not prerequisite orchestration for owner-issued coding jobs.
+Neither its integration nor Synveil is a prerequisite for this pre-v1.0
+milestone. A future learning subsystem may recommend better strategies, but
+must never expand AthenZ's owner-granted tool authority.
+
+**Status (2026-10-21):** design/roadmap only. Do not change the active
+Twin-first worker's implementation priority, claim continuous coding exists,
+or relax current per-stage approvals before A2–A6 are implemented and tested.
 
 ## Cross-project Developmental AI integration track (added 2026-10-14)
 

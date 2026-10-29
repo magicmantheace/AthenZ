@@ -488,7 +488,8 @@ scheduler or self-training daemon is active.
 
 The desktop Coding tasks panel and `athenz-scheduler` can queue **one local
 Ollama code proposal per owner-armed stage**, with private restart-safe leases,
-manual pause/resume and manual crash reconciliation. It starts disabled; even
+manual pause/resume, a terminal owner **cancel** that revokes the lease and
+advances a monotonic fencing epoch, and manual crash reconciliation. It starts disabled; even
 when enabled, it cannot apply patches, execute tests, train models, commit or
 push to Git. Each proposal must still pass independent owner SHA-256 review.
 See [docs/SCHEDULER.md](docs/SCHEDULER.md). Physical Windows and RTX 3060

@@ -130,6 +130,35 @@ class StageTests(unittest.TestCase):
         self.assertTrue(verify_staged_portable(original)['valid'])
         self.assertFalse((self.destination/'AthenZ-new').exists())
 
+    def test_two_version_upgrade_tamper_and_rollback_verification(self):
+        # A realistic portable payload: dozens of files across nested
+        # directories, including one large module, staged as two versions.
+        def payload(version):
+            items = [('AthenZ/', b''), ('AthenZ/AthenZ.exe', b'fake binary ' + version)]
+            for i in range(40):
+                items.append((f'AthenZ/_internal/pkg/mod{i:02d}.py',
+                              f'# synthetic module {i} {version.decode()}\n'.encode()))
+            for d in ('data', 'data/locale', 'assets/icons'):
+                items.append((f'AthenZ/_internal/{d}/blob.bin', bytes(range(256)) * 8))
+            big = b''.join(hashlib.sha256(f'synthetic-block-{i}'.encode()).digest()
+                           for i in range(32768))
+            items.append(('AthenZ/_internal/big.dat', big))
+            return items
+        old_sha = self.pack(payload(b'v1'))
+        old = Path(stage_portable_zip(self.src, old_sha, self.destination,
+                                      name='AthenZ-v1', confirmed=True)['path'])
+        new_sha = self.pack(payload(b'v2'))
+        new = Path(stage_portable_zip(self.src, new_sha, self.destination,
+                                      name='AthenZ-v2', confirmed=True)['path'])
+        verify_staged_portable(old)
+        verify_staged_portable(new)
+        # Upgrade turns out bad: a staged file in v2 is tampered with.
+        (new / 'AthenZ' / '_internal' / 'pkg' / 'mod07.py').write_bytes(b'# tampered\n')
+        with self.assertRaises(PortableArchiveError):
+            verify_staged_portable(new)
+        # Rollback target is untouched: the v1 stage still verifies exactly.
+        verify_staged_portable(old)
+
     def test_cli_has_explicit_stage_and_verify_only(self):
         from athenz.portable_stage import STAGE_NAME
         self.assertTrue(STAGE_NAME.fullmatch('AthenZ-build123'))

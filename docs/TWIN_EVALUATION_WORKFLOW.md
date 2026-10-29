@@ -26,6 +26,11 @@ choice validity and in-flight dataset changes. Lexical independence does not
 prove semantic independence. Hold out the answers, review the split and do
 not use the final-test cases when deciding how to tune prompts.
 
+To author the held-out decision cases as a batch instead of one CLI call
+at a time, see [HELDOUT_IMPORT.md](HELDOUT_IMPORT.md): the whole file is
+validated and leakage-screened before anything is stored, and cases land
+pending — approval remains a separate per-case owner act.
+
 A writing-style pilot additionally needs at least **three reviewed training
 writing samples and three distinct held-out writing samples** to start.
 The v1 Twin acceptance target remains **20 independently owner-rated writing
